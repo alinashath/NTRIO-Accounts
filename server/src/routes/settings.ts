@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
+import { createServiceRoleSupabase } from "../lib/supabaseService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/http.js";
 
@@ -27,9 +27,7 @@ function serviceSupabase() {
   if (!url || !serviceKey) {
     throw new Error("Server missing Supabase configuration");
   }
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return createServiceRoleSupabase(url, serviceKey);
 }
 
 settingsRouter.get(

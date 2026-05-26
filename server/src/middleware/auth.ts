@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
 import { prisma } from "../lib/prisma.js";
+import { createServiceRoleSupabase } from "../lib/supabaseService.js";
 
 export type AuthedRequest = Request & { userId: string; userEmail: string | null };
 
@@ -27,9 +27,7 @@ export async function requireAuth(
     return;
   }
 
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceRoleSupabase(url, serviceKey);
 
   const {
     data: { user },
