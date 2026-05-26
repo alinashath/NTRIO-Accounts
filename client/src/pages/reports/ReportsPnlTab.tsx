@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { eachMonthOfInterval, format, parseISO } from "date-fns";
 import {
   CartesianGrid,
@@ -30,10 +31,20 @@ type Cat = {
   name: string;
   total: number;
   pct_of_kind: number;
+  category_id: string | null;
+  previous_total?: number;
+  change?: number;
+  change_pct?: number | null;
+};
+
+type CategoryBreakdownRes = {
+  rows: Cat[];
+  previous_period?: { from: string; to: string };
 };
 
 export function ReportsPnlTab() {
   const { displayCurrency } = useDisplayCurrency();
+  const [searchParams, setSearchParams] = useSearchParams();
   const today = new Date();
   const defaultFrom = format(new Date(today.getFullYear(), 0, 1), "yyyy-MM-dd");
   const defaultTo = format(today, "yyyy-MM-dd");
@@ -43,8 +54,19 @@ export function ReportsPnlTab() {
   const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
+  const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
   const [trend, setTrend] = useState<Array<{ month: string; income: number; expense: number; net: number }>>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const qf = searchParams.get("from");
+    const qt = searchParams.get("to");
+    if (qf && qt) {
+      setFrom(qf);
+      setTo(qt);
+      setApplied({ from: qf, to: qt });
+    }
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -55,12 +77,13 @@ export function ReportsPnlTab() {
         apiFetch<Pnl>(
           `/api/reports/pnl?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}`,
         ),
-        apiFetch<{ rows: Cat[] }>(
-          `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}`,
+        apiFetch<CategoryBreakdownRes>(
+          `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&compare=true`,
         ),
       ]);
       setPnl(p);
       setCats(c.rows);
+      setPrevPeriod(c.previous_period ?? null);
 
       const months = eachMonthOfInterval({
         start: parseISO(f),
@@ -91,6 +114,11 @@ export function ReportsPnlTab() {
     void load();
   }, [load]);
 
+  function applyRange() {
+    setApplied({ from, to });
+    setSearchParams({ from, to });
+  }
+
   async function downloadCsv() {
     const token = useAuthStore.getState().session?.access_token;
     const res = await fetch("/api/reports/export", {
@@ -112,6 +140,45 @@ export function ReportsPnlTab() {
     a.download = `export-${from}_${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function categoryHref(r: Cat) {
+    const id = r.category_id ?? "uncategorized";
+    const q = new URLSearchParams();
+    q.set("kind", r.kind);
+    q.set("from", applied.from);
+    q.set("to", applied.to);
+    return `/reports/categories/${encodeURIComponent(id)}?${q.toString()}`;
+  }
+
+  function categoryAmountCell(r: Cat) {
+    const hasCompare = prevPeriod != null;
+    const changeTone =
+      r.change == null ? "text-slate-500" : r.change >= 0 ? "text-orange-700" : "text-emerald-700";
+    return (
+      <div className="text-right tabular-nums">
+        <div className="font-medium text-slate-900">{formatMoney(r.total, displayCurrency)}</div>
+        {hasCompare ? (
+          <div className="mt-1 space-y-0.5">
+            <div className="text-xs text-slate-500">
+              Prev{" "}
+              {r.previous_total != null ? formatMoney(r.previous_total, displayCurrency) : "—"}
+            </div>
+            {r.change != null ? (
+              <div className={`text-xs font-medium ${changeTone}`}>
+                {r.change >= 0 ? "+" : ""}
+                {formatMoney(r.change, displayCurrency)}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500">—</div>
+            )}
+            <div className="text-[11px] leading-tight text-slate-500">
+              {r.change_pct != null ? `${r.change_pct >= 0 ? "+" : ""}${r.change_pct.toFixed(1)}%` : "—"}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -144,7 +211,7 @@ export function ReportsPnlTab() {
               onChange={(e) => setTo(e.target.value)}
             />
           </label>
-          <Button type="button" onClick={() => setApplied({ from, to })}>
+          <Button type="button" onClick={() => applyRange()}>
             Apply
           </Button>
           <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
@@ -194,23 +261,32 @@ export function ReportsPnlTab() {
 
       <Card>
         <h3 className="text-sm font-semibold text-slate-900">Category breakdown</h3>
+        {prevPeriod ? (
+          <p className="mt-1 text-xs text-slate-500">
+            vs prior period {prevPeriod.from} → {prevPeriod.to}
+          </p>
+        ) : null}
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
                 <th className="py-2 pr-3">Kind</th>
                 <th className="py-2 pr-3">Category</th>
-                <th className="py-2 pr-3 text-right">Total</th>
+                <th className="py-2 pr-3 text-right align-bottom">Amount</th>
                 <th className="py-2 text-right">%</th>
               </tr>
             </thead>
             <tbody>
               {cats.map((r, i) => (
-                <tr key={`${r.kind}-${r.name}-${i}`} className="border-b border-slate-100">
-                  <td className="py-2 pr-3">{r.kind}</td>
-                  <td className="py-2 pr-3">{r.name}</td>
-                  <td className="py-2 pr-3 text-right">{formatMoney(r.total, displayCurrency)}</td>
-                  <td className="py-2 text-right">{r.pct_of_kind.toFixed(1)}%</td>
+                <tr key={`${r.kind}-${r.name}-${i}`} className="border-b border-slate-100 hover:bg-slate-50/80">
+                  <td className="py-2 pr-3 align-top">{r.kind}</td>
+                  <td className="py-2 pr-3 align-top">
+                    <Link to={categoryHref(r)} className="font-medium text-sky-700 hover:underline">
+                      {r.name}
+                    </Link>
+                  </td>
+                  <td className="py-2 pr-3 align-top">{categoryAmountCell(r)}</td>
+                  <td className="py-2 text-right align-top tabular-nums">{r.pct_of_kind.toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>

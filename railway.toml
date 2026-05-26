@@ -1,0 +1,9 @@
+# https://docs.railway.com/develop/config-as-code
+[build]
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

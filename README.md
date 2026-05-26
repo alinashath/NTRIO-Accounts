@@ -2,7 +2,7 @@
 
 Monorepo layout:
 
-- `client/` — Vite + React + TypeScript + Tailwind v4 + Recharts + Zustand + Supabase Auth (browser)
+- `client/` — Vite + React + TypeScript + Tailwind v4 + Recharts + Zustand + Supabase Auth (browser). In production the Express server serves `client/dist` from the same origin as `/api`.
 - `server/` — Express + Zod + Prisma (PostgreSQL) + Supabase token verification (service role)
 - `shared/types.ts` — shared DTO-style types for the client
 
@@ -98,6 +98,43 @@ The client uses the Supabase browser client + session to upload; the public obje
 
    - API: `http://localhost:3001`
    - UI: `http://localhost:5173` (by default, `fetch("/api/…")` is proxied to the API). If the client runs on another host/port or you call the API directly, set **`VITE_API_BASE_URL`** to the API origin and add that UI origin to **`CLIENT_ORIGIN`** on the server (comma-separated) so CORS allows it.
+
+## Deploy on Railway
+
+Use **one Railway service** from the **repo root**. The production server serves the Vite build from `client/dist` and the API under `/api`, so the browser uses same-origin `fetch("/api/…")` and you do **not** need `VITE_API_BASE_URL` unless you split the UI elsewhere.
+
+1. **Create a service** linked to this GitHub repo (root directory = repository root).
+
+2. **Build & start** — [railway.toml](railway.toml) sets `buildCommand` to `npm run build` and `startCommand` to `npm start` (workspace `server` script: `node dist/index.js` with cwd `server/`). **`PORT`** is injected by Railway; the app listens on **`0.0.0.0`**.
+
+3. **Health check** — `GET /api/health` (configured in `railway.toml`).
+
+4. **Environment variables** (set in the Railway service; use the same Supabase + Postgres values as local `server/.env`):
+
+   | Variable | Notes |
+   |----------|--------|
+   | `DATABASE_URL` | Pooled Postgres URL (e.g. Supabase pooler with `pgbouncer=true`). |
+   | `DIRECT_URL` | Direct Postgres URL for **Prisma migrations** (e.g. Supabase `db.*.supabase.co:5432`). |
+   | `SUPABASE_URL` | Supabase project URL. |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server only). |
+   | `VITE_SUPABASE_URL` | Same as `SUPABASE_URL` — required at **build** time for the client bundle. |
+   | `VITE_SUPABASE_ANON_KEY` | Supabase anon (or publishable) key — **build** time. |
+   | `CLIENT_ORIGIN` | Optional. Comma-separated allowed browser origins for CORS. If unset on Railway, the server uses **`https://$RAILWAY_PUBLIC_DOMAIN`** when that variable is present. |
+   | `NODE_ENV` | Railway often sets this to `production` during build; optional to set explicitly. |
+
+   Optional: `VITE_SUPABASE_RECEIPTS_BUCKET`, `SETTINGS_USER_ADMIN_EMAILS`, etc. (see [.env.example](.env.example)).
+
+5. **Migrations** — After the first successful deploy with `DATABASE_URL` and **`DIRECT_URL`** set, run migrations once (or on every deploy):
+
+   ```bash
+   npm run db:deploy -w server
+   ```
+
+   From Railway: **Settings → Deploy → Custom Pre-deploy Command** (or one-off shell) with the same command. If `migrate deploy` fails (e.g. **P3005** on a non-empty DB), fix the baseline the same way as in the local database section above.
+
+6. **Supabase Auth** — In the Supabase dashboard, add your public app URL (e.g. `https://<your-service>.up.railway.app`) to **Authentication → URL configuration** (site URL and redirect URLs). Do the same for **Google OAuth** if you use it.
+
+7. **Prisma OpenSSL** — If the build or runtime errors on OpenSSL, switch the service to an image that includes OpenSSL 3 or follow [Railway’s Prisma troubleshooting](https://docs.railway.com/reference/errors/prisma-openssl-error).
 
 ## Implemented vs plan
 

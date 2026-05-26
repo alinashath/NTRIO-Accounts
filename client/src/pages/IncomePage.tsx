@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Filter } from "lucide-react";
 import { apiFetch } from "@/api/http";
 import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
@@ -42,6 +43,7 @@ export function IncomePage() {
   const [contacts, setContacts] = useState<ContactDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [detail, setDetail] = useState<IncomeEntryDto | null>(null);
   const [showVoided, setShowVoided] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -79,6 +81,38 @@ export function IncomePage() {
   );
 
   const prevFilterKey = useRef(filterKey);
+
+  const filtersActive = useMemo(
+    () =>
+      Boolean(
+        searchInput.trim() ||
+          debouncedSearch ||
+          dateFrom ||
+          dateTo ||
+          filterCategoryId ||
+          filterAccountId ||
+          incomeType !== "all",
+      ),
+    [
+      searchInput,
+      debouncedSearch,
+      dateFrom,
+      dateTo,
+      filterCategoryId,
+      filterAccountId,
+      incomeType,
+    ],
+  );
+
+  const clearListFilters = useCallback(() => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setFilterCategoryId("");
+    setFilterAccountId("");
+    setIncomeType("all");
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
@@ -285,9 +319,27 @@ export function IncomePage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 md:text-xl">Income</h2>
         </div>
-        <Button type="button" disabled={loading} onClick={() => setModalOpen(true)}>
-          Add income
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="relative min-w-11 px-3"
+            aria-label="Search and filters"
+            title="Search and filters"
+            onClick={() => setFilterModalOpen(true)}
+          >
+            <Filter className="h-5 w-5 text-slate-700" aria-hidden />
+            {filtersActive ? (
+              <span
+                className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-slate-900"
+                aria-hidden
+              />
+            ) : null}
+          </Button>
+          <Button type="button" disabled={loading} onClick={() => setModalOpen(true)}>
+            Add income
+          </Button>
+        </div>
       </div>
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
@@ -300,45 +352,59 @@ export function IncomePage() {
         Show voided in list
       </label>
 
-      <Card className="p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Search & filters</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <TextField
-            label="Search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Description, notes, source, category, customer…"
-          />
-          <TextField label="From date" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <TextField label="To date" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Dropdown
-            label="Category"
-            value={filterCategoryId}
-            onChange={setFilterCategoryId}
-            options={filterCategoryOpts}
-            required={false}
-            placeholder="Any category"
-          />
-          <Dropdown
-            label="Account"
-            value={filterAccountId}
-            onChange={setFilterAccountId}
-            options={filterAccountOpts}
-            required={false}
-            placeholder="Any account"
-          />
-          <Dropdown
-            label="Type"
-            value={incomeType}
-            onChange={(v) => setIncomeType(v === "uncategorized" ? "uncategorized" : "all")}
-            options={incomeTypeOpts}
-            required={false}
-            searchable={false}
-          />
-        </div>
-      </Card>
-
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      <Modal
+        open={filterModalOpen}
+        title="Search & filters"
+        size="lg"
+        onClose={() => setFilterModalOpen(false)}
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Description, notes, source, category, customer…"
+            />
+            <TextField label="From date" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <TextField label="To date" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Dropdown
+              label="Category"
+              value={filterCategoryId}
+              onChange={setFilterCategoryId}
+              options={filterCategoryOpts}
+              required={false}
+              placeholder="Any category"
+            />
+            <Dropdown
+              label="Account"
+              value={filterAccountId}
+              onChange={setFilterAccountId}
+              options={filterAccountOpts}
+              required={false}
+              placeholder="Any account"
+            />
+            <Dropdown
+              label="Type"
+              value={incomeType}
+              onChange={(v) => setIncomeType(v === "uncategorized" ? "uncategorized" : "all")}
+              options={incomeTypeOpts}
+              required={false}
+              searchable={false}
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button type="button" variant="ghost" onClick={clearListFilters}>
+              Clear filters
+            </Button>
+            <Button type="button" onClick={() => setFilterModalOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={modalOpen} title="New income" size="lg" onClose={() => setModalOpen(false)}>
         <IncomeForm

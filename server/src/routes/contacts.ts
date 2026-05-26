@@ -306,6 +306,10 @@ contactsRouter.post(
       res.status(404).json({ error: "Contact not found" });
       return;
     }
+    if (contact.kind !== "vendor") {
+      res.status(400).json({ error: "Merge pay-later bills is only available for vendor contacts." });
+      return;
+    }
 
     const uniqueIds = [...new Set(body.expense_ids)];
     const expenses = await prisma.expenseEntry.findMany({

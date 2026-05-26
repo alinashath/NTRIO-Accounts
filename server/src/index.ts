@@ -1,4 +1,7 @@
 import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
@@ -16,9 +19,28 @@ import { notFound } from "./utils/http.js";
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
 
+/** CORS: explicit CLIENT_ORIGIN(s), else Railway public URL, else reflect any origin. */
+function resolveCorsOrigin(): boolean | string | string[] {
+  const raw = process.env.CLIENT_ORIGIN?.trim();
+  if (raw) {
+    const list = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length === 0) return true;
+    if (list.length === 1) return list[0]!;
+    return list;
+  }
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (railway) {
+    return [`https://${railway}`];
+  }
+  return true;
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN?.split(",") ?? true,
+    origin: resolveCorsOrigin(),
     credentials: true,
   }),
 );
@@ -36,6 +58,34 @@ app.use("/api/contacts", contactsRouter);
 app.use("/api/debts", debtsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDist = path.resolve(__dirname, "../../client/dist");
+const clientIndexHtml = path.join(clientDist, "index.html");
+const serveClient = fs.existsSync(clientIndexHtml);
+
+if (serveClient) {
+  app.use(
+    express.static(clientDist, {
+      index: false,
+      maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
+    }),
+  );
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      notFound(req, res);
+      return;
+    }
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      notFound(req, res);
+      return;
+    }
+    res.sendFile(clientIndexHtml, (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 app.use(notFound);
 
@@ -75,6 +125,6 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Listening on port ${port}${serveClient ? " (API + static client)" : " (API only)"}`);
 });
