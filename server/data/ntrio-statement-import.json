@@ -1,0 +1,1159 @@
+{
+  "meta": {
+    "source": "Ntrio Statement.pdf (Cashflow Feb–Apr 2026, partner header excluded)",
+    "batch_tag": "ntrio-import:2026-05-25",
+    "notes": "Six-value tuples: Feb USD, Feb MVR, Mar USD, Mar MVR, Apr USD, Apr MVR. Empty USD → MVR only for that month. For salaries, SENORA, Ezee, etc., when USD is filled the adjacent MVR is conversion-only (suppressMvrWhenUsd in generator). Pocket money is USD-only lines. Totals columns omitted."
+  },
+  "categories": [
+    {
+      "name": "Sales",
+      "kind": "income"
+    },
+    {
+      "name": "Vendor supplies",
+      "kind": "expense"
+    },
+    {
+      "name": "Safety equipment",
+      "kind": "expense"
+    },
+    {
+      "name": "Groceries",
+      "kind": "expense"
+    },
+    {
+      "name": "Water & beverages",
+      "kind": "expense"
+    },
+    {
+      "name": "Glass & ceramics",
+      "kind": "expense"
+    },
+    {
+      "name": "Stationery",
+      "kind": "expense"
+    },
+    {
+      "name": "Printing & signage",
+      "kind": "expense"
+    },
+    {
+      "name": "Housekeeping supplies",
+      "kind": "expense"
+    },
+    {
+      "name": "Food supplies",
+      "kind": "expense"
+    },
+    {
+      "name": "Transfers & remittances",
+      "kind": "expense"
+    },
+    {
+      "name": "Loan repayments",
+      "kind": "expense"
+    },
+    {
+      "name": "Salaries",
+      "kind": "expense"
+    },
+    {
+      "name": "Staff allowances",
+      "kind": "expense"
+    },
+    {
+      "name": "Utilities",
+      "kind": "expense"
+    },
+    {
+      "name": "Telecom",
+      "kind": "expense"
+    },
+    {
+      "name": "Motor parts",
+      "kind": "expense"
+    },
+    {
+      "name": "Insurance",
+      "kind": "expense"
+    },
+    {
+      "name": "Subscriptions",
+      "kind": "expense"
+    }
+  ],
+  "excluded": [
+    {
+      "label": "Settlement Account - Effimetic Solutions LLP",
+      "reason": "liability_snapshot",
+      "amount_text": "505,192.76"
+    },
+    {
+      "label": "Settlement Account - Hassan Nawaz",
+      "reason": "liability_snapshot",
+      "amount_text": "138,362.00"
+    },
+    {
+      "label": "Settlement Account - Mohamed Najaah",
+      "reason": "liability_snapshot",
+      "amount_text": "449,788.85"
+    },
+    {
+      "label": "Rasheed - Balance",
+      "reason": "liability_snapshot",
+      "amount_text": "58,500.00"
+    },
+    {
+      "label": "Total Liability as of Now Exclusing Laon",
+      "reason": "liability_snapshot",
+      "amount_text": "1,151,843.61"
+    },
+    {
+      "label": "Financial Input / Gross Profit (subtotal rows)",
+      "reason": "derived_subtotal_not_posted"
+    },
+    {
+      "label": "Expnese Carry Forward",
+      "reason": "opening_carryforward_ambiguous"
+    },
+    {
+      "label": "Total Expense / Net Profit / Notes block",
+      "reason": "statement_control_lines"
+    }
+  ],
+  "entries": [
+    {
+      "kind": "income",
+      "date": "2026-02-28",
+      "amount": 3335.2,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-FEB-USD"
+    },
+    {
+      "kind": "income",
+      "date": "2026-02-28",
+      "amount": 66704,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-FEB-MVR"
+    },
+    {
+      "kind": "income",
+      "date": "2026-03-31",
+      "amount": 2714,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-MAR-USD"
+    },
+    {
+      "kind": "income",
+      "date": "2026-03-31",
+      "amount": 54280,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-MAR-MVR"
+    },
+    {
+      "kind": "income",
+      "date": "2026-04-30",
+      "amount": 1668.8,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-APR-USD"
+    },
+    {
+      "kind": "income",
+      "date": "2026-04-30",
+      "amount": 33376,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Sales",
+      "description": "Sales",
+      "merchant": null,
+      "statement_ref": "sales-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 5500,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "455 GREASE TRIP ( STELCO SALES CENTER)",
+      "merchant": null,
+      "statement_ref": "grease-trip-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 275,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "455 GREASE TRIP ( STELCO SALES CENTER)",
+      "merchant": null,
+      "statement_ref": "grease-trip-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 5628.96,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Safety equipment",
+      "description": "455 VELIGA - FIRE EXTINGUISERS",
+      "merchant": null,
+      "statement_ref": "veliga-fire-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 281.45,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Safety equipment",
+      "description": "455 VELIGA - FIRE EXTINGUISERS",
+      "merchant": null,
+      "statement_ref": "veliga-fire-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 2100.02,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "455 UNLIMIT HARDWARE - DOOR CLOSER",
+      "merchant": null,
+      "statement_ref": "unlimit-hardware-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 105,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "455 UNLIMIT HARDWARE - DOOR CLOSER",
+      "merchant": null,
+      "statement_ref": "unlimit-hardware-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 56,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "425 NAALU",
+      "merchant": null,
+      "statement_ref": "naalu-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 2.8,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "425 NAALU",
+      "merchant": null,
+      "statement_ref": "naalu-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 680,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "455 EURO STORE",
+      "merchant": null,
+      "statement_ref": "euro-store-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 34,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "455 EURO STORE",
+      "merchant": null,
+      "statement_ref": "euro-store-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 827,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "455 ASTERS - Containairs and others",
+      "merchant": null,
+      "statement_ref": "asters-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 41.35,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "455 ASTERS - Containairs and others",
+      "merchant": null,
+      "statement_ref": "asters-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 520,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Water & beverages",
+      "description": "MINERAL WATER - KAREEMEE INVESTMET",
+      "merchant": null,
+      "statement_ref": "mineral-water-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 390,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Water & beverages",
+      "description": "MINERAL WATER - KAREEMEE INVESTMET",
+      "merchant": null,
+      "statement_ref": "mineral-water-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 910,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Water & beverages",
+      "description": "MINERAL WATER - KAREEMEE INVESTMET",
+      "merchant": null,
+      "statement_ref": "mineral-water-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 45.5,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Water & beverages",
+      "description": "MINERAL WATER - KAREEMEE INVESTMET",
+      "merchant": null,
+      "statement_ref": "mineral-water-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 2908.74,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Glass & ceramics",
+      "description": "RED STAR - Glass other ceramics",
+      "merchant": null,
+      "statement_ref": "red-star-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 145.44,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Glass & ceramics",
+      "description": "RED STAR - Glass other ceramics",
+      "merchant": null,
+      "statement_ref": "red-star-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 865.75,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Housekeeping supplies",
+      "description": "FATHAHA - STRAW/TRAY and Others",
+      "merchant": null,
+      "statement_ref": "fathaha-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 43.29,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Housekeeping supplies",
+      "description": "FATHAHA - STRAW/TRAY and Others",
+      "merchant": null,
+      "statement_ref": "fathaha-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 214.96,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Stationery",
+      "description": "Asrafee - Stationary",
+      "merchant": null,
+      "statement_ref": "asrafee-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 10.75,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Stationery",
+      "description": "Asrafee - Stationary",
+      "merchant": null,
+      "statement_ref": "asrafee-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 245.02,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Printing & signage",
+      "description": "SKY Print - Sinage Printing",
+      "merchant": null,
+      "statement_ref": "sky-print-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 12.25,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Printing & signage",
+      "description": "SKY Print - Sinage Printing",
+      "merchant": null,
+      "statement_ref": "sky-print-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 230,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Housekeeping supplies",
+      "description": "ITEMS - Towel Microsfiber",
+      "merchant": null,
+      "statement_ref": "items-towel-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 11.5,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Housekeeping supplies",
+      "description": "ITEMS - Towel Microsfiber",
+      "merchant": null,
+      "statement_ref": "items-towel-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 520,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Food supplies",
+      "description": "Butter Portion - Thohir",
+      "merchant": null,
+      "statement_ref": "butter-portion-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 26,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Food supplies",
+      "description": "Butter Portion - Thohir",
+      "merchant": null,
+      "statement_ref": "butter-portion-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 2657,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Groceries",
+      "description": "SANCO - Groceries",
+      "merchant": null,
+      "statement_ref": "sanco-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 132.85,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Groceries",
+      "description": "SANCO - Groceries",
+      "merchant": null,
+      "statement_ref": "sanco-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 170.8,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Transfers & remittances",
+      "description": "SENORA - Transfer",
+      "merchant": null,
+      "statement_ref": "senora-transfer-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 677.9,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Transfers & remittances",
+      "description": "SENORA - Transfer",
+      "merchant": null,
+      "statement_ref": "senora-transfer-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 16974,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Transfers & remittances",
+      "description": "SENORA - Transfer",
+      "merchant": null,
+      "statement_ref": "senora-transfer-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 180,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "BUGGY - Ahmed Shareef",
+      "merchant": null,
+      "statement_ref": "buggy-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 330,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "BUGGY - Ahmed Shareef",
+      "merchant": null,
+      "statement_ref": "buggy-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 510,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "BUGGY - Ahmed Shareef",
+      "merchant": null,
+      "statement_ref": "buggy-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 25.5,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "BUGGY - Ahmed Shareef",
+      "merchant": null,
+      "statement_ref": "buggy-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 60,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Food supplies",
+      "description": "CREAMY BAKERY BUNS",
+      "merchant": null,
+      "statement_ref": "creamy-bakery-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 3,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Food supplies",
+      "description": "CREAMY BAKERY BUNS",
+      "merchant": null,
+      "statement_ref": "creamy-bakery-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 7504.31,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Loan repayments",
+      "description": "Loan Repayment",
+      "merchant": null,
+      "statement_ref": "loan-repayment-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 7000,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Loan repayments",
+      "description": "Loan Repayment",
+      "merchant": null,
+      "statement_ref": "loan-repayment-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 14504.31,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Loan repayments",
+      "description": "Loan Repayment",
+      "merchant": null,
+      "statement_ref": "loan-repayment-MAR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 725.22,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Loan repayments",
+      "description": "Loan Repayment",
+      "merchant": null,
+      "statement_ref": "loan-repayment-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 2360,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Loan repayments",
+      "description": "Hassan Nawaz - Lui Repayment",
+      "merchant": null,
+      "statement_ref": "hassan-lui-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 118,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Loan repayments",
+      "description": "Hassan Nawaz - Lui Repayment",
+      "merchant": null,
+      "statement_ref": "hassan-lui-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 6070,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Loan repayments",
+      "description": "Aishath Fazna - Lui Repayment",
+      "merchant": null,
+      "statement_ref": "aishath-lui-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 12140,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Loan repayments",
+      "description": "Aishath Fazna - Lui Repayment",
+      "merchant": null,
+      "statement_ref": "aishath-lui-MAR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 607,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Loan repayments",
+      "description": "Aishath Fazna - Lui Repayment",
+      "merchant": null,
+      "statement_ref": "aishath-lui-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 260,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Groceries",
+      "description": "MADHEEHA - Groceries",
+      "merchant": null,
+      "statement_ref": "madheeha-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 193,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Groceries",
+      "description": "MADHEEHA - Groceries",
+      "merchant": null,
+      "statement_ref": "madheeha-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 453,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Groceries",
+      "description": "MADHEEHA - Groceries",
+      "merchant": null,
+      "statement_ref": "madheeha-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 22.65,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Groceries",
+      "description": "MADHEEHA - Groceries",
+      "merchant": null,
+      "statement_ref": "madheeha-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 1434,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Groceries",
+      "description": "NEW STAND - Groceries",
+      "merchant": null,
+      "statement_ref": "new-stand-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 894,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Groceries",
+      "description": "NEW STAND - Groceries",
+      "merchant": null,
+      "statement_ref": "new-stand-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 2328,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Groceries",
+      "description": "NEW STAND - Groceries",
+      "merchant": null,
+      "statement_ref": "new-stand-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 116.4,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Groceries",
+      "description": "NEW STAND - Groceries",
+      "merchant": null,
+      "statement_ref": "new-stand-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 1500,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Transfers & remittances",
+      "description": "Transfer - Siraj - Folhudhoo - Feridhoo",
+      "merchant": null,
+      "statement_ref": "transfer-siraj-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 75,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Transfers & remittances",
+      "description": "Transfer - Siraj - Folhudhoo - Feridhoo",
+      "merchant": null,
+      "statement_ref": "transfer-siraj-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 510,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Amin",
+      "merchant": null,
+      "statement_ref": "salary-amin-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 350,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Amin",
+      "merchant": null,
+      "statement_ref": "salary-amin-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 17200,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Salaries",
+      "description": "Salary - Amin",
+      "merchant": null,
+      "statement_ref": "salary-amin-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 500,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Staff allowances",
+      "description": "Pocket Money - Amin",
+      "statement_ref": "pocket-amin-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 500,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Staff allowances",
+      "description": "Pocket Money - Amin",
+      "statement_ref": "pocket-amin-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 500,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Staff allowances",
+      "description": "Pocket Money - Amin",
+      "statement_ref": "pocket-amin-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 342.86,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Nawaz",
+      "merchant": null,
+      "statement_ref": "salary-nawaz-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 243,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Nawaz",
+      "merchant": null,
+      "statement_ref": "salary-nawaz-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 11717.2,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Salaries",
+      "description": "Salary - Nawaz",
+      "merchant": null,
+      "statement_ref": "salary-nawaz-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 200,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Zeena Ahmed",
+      "merchant": null,
+      "statement_ref": "salary-zeena-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 250,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Salaries",
+      "description": "Salary - Zeena Ahmed",
+      "merchant": null,
+      "statement_ref": "salary-zeena-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 9000,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Salaries",
+      "description": "Salary - Zeena Ahmed",
+      "merchant": null,
+      "statement_ref": "salary-zeena-APR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 150,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Vendor supplies",
+      "description": "Washing Machine Screw (Mahibadhoo/Thohir)",
+      "merchant": null,
+      "statement_ref": "washing-machine-screw-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 7.5,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Vendor supplies",
+      "description": "Washing Machine Screw (Mahibadhoo/Thohir)",
+      "merchant": null,
+      "statement_ref": "washing-machine-screw-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 2605.3,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Haali",
+      "merchant": null,
+      "statement_ref": "utility-haali-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 4272.45,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Haali",
+      "merchant": null,
+      "statement_ref": "utility-haali-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 6238.95,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Haali",
+      "merchant": null,
+      "statement_ref": "utility-haali-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 13116.7,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Haali",
+      "merchant": null,
+      "statement_ref": "utility-haali-MAR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 655.84,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Haali",
+      "merchant": null,
+      "statement_ref": "utility-haali-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 1192.78,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Ntrio",
+      "merchant": null,
+      "statement_ref": "utility-ntrio-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 11813.76,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Ntrio",
+      "merchant": null,
+      "statement_ref": "utility-ntrio-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 13006.54,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Ntrio",
+      "merchant": null,
+      "statement_ref": "utility-ntrio-MAR-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 650.33,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Utilities",
+      "description": "Utility Bill - Ntrio",
+      "merchant": null,
+      "statement_ref": "utility-ntrio-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 1910,
+      "currency": "MVR",
+      "account_key": "BML_MVR",
+      "category_name": "Insurance",
+      "description": "Insurance Premium - Guest House",
+      "merchant": null,
+      "statement_ref": "insurance-guesthouse-FEB-MVR"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 95.5,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Insurance",
+      "description": "Insurance Premium - Guest House",
+      "merchant": null,
+      "statement_ref": "insurance-guesthouse-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-02-28",
+      "amount": 50,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Subscriptions",
+      "description": "Ezee Subscription",
+      "merchant": null,
+      "statement_ref": "ezee-FEB-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 54,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Subscriptions",
+      "description": "Ezee Subscription",
+      "merchant": null,
+      "statement_ref": "ezee-MAR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 54,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Subscriptions",
+      "description": "Ezee Subscription",
+      "merchant": null,
+      "statement_ref": "ezee-APR-USD"
+    },
+    {
+      "kind": "expense",
+      "date": "2026-04-30",
+      "amount": 277.96,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Telecom",
+      "description": "Internet - Dhiraagu",
+      "statement_ref": "dhiraagu-review-APR-usd",
+      "needs_review": true,
+      "notes": "PDF shows five numbers (3,853.20 / 853.00 / 853.00 / 5,559.20 / 277.96) without a clear Feb/Mar/Apr USD+MVR pairing; confirm split before posting."
+    },
+    {
+      "kind": "expense",
+      "date": "2026-03-31",
+      "amount": 510,
+      "currency": "USD",
+      "account_key": "BML_USD",
+      "category_name": "Motor parts",
+      "description": "Sparks - Mortor Spare",
+      "statement_ref": "sparks-review-MAR-usd",
+      "needs_review": true,
+      "notes": "Row has ambiguous columns (510 without decimals vs 510.00 / 25.50); confirm which month and currency."
+    }
+  ]
+}

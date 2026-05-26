@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Application user profile keyed to Supabase Auth `auth.users.id`
+model User {
+  id        String   @id @db.Uuid
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  accounts            Account[]
+  categories          Category[]
+  incomeEntries       IncomeEntry[]
+  expenseEntries      ExpenseEntry[]
+  recurringSchedules  RecurringSchedule[]
+  debts               Debt[]
+  accountTransfers    AccountTransfer[]
+  contacts            Contact[]
+  settings            UserSettings?
+  accountBalanceAdjustments AccountBalanceAdjustment[]
+
+  @@map("users")
+}
+
+/// Per-user preferences (FX for display and defaults).
+model UserSettings {
+  userId           String   @id @map("user_id") @db.Uuid
+  /// MVR units per 1 USD (same convention as account transfers).
+  globalUsdMvrRate Decimal  @default(15.42) @map("global_usd_mvr_rate") @db.Decimal(18, 8)
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+enum ContactKind {
+  vendor
+  customer
+  other
+}
+
+model Contact {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  name      String
+  kind      ContactKind @default(other)
+  email     String?
+  phone     String?
+  /// Tax registration (e.g. TGST / GST-style number).
+  tgstNumber String?    @map("tgst_number")
+  notes     String?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeEntries  IncomeEntry[]
+  expenseEntries ExpenseEntry[]
+  debts          Debt[]
+
+  @@index([userId])
+  @@index([userId, kind])
+  @@map("contacts")
+}
+
+enum AccountType {
+  bank
+  cash
+  wallet
+}
+
+model Account {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  name      String
+  type      AccountType
+  currency        String      @default("USD")
+  openingBalance  Decimal     @default(0) @map("opening_balance") @db.Decimal(15, 2)
+  balance         Decimal     @default(0) @db.Decimal(15, 2)
+  openedAt        DateTime?   @map("opened_at") @db.Date
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  incomeFromAccount IncomeEntry[]      @relation("IncomeAccount")
+  expenseFromAccount ExpenseEntry[]    @relation("ExpenseAccount")
+  debtPayments      DebtPayment[]
+  transfersFrom     AccountTransfer[] @relation("TransferFrom")
+  transfersTo       AccountTransfer[]   @relation("TransferTo")
+  balanceAdjustments AccountBalanceAdjustment[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Manual reconciliation deltas (bank fees, rounding, true-up). Positive increases account balance.
+model AccountBalanceAdjustment {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  date      DateTime @db.Date
+  amount    Decimal  @db.Decimal(15, 2)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, date])
+  @@index([userId, accountId])
+  @@map("account_balance_adjustments")
+}
+
+enum CategoryKind {
+  income
+  expense
+}
+
+model Category {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  name      String
+  type      CategoryKind
+  color     String?
+  icon      String?
+  budgetLimit Decimal?   @map("budget_limit") @db.Decimal(15, 2)
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeEntries  IncomeEntry[]
+  expenseEntries ExpenseEntry[]
+  expenseSplits  ExpenseSplit[]
+
+  @@index([userId, type])
+  @@map("categories")
+}
+
+enum RecurringType {
+  income
+  expense
+}
+
+enum RecurringFrequency {
+  daily
+  weekly
+  fortnightly
+  monthly
+  quarterly
+  annually
+}
+
+model RecurringSchedule {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @map("user_id") @db.Uuid
+  type      RecurringType
+  frequency RecurringFrequency
+  nextDate  DateTime?          @map("next_date") @db.Date
+  endDate   DateTime?          @map("end_date") @db.Date
+  isActive  Boolean            @default(true) @map("is_active")
+  template  Json
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeEntries IncomeEntry[]
+  expenseEntries ExpenseEntry[]
+
+  @@index([userId])
+  @@map("recurring_schedules")
+}
+
+model IncomeEntry {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  amount         Decimal   @db.Decimal(15, 2)
+  /// Earned / invoice date (accrual).
+  date           DateTime  @db.Date
+  /// When deposited to `account`; null while receivable (no account yet).
+  receivedDate DateTime? @map("received_date") @db.Date
+  /// Currency of `amount` (must match account when deposited).
+  currency       String    @default("USD")
+  description    String?
+  categoryId     String?   @map("category_id") @db.Uuid
+  accountId      String?   @map("account_id") @db.Uuid
+  source         String?
+  notes          String?
+  tags           String[]  @default([])
+  attachmentUrl  String?   @map("attachment_url")
+  contactId      String?   @map("contact_id") @db.Uuid
+  voidedAt       DateTime? @map("voided_at")
+  voidReason     String?   @map("void_reason")
+  recurringId    String?   @map("recurring_id") @db.Uuid
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  account   Account?           @relation("IncomeAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  contact   Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  recurring RecurringSchedule? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+  @@index([userId, receivedDate])
+  @@index([accountId])
+  @@index([contactId])
+  @@map("income_entries")
+}
+
+model ExpenseEntry {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  amount         Decimal   @db.Decimal(15, 2)
+  /// Legacy sort/filter date; kept in sync as COALESCE(paid_date, bill_date) on write.
+  date           DateTime  @db.Date
+  /// Vendor / statement date.
+  billDate       DateTime  @map("bill_date") @db.Date
+  /// Cash-out date (null while pay_later unpaid).
+  paidDate       DateTime? @map("paid_date") @db.Date
+  description    String?
+  categoryId     String?   @map("category_id") @db.Uuid
+  accountId      String?   @map("account_id") @db.Uuid
+  debtId         String?   @map("debt_id") @db.Uuid
+  merchant       String?
+  notes          String?
+  tags           String[]  @default([])
+  attachmentUrl  String?   @map("attachment_url")
+  contactId      String?   @map("contact_id") @db.Uuid
+  voidedAt       DateTime? @map("voided_at")
+  voidReason     String?   @map("void_reason")
+  recurringId    String?   @map("recurring_id") @db.Uuid
+  /// Unpaid bill: no bank account and no debt until settled from an account or charged to debt.
+  payLater       Boolean   @default(false) @map("pay_later")
+  /// Currency of `amount` when pay_later (defaults USD).
+  billCurrency   String    @default("USD") @map("bill_currency")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  account   Account?           @relation("ExpenseAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  debt      Debt?              @relation("ExpenseDebt", fields: [debtId], references: [id], onDelete: Restrict)
+  contact   Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  recurring RecurringSchedule? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  splits    ExpenseSplit[]
+
+  @@index([userId, date])
+  @@index([accountId])
+  @@index([debtId])
+  @@index([contactId])
+  @@index([userId, payLater])
+  @@map("expense_entries")
+}
+
+model ExpenseSplit {
+  id         String  @id @default(uuid()) @db.Uuid
+  expenseId  String  @map("expense_id") @db.Uuid
+  categoryId String  @map("category_id") @db.Uuid
+  amount     Decimal @db.Decimal(15, 2)
+  percentage Decimal? @db.Decimal(5, 2)
+
+  expense  ExpenseEntry @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  category Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([expenseId])
+  @@map("expense_splits")
+}
+
+enum DebtDirection {
+  i_owe
+  owed_to_me
+}
+
+enum DebtStatus {
+  open
+  settled
+}
+
+model Debt {
+  id            String        @id @default(uuid()) @db.Uuid
+  userId        String        @map("user_id") @db.Uuid
+  direction     DebtDirection
+  contactName   String        @map("contact_name")
+  /// Optional link to a row on the Contacts page (counterparty label stays in `contactName`).
+  contactId     String?       @map("contact_id") @db.Uuid
+  principal     Decimal       @db.Decimal(15, 2)
+  currency      String        @default("USD")
+  interestRate  Decimal       @default(0) @map("interest_rate") @db.Decimal(5, 2)
+  dueDate       DateTime?     @map("due_date") @db.Date
+  notes         String?
+  status        DebtStatus    @default(open)
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact         Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  payments        DebtPayment[]
+  expenseAccruals ExpenseEntry[] @relation("ExpenseDebt")
+
+  @@index([userId, status])
+  @@index([contactId])
+  @@map("debts")
+}
+
+model DebtPayment {
+  id            String    @id @default(uuid()) @db.Uuid
+  debtId        String    @map("debt_id") @db.Uuid
+  accountId     String    @map("account_id") @db.Uuid
+  /// Reduction toward the debt, always in the debt's `currency`.
+  amount        Decimal   @db.Decimal(15, 2)
+  /// Cash debited from `account` when in a different currency than the debt; otherwise null (use `amount`).
+  accountAmount Decimal?  @map("account_amount") @db.Decimal(15, 2)
+  /// Debt-currency units per 1 account-currency unit (when cross-currency).
+  exchangeRate  Decimal?  @map("exchange_rate") @db.Decimal(18, 8)
+  date          DateTime  @db.Date
+  notes         String?
+  attachmentUrl String?   @map("attachment_url")
+  voidedAt      DateTime? @map("voided_at")
+  voidReason    String?   @map("void_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  debt    Debt    @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([debtId])
+  @@map("debt_payments")
+}
+
+model AccountTransfer {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  fromAccountId String    @map("from_account_id") @db.Uuid
+  toAccountId   String    @map("to_account_id") @db.Uuid
+  amount        Decimal   @db.Decimal(15, 2)
+  /// Units of *to* currency per 1 unit of *from* currency (when currencies differ). Null = same currency (treated as 1).
+  exchangeRate  Decimal?  @map("exchange_rate") @db.Decimal(18, 8)
+  date          DateTime  @db.Date
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAccount Account @relation("TransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccount   Account @relation("TransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+
+  @@index([userId, date])
+  @@map("account_transfers")
+}

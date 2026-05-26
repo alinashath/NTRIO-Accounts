@@ -1,0 +1,22 @@
+{
+  "name": "income-expense-monorepo",
+  "private": true,
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "db:generate": "npm run db:generate -w server",
+    "db:migrate": "npm run db:migrate -w server",
+    "db:push": "npm run db:push -w server",
+    "db:nuke": "npm run db:nuke -w server",
+    "db:nuke:migrate": "npm run db:nuke:migrate -w server",
+    "db:clear-data": "npm run db:clear-data -w server",
+    "generate:ntrio-json": "npm run generate:ntrio-json -w server",
+    "import:ntrio": "npm run import:ntrio -w server",
+    "db:deploy": "npm run db:deploy -w server",
+    "lint": "npm run lint -w client && npm run lint -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

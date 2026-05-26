@@ -1,0 +1,39 @@
+{
+  "name": "server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "node scripts/audit-migrations.mjs && prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset",
+    "db:push": "prisma db push",
+    "db:clear-data": "node scripts/clear-app-data.mjs",
+    "generate:ntrio-json": "node scripts/generate-ntrio-statement-json.mjs",
+    "import:ntrio": "tsx src/scripts/import-ntrio-statement.ts",
+    "db:nuke": "prisma db execute --schema prisma/schema.prisma --file scripts/drop-app-tables.sql && prisma db push",
+    "db:nuke:migrate": "prisma db execute --schema prisma/schema.prisma --file scripts/drop-app-tables.sql && prisma migrate deploy",
+    "db:audit-migrations": "node scripts/audit-migrations.mjs",
+    "lint": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.2",
+    "@supabase/supabase-js": "^2.49.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.28"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.21",
+    "prisma": "^6.8.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

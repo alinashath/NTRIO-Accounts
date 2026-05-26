@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Mobile-first: comfortable reading, tap feedback, notches */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: rgb(15 23 42 / 0.08);
+  overscroll-behavior-y: none;
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}

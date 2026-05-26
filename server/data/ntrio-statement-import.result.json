@@ -1,0 +1,484 @@
+{
+  "meta": {
+    "source": "Ntrio Statement.pdf (Cashflow Feb–Apr 2026, partner header excluded)",
+    "batch_tag": "ntrio-import:2026-05-25",
+    "notes": "Six-value tuples: Feb USD, Feb MVR, Mar USD, Mar MVR, Apr USD, Apr MVR. Empty USD → MVR only for that month. For salaries, SENORA, Ezee, etc., when USD is filled the adjacent MVR is conversion-only (suppressMvrWhenUsd in generator). Pocket money is USD-only lines. Totals columns omitted.",
+    "userId": "1489781c-f74a-447f-bb88-fa16fdb24dc6",
+    "dryRun": false
+  },
+  "results": [
+    {
+      "statement_ref": "sales-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sales-FEB-MVR",
+      "status": "posted",
+      "id": "99718f82-6c86-4b5e-a2ad-bb5bbba9256c"
+    },
+    {
+      "statement_ref": "sales-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sales-MAR-MVR",
+      "status": "posted",
+      "id": "a1f477c8-e5cd-4004-b498-115988f5da4f"
+    },
+    {
+      "statement_ref": "sales-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sales-APR-MVR",
+      "status": "posted",
+      "id": "4c8c7b45-61b1-48a9-b970-7a28eee984ab"
+    },
+    {
+      "statement_ref": "grease-trip-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "grease-trip-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "veliga-fire-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "veliga-fire-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "unlimit-hardware-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "unlimit-hardware-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "naalu-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "naalu-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "euro-store-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "euro-store-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "asters-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "asters-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "mineral-water-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "mineral-water-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "mineral-water-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "mineral-water-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "red-star-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "red-star-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "fathaha-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "fathaha-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "asrafee-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "asrafee-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sky-print-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sky-print-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "items-towel-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "items-towel-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "butter-portion-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "butter-portion-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sanco-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "sanco-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "senora-transfer-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "senora-transfer-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "senora-transfer-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "buggy-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "buggy-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "buggy-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "buggy-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "creamy-bakery-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "creamy-bakery-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "loan-repayment-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "loan-repayment-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "loan-repayment-MAR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "loan-repayment-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "hassan-lui-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "hassan-lui-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "aishath-lui-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "aishath-lui-MAR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "aishath-lui-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "madheeha-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "madheeha-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "madheeha-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "madheeha-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "new-stand-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "new-stand-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "new-stand-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "new-stand-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "transfer-siraj-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "transfer-siraj-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-amin-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-amin-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-amin-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "pocket-amin-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "pocket-amin-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "pocket-amin-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-nawaz-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-nawaz-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-nawaz-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-zeena-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-zeena-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "salary-zeena-APR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "washing-machine-screw-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "washing-machine-screw-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-haali-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-haali-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-haali-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-haali-MAR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-haali-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-ntrio-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-ntrio-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-ntrio-MAR-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "utility-ntrio-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "insurance-guesthouse-FEB-MVR",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "insurance-guesthouse-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "ezee-FEB-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "ezee-MAR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "ezee-APR-USD",
+      "status": "skipped",
+      "reason": "already imported (stmt tag exists)"
+    },
+    {
+      "statement_ref": "dhiraagu-review-APR-usd",
+      "status": "skipped",
+      "reason": "needs_review (use --include-review after verifying)"
+    },
+    {
+      "statement_ref": "sparks-review-MAR-usd",
+      "status": "skipped",
+      "reason": "needs_review (use --include-review after verifying)"
+    }
+  ],
+  "posted": 3,
+  "skipped": 91,
+  "dry_run": 0
+}
