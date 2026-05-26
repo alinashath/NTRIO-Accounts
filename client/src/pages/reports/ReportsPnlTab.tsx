@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { eachMonthOfInterval, format, parseISO } from "date-fns";
+import {
+  eachMonthOfInterval,
+  endOfMonth,
+  format,
+  parseISO,
+  startOfMonth,
+  subMonths,
+} from "date-fns";
+import clsx from "clsx";
 import {
   CartesianGrid,
   Legend,
@@ -42,16 +50,41 @@ type CategoryBreakdownRes = {
   previous_period?: { from: string; to: string };
 };
 
+type RangePreset = "this_month" | "last_month" | "custom";
+
+function thisMonthRange(now = new Date()) {
+  return {
+    from: format(startOfMonth(now), "yyyy-MM-dd"),
+    to: format(now, "yyyy-MM-dd"),
+  };
+}
+
+function lastMonthRange(now = new Date()) {
+  const ref = subMonths(now, 1);
+  return {
+    from: format(startOfMonth(ref), "yyyy-MM-dd"),
+    to: format(endOfMonth(ref), "yyyy-MM-dd"),
+  };
+}
+
+function inferPreset(fromStr: string, toStr: string): RangePreset {
+  const now = new Date();
+  const tm = thisMonthRange(now);
+  const lm = lastMonthRange(now);
+  if (fromStr === tm.from && toStr === tm.to) return "this_month";
+  if (fromStr === lm.from && toStr === lm.to) return "last_month";
+  return "custom";
+}
+
 export function ReportsPnlTab() {
   const { displayCurrency } = useDisplayCurrency();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = new Date();
-  const defaultFrom = format(new Date(today.getFullYear(), 0, 1), "yyyy-MM-dd");
-  const defaultTo = format(today, "yyyy-MM-dd");
+  const initialRange = thisMonthRange();
 
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
-  const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
+  const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
+  const [from, setFrom] = useState(initialRange.from);
+  const [to, setTo] = useState(initialRange.to);
+  const [applied, setApplied] = useState(initialRange);
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
@@ -65,6 +98,7 @@ export function ReportsPnlTab() {
       setFrom(qf);
       setTo(qt);
       setApplied({ from: qf, to: qt });
+      setRangePreset(inferPreset(qf, qt));
     }
   }, [searchParams]);
 
@@ -117,17 +151,38 @@ export function ReportsPnlTab() {
   function applyRange() {
     setApplied({ from, to });
     setSearchParams({ from, to });
+    setRangePreset("custom");
+  }
+
+  function applyPreset(preset: RangePreset) {
+    setRangePreset(preset);
+    if (preset === "this_month") {
+      const r = thisMonthRange();
+      setFrom(r.from);
+      setTo(r.to);
+      setApplied(r);
+      setSearchParams({ from: r.from, to: r.to });
+      return;
+    }
+    if (preset === "last_month") {
+      const r = lastMonthRange();
+      setFrom(r.from);
+      setTo(r.to);
+      setApplied(r);
+      setSearchParams({ from: r.from, to: r.to });
+    }
   }
 
   async function downloadCsv() {
     const token = useAuthStore.getState().session?.access_token;
+    const { from: af, to: at } = applied;
     const res = await fetch("/api/reports/export", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ format: "csv", from, to }),
+      body: JSON.stringify({ format: "csv", from: af, to: at }),
     });
     if (!res.ok) {
       setError("Export failed");
@@ -137,7 +192,7 @@ export function ReportsPnlTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `export-${from}_${to}.csv`;
+    a.download = `export-${af}_${at}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -192,32 +247,92 @@ export function ReportsPnlTab() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <Card>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            <span className="text-slate-600">From</span>
-            <input
-              type="date"
-              className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </label>
-          <label className="text-sm">
-            <span className="text-slate-600">To</span>
-            <input
-              type="date"
-              className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </label>
-          <Button type="button" onClick={() => applyRange()}>
-            Apply
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
-            Export CSV
-          </Button>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Period</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => applyPreset("this_month")}
+            className={clsx(
+              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
+              rangePreset === "this_month"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
+            )}
+          >
+            This month
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset("last_month")}
+            className={clsx(
+              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
+              rangePreset === "last_month"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
+            )}
+          >
+            Last month
+          </button>
+          <button
+            type="button"
+            onClick={() => setRangePreset("custom")}
+            className={clsx(
+              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
+              rangePreset === "custom"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
+            )}
+          >
+            Custom
+          </button>
         </div>
+
+        {rangePreset === "custom" ? (
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="text-slate-600">From</span>
+              <input
+                type="date"
+                className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                value={from}
+                onChange={(e) => {
+                  setFrom(e.target.value);
+                  setRangePreset("custom");
+                }}
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-slate-600">To</span>
+              <input
+                type="date"
+                className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                value={to}
+                onChange={(e) => {
+                  setTo(e.target.value);
+                  setRangePreset("custom");
+                }}
+              />
+            </label>
+            <Button type="button" onClick={() => applyRange()}>
+              Apply
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
+              Export CSV
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-700">
+              <span className="text-slate-500">Showing </span>
+              {format(parseISO(from), "MMM d, yyyy")}
+              <span className="text-slate-500"> – </span>
+              {format(parseISO(to), "MMM d, yyyy")}
+            </p>
+            <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
+              Export CSV
+            </Button>
+          </div>
+        )}
       </Card>
 
       {pnl ? (

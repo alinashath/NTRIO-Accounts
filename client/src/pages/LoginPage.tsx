@@ -19,12 +19,18 @@ export function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error: err } = await supabase.auth.signInWithPassword({
+    const { data, error: err } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     setLoading(false);
-    if (err) setError(err.message);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    if (data.session) {
+      useAuthStore.getState().setSession(data.session);
+    }
   }
 
   async function handleGoogle() {

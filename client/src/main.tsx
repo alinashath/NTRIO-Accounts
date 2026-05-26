@@ -8,18 +8,40 @@ import { useAuthStore } from "./store/auth";
 
 function Boot() {
   const setSession = useAuthStore((s) => s.setSession);
+  const markAuthReady = useAuthStore((s) => s.markAuthReady);
+  const authReady = useAuthStore((s) => s.authReady);
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-    });
+    let cancelled = false;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
       setSession(session);
     });
-    return () => subscription.unsubscribe();
-  }, [setSession]);
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSession(data.session);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) markAuthReady();
+      });
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [setSession, markAuthReady]);
+
+  if (!authReady) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50 text-slate-600">
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
