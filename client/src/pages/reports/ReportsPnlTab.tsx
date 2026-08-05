@@ -2,28 +2,42 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   eachMonthOfInterval,
-  endOfMonth,
   format,
   parseISO,
-  startOfMonth,
-  subMonths,
 } from "date-fns";
 import clsx from "clsx";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
   Legend,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { apiFetch } from "@/api/http";
+import { DateBasisToggle, dateBasisSubtitle, type DateBasis } from "@/components/DateBasisToggle";
+import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Button, Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { chartAxisProps, chartTheme } from "@/lib/chartTheme";
 import { formatMoney } from "@/lib/money";
+import {
+  lastMonthRange,
+  type RangePreset,
+  thisMonthRange,
+} from "@/lib/reportPeriod";
 import { useAuthStore } from "@/store/auth";
+
+type IncomeLine = {
+  key: string;
+  label: string;
+  amount: number;
+  category_id: string | null;
+  pct_of_total: number;
+};
 
 type Pnl = {
   from: string;
@@ -31,7 +45,11 @@ type Pnl = {
   total_income: number;
   total_expenses: number;
   net: number;
+  net_income?: number;
   display_currency?: string | null;
+  basis?: string;
+  income_lines?: IncomeLine[];
+  expense_lines?: IncomeLine[];
 };
 
 type Cat = {
@@ -50,23 +68,6 @@ type CategoryBreakdownRes = {
   previous_period?: { from: string; to: string };
 };
 
-type RangePreset = "this_month" | "last_month" | "custom";
-
-function thisMonthRange(now = new Date()) {
-  return {
-    from: format(startOfMonth(now), "yyyy-MM-dd"),
-    to: format(now, "yyyy-MM-dd"),
-  };
-}
-
-function lastMonthRange(now = new Date()) {
-  const ref = subMonths(now, 1);
-  return {
-    from: format(startOfMonth(ref), "yyyy-MM-dd"),
-    to: format(endOfMonth(ref), "yyyy-MM-dd"),
-  };
-}
-
 function inferPreset(fromStr: string, toStr: string): RangePreset {
   const now = new Date();
   const tm = thisMonthRange(now);
@@ -82,9 +83,8 @@ export function ReportsPnlTab() {
   const initialRange = thisMonthRange();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
-  const [from, setFrom] = useState(initialRange.from);
-  const [to, setTo] = useState(initialRange.to);
   const [applied, setApplied] = useState(initialRange);
+  const [dateBasis, setDateBasis] = useState<DateBasis>("accrual");
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
@@ -94,25 +94,26 @@ export function ReportsPnlTab() {
   useEffect(() => {
     const qf = searchParams.get("from");
     const qt = searchParams.get("to");
+    const qb = searchParams.get("date_basis");
     if (qf && qt) {
-      setFrom(qf);
-      setTo(qt);
       setApplied({ from: qf, to: qt });
       setRangePreset(inferPreset(qf, qt));
     }
+    if (qb === "accrual" || qb === "cash") setDateBasis(qb);
   }, [searchParams]);
 
   const load = useCallback(async () => {
     setError(null);
     const dc = encodeURIComponent(displayCurrency);
+    const db = encodeURIComponent(dateBasis);
     const { from: f, to: t } = applied;
     try {
       const [p, c] = await Promise.all([
         apiFetch<Pnl>(
-          `/api/reports/pnl?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}`,
+          `/api/reports/pnl?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&date_basis=${db}`,
         ),
         apiFetch<CategoryBreakdownRes>(
-          `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&compare=true`,
+          `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&compare=true&date_basis=${db}`,
         ),
       ]);
       setPnl(p);
@@ -129,7 +130,7 @@ export function ReportsPnlTab() {
         const ms = format(m, "yyyy-MM-01");
         const me = format(new Date(m.getFullYear(), m.getMonth() + 1, 0), "yyyy-MM-dd");
         const row = await apiFetch<Pnl>(
-          `/api/reports/pnl?from=${encodeURIComponent(ms)}&to=${encodeURIComponent(me)}&display_currency=${dc}`,
+          `/api/reports/pnl?from=${encodeURIComponent(ms)}&to=${encodeURIComponent(me)}&display_currency=${dc}&date_basis=${db}`,
         );
         points.push({
           month: format(m, "MMM yyyy"),
@@ -142,35 +143,21 @@ export function ReportsPnlTab() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     }
-  }, [applied, displayCurrency]);
+  }, [applied, dateBasis, displayCurrency]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  function applyRange() {
-    setApplied({ from, to });
-    setSearchParams({ from, to });
-    setRangePreset("custom");
+  function applyPeriod(next: { from: string; to: string; preset: RangePreset }) {
+    setRangePreset(next.preset);
+    setApplied({ from: next.from, to: next.to });
+    setSearchParams({ from: next.from, to: next.to, date_basis: dateBasis });
   }
 
-  function applyPreset(preset: RangePreset) {
-    setRangePreset(preset);
-    if (preset === "this_month") {
-      const r = thisMonthRange();
-      setFrom(r.from);
-      setTo(r.to);
-      setApplied(r);
-      setSearchParams({ from: r.from, to: r.to });
-      return;
-    }
-    if (preset === "last_month") {
-      const r = lastMonthRange();
-      setFrom(r.from);
-      setTo(r.to);
-      setApplied(r);
-      setSearchParams({ from: r.from, to: r.to });
-    }
+  function applyDateBasis(next: DateBasis) {
+    setDateBasis(next);
+    setSearchParams({ from: applied.from, to: applied.to, date_basis: next });
   }
 
   async function downloadCsv() {
@@ -208,14 +195,34 @@ export function ReportsPnlTab() {
 
   function categoryAmountCell(r: Cat) {
     const hasCompare = prevPeriod != null;
+    // Income up = good (green); expense up = bad (red)
     const changeTone =
-      r.change == null ? "text-slate-500" : r.change >= 0 ? "text-orange-700" : "text-emerald-700";
+      r.change == null
+        ? "text-muted-foreground"
+        : r.kind === "expense"
+          ? r.change > 0
+            ? "text-negative"
+            : r.change < 0
+              ? "text-positive"
+              : "text-muted-foreground"
+          : r.change > 0
+            ? "text-positive"
+            : r.change < 0
+              ? "text-negative"
+              : "text-muted-foreground";
     return (
       <div className="text-right tabular-nums">
-        <div className="font-medium text-slate-900">{formatMoney(r.total, displayCurrency)}</div>
+        <div
+          className={clsx(
+            "font-medium",
+            r.kind === "income" ? "text-positive" : "text-negative",
+          )}
+        >
+          {formatMoney(r.total, displayCurrency)}
+        </div>
         {hasCompare ? (
           <div className="mt-1 space-y-0.5">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-muted-foreground">
               Prev{" "}
               {r.previous_total != null ? formatMoney(r.previous_total, displayCurrency) : "—"}
             </div>
@@ -225,9 +232,9 @@ export function ReportsPnlTab() {
                 {formatMoney(r.change, displayCurrency)}
               </div>
             ) : (
-              <div className="text-xs text-slate-500">—</div>
+              <div className="text-xs text-muted-foreground">—</div>
             )}
-            <div className="text-[11px] leading-tight text-slate-500">
+            <div className={`text-[11px] leading-tight ${changeTone}`}>
               {r.change_pct != null ? `${r.change_pct >= 0 ? "+" : ""}${r.change_pct.toFixed(1)}%` : "—"}
             </div>
           </div>
@@ -236,142 +243,246 @@ export function ReportsPnlTab() {
     );
   }
 
+  const ccy = pnl?.display_currency ?? displayCurrency;
+  const netIncome = pnl?.net_income ?? pnl?.net ?? 0;
+
   return (
-    <div className="space-y-6">
-      <h3 className="text-base font-semibold text-slate-900">Profit &amp; loss</h3>
-      <p className="text-sm text-slate-600">
-        Income is counted by <strong>earned date</strong>; expenses by <strong>bill date</strong> (including unpaid
-        pay-later).
-      </p>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground">Income statement</h3>
+        <PeriodFilterBar
+          from={applied.from}
+          to={applied.to}
+          preset={rangePreset}
+          onApply={applyPeriod}
+          actions={
+            <>
+              <DateBasisToggle value={dateBasis} onChange={applyDateBasis} />
+              <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
+                CSV
+              </Button>
+            </>
+          }
+        />
+      </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <p className="text-xs text-muted-foreground">{dateBasisSubtitle(dateBasis)}</p>
 
-      <Card>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Period</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => applyPreset("this_month")}
-            className={clsx(
-              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
-              rangePreset === "this_month"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
-            )}
-          >
-            This month
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset("last_month")}
-            className={clsx(
-              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
-              rangePreset === "last_month"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
-            )}
-          >
-            Last month
-          </button>
-          <button
-            type="button"
-            onClick={() => setRangePreset("custom")}
-            className={clsx(
-              "min-h-11 touch-manipulation rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.99]",
-              rangePreset === "custom"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-800 hover:bg-slate-200",
-            )}
-          >
-            Custom
-          </button>
-        </div>
-
-        {rangePreset === "custom" ? (
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <label className="text-sm">
-              <span className="text-slate-600">From</span>
-              <input
-                type="date"
-                className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                value={from}
-                onChange={(e) => {
-                  setFrom(e.target.value);
-                  setRangePreset("custom");
-                }}
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-slate-600">To</span>
-              <input
-                type="date"
-                className="mt-1 block rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                value={to}
-                onChange={(e) => {
-                  setTo(e.target.value);
-                  setRangePreset("custom");
-                }}
-              />
-            </label>
-            <Button type="button" onClick={() => applyRange()}>
-              Apply
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
-              Export CSV
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-700">
-              <span className="text-slate-500">Showing </span>
-              {format(parseISO(from), "MMM d, yyyy")}
-              <span className="text-slate-500"> – </span>
-              {format(parseISO(to), "MMM d, yyyy")}
-            </p>
-            <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
-              Export CSV
-            </Button>
-          </div>
-        )}
-      </Card>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {pnl ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Card>
-            <p className="text-xs uppercase text-slate-500">Income</p>
-            <p className="mt-2 text-2xl font-bold text-emerald-700">
-              {formatMoney(pnl.total_income, displayCurrency)}
-            </p>
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Total income
+              </p>
+              <p className="mt-2 text-xl font-extrabold tabular-nums text-positive sm:text-2xl">
+                {formatMoney(pnl.total_income, ccy)}
+              </p>
+            </Card>
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Total expenses
+              </p>
+              <p className="mt-2 text-xl font-extrabold tabular-nums text-negative sm:text-2xl">
+                {formatMoney(pnl.total_expenses, ccy)}
+              </p>
+            </Card>
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Net income
+              </p>
+              <p
+                className={`mt-2 text-xl font-extrabold tabular-nums sm:text-2xl ${
+                  netIncome >= 0 ? "text-positive" : "text-negative"
+                }`}
+              >
+                {formatMoney(netIncome, ccy)}
+              </p>
+              {pnl.total_income > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {((netIncome / pnl.total_income) * 100).toFixed(0)}% of income retained
+                </p>
+              ) : null}
+            </Card>
+          </div>
+
+          <Card className="mx-auto max-w-2xl">
+            <StatementHeader
+              title="Income Statement"
+              subtitle={`${format(parseISO(pnl.from), "MMM d, yyyy")} – ${format(parseISO(pnl.to), "MMM d, yyyy")} · ${dateBasisSubtitle(dateBasis)} · ${ccy}`}
+            />
+            <div className="mt-2">
+              <StatementRow label="Income" currency={ccy} depth={0} />
+              {(pnl.income_lines ?? []).length ? (
+                (pnl.income_lines ?? []).map((l) => (
+                  <StatementRow
+                    key={`inc-${l.key}`}
+                    label={`${l.label} (${l.pct_of_total.toFixed(0)}%)`}
+                    amount={l.amount}
+                    currency={ccy}
+                    depth={1}
+                  />
+                ))
+              ) : (
+                <StatementRow label="No income in period" amount={0} currency={ccy} depth={1} muted />
+              )}
+              <StatementRow
+                label="Total income"
+                amount={pnl.total_income}
+                currency={ccy}
+                bold
+                borderTop
+              />
+
+              <StatementRow label="Expenses" currency={ccy} depth={0} />
+              {(pnl.expense_lines ?? []).length ? (
+                (pnl.expense_lines ?? []).map((l) => (
+                  <StatementRow
+                    key={`exp-${l.key}`}
+                    label={`${l.label} (${l.pct_of_total.toFixed(0)}%)`}
+                    amount={l.amount}
+                    currency={ccy}
+                    depth={1}
+                  />
+                ))
+              ) : (
+                <StatementRow label="No expenses in period" amount={0} currency={ccy} depth={1} muted />
+              )}
+              <StatementRow
+                label="Total expenses"
+                amount={pnl.total_expenses}
+                currency={ccy}
+                bold
+                borderTop
+              />
+
+              <StatementRow
+                label="Net income"
+                amount={netIncome}
+                currency={ccy}
+                depth={2}
+                borderDouble
+                negativeAsParen
+              />
+            </div>
           </Card>
-          <Card>
-            <p className="text-xs uppercase text-slate-500">Expenses</p>
-            <p className="mt-2 text-2xl font-bold text-orange-700">
-              {formatMoney(pnl.total_expenses, displayCurrency)}
-            </p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase text-slate-500">Net</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(pnl.net, displayCurrency)}</p>
-          </Card>
-        </div>
+        </>
       ) : null}
 
       <Card>
-        <h3 className="text-sm font-semibold text-slate-900">Trend by month</h3>
-        <div className="mt-4 h-72">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Trend by month</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Green income · red expense · blue net
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 h-72 sm:h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => formatMoney(v, displayCurrency)} />
-              <Legend />
-              <Line type="monotone" dataKey="income" stroke="#16a34a" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="expense" stroke="#f97316" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="net" stroke="#0f172a" strokeWidth={2} dot={false} />
-            </LineChart>
+            <AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="pnlIncomeFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={chartTheme.income} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={chartTheme.income} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="pnlExpenseFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={chartTheme.expense} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={chartTheme.expense} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
+              <XAxis dataKey="month" {...chartAxisProps} />
+              <YAxis
+                {...chartAxisProps}
+                width={44}
+                tickFormatter={(v: number) =>
+                  Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                }
+              />
+              <Tooltip
+                formatter={(v: number, name: string) => [
+                  formatMoney(v, displayCurrency),
+                  name === "income" ? "Income" : name === "expense" ? "Expense" : "Net",
+                ]}
+                contentStyle={{
+                  borderRadius: 10,
+                  borderColor: chartTheme.tooltipBorder,
+                  background: chartTheme.tooltipBg,
+                  fontSize: 12,
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 12 }}
+                formatter={(value) =>
+                  value === "income" ? "Income" : value === "expense" ? "Expense" : "Net"
+                }
+              />
+              <Area
+                type="monotone"
+                dataKey="income"
+                name="income"
+                stroke={chartTheme.income}
+                strokeWidth={2}
+                fill="url(#pnlIncomeFill)"
+                dot={false}
+              />
+              <Area
+                type="monotone"
+                dataKey="expense"
+                name="expense"
+                stroke={chartTheme.expense}
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                fill="url(#pnlExpenseFill)"
+                dot={false}
+              />
+              <Area
+                type="monotone"
+                dataKey="net"
+                name="net"
+                stroke={chartTheme.net}
+                strokeWidth={2}
+                strokeDasharray="2 4"
+                fill="transparent"
+                dot={{ r: 3, strokeWidth: 0, fill: chartTheme.net }}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
+        {trend.length > 0 ? (
+          <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-3">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Best net month
+              </dt>
+              <dd className="mt-0.5 text-sm font-bold text-foreground">
+                {[...trend].sort((a, b) => b.net - a.net)[0]?.month ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Highest spend
+              </dt>
+              <dd className="mt-0.5 text-sm font-bold text-foreground">
+                {[...trend].sort((a, b) => b.expense - a.expense)[0]?.month ?? "—"}
+              </dd>
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Avg monthly net
+              </dt>
+              <dd className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
+                {formatMoney(
+                  trend.reduce((s, r) => s + r.net, 0) / Math.max(trend.length, 1),
+                  displayCurrency,
+                )}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
       </Card>
 
       <Card>

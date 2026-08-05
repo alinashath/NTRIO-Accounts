@@ -2,6 +2,24 @@ import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 
 /**
+ * Credit to destination account for an inbound transfer.
+ * Debit side always uses `amount` in source currency; credit is
+ * `amount * exchange_rate` when currencies differ (`exchange_rate` = to per 1 from).
+ */
+export function transferCreditToDestination(t: {
+  amount: unknown;
+  exchangeRate: unknown;
+  fromAccount: { currency: string };
+  toAccount: { currency: string };
+}): number {
+  const amt = Number(t.amount);
+  if (t.fromAccount.currency === t.toAccount.currency) return amt;
+  const rate = Number(t.exchangeRate ?? 0);
+  if (!rate || rate <= 0) return amt;
+  return toMoney(amt * rate);
+}
+
+/**
  * Recomputes cached `balance` from opening balance plus all live flows.
  * Transfers: debit `amount` from source (in source currency); credit destination
  * with `amount * exchange_rate` when currencies differ (`exchange_rate` = to per 1 from).
@@ -40,19 +58,7 @@ export async function recalculateAccountBalance(accountId: string): Promise<numb
 
   let inT = 0;
   for (const t of transfersIn) {
-    const fromCur = t.fromAccount.currency;
-    const toCur = t.toAccount.currency;
-    const amt = Number(t.amount);
-    if (fromCur === toCur) {
-      inT += amt;
-    } else {
-      const rate = Number(t.exchangeRate ?? 0);
-      if (!rate || rate <= 0) {
-        inT += amt;
-      } else {
-        inT += toMoney(amt * rate);
-      }
-    }
+    inT += transferCreditToDestination(t);
   }
 
   const payments = await prisma.debtPayment.findMany({

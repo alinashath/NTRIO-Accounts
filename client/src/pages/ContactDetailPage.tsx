@@ -244,7 +244,8 @@ export function ContactDetailPage() {
                             <DisplayAmountCell
                               amount={ln.amount}
                               nativeCurrency={ln.currency}
-                              className="font-medium text-orange-800"
+                              tone="negative"
+                              className="font-medium"
                             />
                           </td>
                         </tr>
@@ -371,9 +372,8 @@ export function ContactDetailPage() {
                           <DisplayAmountCell
                             amount={ln.amount}
                             nativeCurrency={ln.currency}
-                            className={
-                              ln.kind === "income" ? "font-medium text-emerald-700" : "font-medium text-orange-700"
-                            }
+                            tone={ln.kind === "income" ? "positive" : "negative"}
+                            className="font-medium"
                           />
                         </td>
                       </tr>

@@ -246,14 +246,14 @@ function ModalAdj({
 }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[var(--radius-md)] border border-border bg-card p-3">
         <h3 className="text-base font-semibold text-slate-900">Balance adjustment</h3>
         <form className="mt-4 space-y-3" onSubmit={onSubmit}>
           <label className="block text-sm">
             <span className="text-slate-600">Date</span>
             <input
               type="date"
-              className="mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              className="mt-1 block h-8 w-full rounded-[var(--radius-md)] border border-border px-2.5 text-sm"
               value={adjDate}
               onChange={(e) => setAdjDate(e.target.value)}
               required

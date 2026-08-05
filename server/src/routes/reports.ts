@@ -4,7 +4,12 @@ import { Prisma } from "@prisma/client";
 import { convertWithUsdMvrRate } from "../lib/displayFx.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
-import { nonVoidedPaidSum } from "../services/debtService.js";
+import {
+  buildBalanceSheet,
+  buildCashFlowStatement,
+  buildIncomeStatement,
+  type DateBasis,
+} from "../services/statementService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/http.js";
 
@@ -17,6 +22,16 @@ const rangeQuery = z.object({
   account_id: z.string().uuid().optional(),
   category_id: z.string().uuid().optional(),
 });
+
+function parseDateBasis(raw: unknown): DateBasis {
+  const v = z
+    .preprocess(
+      (x) => (Array.isArray(x) ? x[0] : x),
+      z.enum(["accrual", "cash"]).optional(),
+    )
+    .parse(raw);
+  return v ?? "accrual";
+}
 
 const DAY_MS = 86_400_000;
 
@@ -240,88 +255,62 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = rangeQuery.parse(req.query);
-    const from = new Date(`${q.from}T00:00:00Z`);
-    const to = new Date(`${q.to}T00:00:00Z`);
     const displayCurrency = z
       .preprocess(
         (v) => (Array.isArray(v) ? v[0] : v),
         z.enum(["USD", "MVR"]).optional(),
       )
       .parse(req.query.display_currency);
+    const dateBasis = parseDateBasis(req.query.date_basis);
 
-    /** Accrual P&amp;L: income by earned date, expenses by vendor bill date (includes pay-later). */
+    if (displayCurrency) {
+      const stmt = await buildIncomeStatement(userId, q.from, q.to, displayCurrency, dateBasis);
+      res.json(stmt);
+      return;
+    }
+
+    const from = new Date(`${q.from}T00:00:00Z`);
+    const to = new Date(`${q.to}T00:00:00Z`);
     const incomeWhere: Prisma.IncomeEntryWhereInput = {
       userId,
       deletedAt: null,
       voidedAt: null,
-      date: { gte: from, lte: to },
+      ...(dateBasis === "accrual"
+        ? { date: { gte: from, lte: to } }
+        : { receivedDate: { not: null, gte: from, lte: to } }),
       ...(q.account_id ? { accountId: q.account_id } : {}),
       ...(q.category_id ? { categoryId: q.category_id } : {}),
     };
-
     const expenseWhere: Prisma.ExpenseEntryWhereInput = {
       userId,
       deletedAt: null,
       voidedAt: null,
-      billDate: { gte: from, lte: to },
+      ...(dateBasis === "accrual"
+        ? { billDate: { gte: from, lte: to } }
+        : { paidDate: { not: null, gte: from, lte: to } }),
       ...(q.account_id ? { accountId: q.account_id } : {}),
       ...(q.category_id ? { categoryId: q.category_id } : {}),
     };
-
-    let totalIncome: number;
-    let totalExpenses: number;
-
-    if (displayCurrency) {
-      const fxRow = await prisma.userSettings.findUnique({ where: { userId } });
-      const rate = Number(fxRow?.globalUsdMvrRate ?? 15.42);
-      const [incomeRows, expenseRows] = await Promise.all([
-        prisma.incomeEntry.findMany({
-          where: incomeWhere,
-          include: { account: true },
-        }),
-        prisma.expenseEntry.findMany({
-          where: expenseWhere,
-          include: { account: true, debt: true },
-        }),
-      ]);
-      totalIncome = toMoney(
-        incomeRows.reduce((s, r) => {
-          const ccy = r.account?.currency ?? r.currency ?? "USD";
-          return s + convertWithUsdMvrRate(Number(r.amount), ccy, displayCurrency, rate);
-        }, 0),
-      );
-      totalExpenses = toMoney(
-        expenseRows.reduce((s, r) => {
-          const ccy = r.account?.currency ?? r.debt?.currency ?? r.billCurrency ?? "USD";
-          return s + convertWithUsdMvrRate(Number(r.amount), ccy, displayCurrency, rate);
-        }, 0),
-      );
-    } else {
-      const [incomeAgg, expenseAgg] = await Promise.all([
-        prisma.incomeEntry.aggregate({
-          where: incomeWhere,
-          _sum: { amount: true },
-        }),
-        prisma.expenseEntry.aggregate({
-          where: { ...expenseWhere },
-          _sum: { amount: true },
-        }),
-      ]);
-      totalIncome = toMoney(Number(incomeAgg._sum.amount ?? 0));
-      totalExpenses = toMoney(Number(expenseAgg._sum.amount ?? 0));
-    }
-
-    const grossProfit = totalIncome;
+    const [incomeAgg, expenseAgg] = await Promise.all([
+      prisma.incomeEntry.aggregate({ where: incomeWhere, _sum: { amount: true } }),
+      prisma.expenseEntry.aggregate({ where: expenseWhere, _sum: { amount: true } }),
+    ]);
+    const totalIncome = toMoney(Number(incomeAgg._sum.amount ?? 0));
+    const totalExpenses = toMoney(Number(expenseAgg._sum.amount ?? 0));
     const net = toMoney(totalIncome - totalExpenses);
-
     res.json({
       from: q.from,
       to: q.to,
-      display_currency: displayCurrency ?? null,
+      display_currency: null,
+      basis: dateBasis,
+      date_basis: dateBasis,
       total_income: totalIncome,
       total_expenses: totalExpenses,
-      gross_profit: grossProfit,
+      gross_profit: totalIncome,
       net,
+      net_income: net,
+      income_lines: [],
+      expense_lines: [],
     });
   }),
 );
@@ -331,98 +320,34 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = rangeQuery.parse(req.query);
-    const from = new Date(`${q.from}T00:00:00Z`);
-    const to = new Date(`${q.to}T00:00:00Z`);
+    const displayCurrency = z
+      .preprocess(
+        (v) => (Array.isArray(v) ? v[0] : v),
+        z.enum(["USD", "MVR"]).optional(),
+      )
+      .parse(req.query.display_currency);
+    const dateBasis = parseDateBasis(req.query.date_basis);
 
-    const accounts = await prisma.account.findMany({
-      where: { userId, ...(q.account_id ? { id: q.account_id } : {}) },
-    });
+    const dc = displayCurrency ?? "USD";
+    const stmt = await buildCashFlowStatement(userId, q.from, q.to, dc, dateBasis);
+    res.json(stmt);
+  }),
+);
 
-    const out: Array<{
-      account_id: string;
-      name: string;
-      currency: string;
-      /** Income + transfers in + cash-in from debt activity (account currency). */
-      money_in: number;
-      /** Expenses + transfers out + cash-out from debt activity (account currency). */
-      money_out: number;
-      /** money_in − money_out */
-      net_flow: number;
-    }> = [];
+reportsRouter.get(
+  "/balance-sheet",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const asOf = z.object({ as_of: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+    const displayCurrency = z
+      .preprocess(
+        (v) => (Array.isArray(v) ? v[0] : v),
+        z.enum(["USD", "MVR"]).optional(),
+      )
+      .parse(req.query.display_currency);
 
-    for (const a of accounts) {
-      const [inc, exp, tout, tin, debtPay] = await Promise.all([
-        prisma.incomeEntry.aggregate({
-          where: {
-            userId,
-            accountId: a.id,
-            deletedAt: null,
-            voidedAt: null,
-            receivedDate: { not: null, gte: from, lte: to },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.expenseEntry.aggregate({
-          where: {
-            userId,
-            accountId: a.id,
-            deletedAt: null,
-            voidedAt: null,
-            paidDate: { not: null, gte: from, lte: to },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.accountTransfer.aggregate({
-          where: {
-            userId,
-            fromAccountId: a.id,
-            date: { gte: from, lte: to },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.accountTransfer.aggregate({
-          where: {
-            userId,
-            toAccountId: a.id,
-            date: { gte: from, lte: to },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.debtPayment.findMany({
-          where: { accountId: a.id, voidedAt: null, date: { gte: from, lte: to } },
-          include: { debt: true },
-        }),
-      ]);
-
-      const incomeSum = Number(inc._sum.amount ?? 0);
-      const expenseSum = Number(exp._sum.amount ?? 0);
-      const transferOut = Number(tout._sum.amount ?? 0);
-      const transferIn = Number(tin._sum.amount ?? 0);
-
-      let debtIn = 0;
-      let debtOut = 0;
-      for (const p of debtPay) {
-        const cash = p.accountAmount != null ? Number(p.accountAmount) : Number(p.amount);
-        const delta = p.debt.direction === "i_owe" ? -cash : cash;
-        if (delta >= 0) debtIn += delta;
-        else debtOut += -delta;
-      }
-
-      const moneyIn = toMoney(incomeSum + transferIn + debtIn);
-      const moneyOut = toMoney(expenseSum + transferOut + debtOut);
-      const netFlow = toMoney(moneyIn - moneyOut);
-
-      out.push({
-        account_id: a.id,
-        name: a.name,
-        currency: a.currency,
-        money_in: moneyIn,
-        money_out: moneyOut,
-        net_flow: netFlow,
-      });
-    }
-
-    res.json({ from: q.from, to: q.to, accounts: out });
+    const stmt = await buildBalanceSheet(userId, asOf.as_of, displayCurrency ?? "USD");
+    res.json(stmt);
   }),
 );
 
@@ -437,160 +362,16 @@ reportsRouter.get(
         z.enum(["USD", "MVR"]).optional(),
       )
       .parse(req.query.display_currency);
-    const end = new Date(`${asOf.as_of}T23:59:59Z`);
 
-    let rate = 15.42;
-    if (displayCurrency) {
-      const fxRow = await prisma.userSettings.findUnique({ where: { userId } });
-      rate = Number(fxRow?.globalUsdMvrRate ?? 15.42);
-    }
-
-    const accounts = await prisma.account.findMany({ where: { userId } });
-
-    let cashLike = 0;
-
-    for (const a of accounts) {
-      const [inc, exp, tout, tin, debtPay] = await Promise.all([
-        prisma.incomeEntry.aggregate({
-          where: {
-            userId,
-            accountId: a.id,
-            deletedAt: null,
-            voidedAt: null,
-            receivedDate: { not: null, lte: end },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.expenseEntry.aggregate({
-          where: {
-            userId,
-            accountId: a.id,
-            deletedAt: null,
-            voidedAt: null,
-            paidDate: { not: null, lte: end },
-          },
-          _sum: { amount: true },
-        }),
-        prisma.accountTransfer.aggregate({
-          where: { userId, fromAccountId: a.id, date: { lte: end } },
-          _sum: { amount: true },
-        }),
-        prisma.accountTransfer.aggregate({
-          where: { userId, toAccountId: a.id, date: { lte: end } },
-          _sum: { amount: true },
-        }),
-        prisma.debtPayment.findMany({
-          where: { accountId: a.id, voidedAt: null, date: { lte: end } },
-          include: { debt: true },
-        }),
-      ]);
-
-      let debtDelta = 0;
-      for (const p of debtPay) {
-        const cash = p.accountAmount != null ? Number(p.accountAmount) : Number(p.amount);
-        debtDelta += p.debt.direction === "i_owe" ? -cash : cash;
-      }
-
-      const bal = toMoney(
-        Number(a.openingBalance) +
-          Number(inc._sum.amount ?? 0) -
-          Number(exp._sum.amount ?? 0) -
-          Number(tout._sum.amount ?? 0) +
-          Number(tin._sum.amount ?? 0) +
-          debtDelta,
-      );
-
-      if (displayCurrency) {
-        cashLike = toMoney(
-          cashLike + convertWithUsdMvrRate(bal, a.currency, displayCurrency, rate),
-        );
-      } else {
-        cashLike += bal;
-      }
-    }
-
-    const debts = await prisma.debt.findMany({
-      where: { userId },
-      include: { payments: true },
-    });
-
-    const debtIds = debts.map((d) => d.id);
-    const accGroups =
-      debtIds.length === 0
-        ? []
-        : await prisma.expenseEntry.groupBy({
-            by: ["debtId"],
-            where: {
-              userId,
-              debtId: { in: debtIds },
-              deletedAt: null,
-              voidedAt: null,
-              billDate: { lte: end },
-            },
-            _sum: { amount: true },
-          });
-    const accMap = new Map(
-      accGroups
-        .filter((g): g is typeof g & { debtId: string } => g.debtId != null)
-        .map((g) => [g.debtId, toMoney(Number(g._sum.amount ?? 0))]),
-    );
-
-    let iOweOutstanding = 0;
-    let owedToMeOutstanding = 0;
-
-    for (const d of debts) {
-      const paid = nonVoidedPaidSum(d.payments);
-      const principal = toMoney(Number(d.principal));
-      const accrued = accMap.get(d.id) ?? 0;
-      const outst = toMoney(principal + accrued - paid);
-      if (outst <= 0) continue;
-      if (displayCurrency) {
-        const conv = convertWithUsdMvrRate(outst, d.currency, displayCurrency, rate);
-        if (d.direction === "i_owe") iOweOutstanding = toMoney(iOweOutstanding + conv);
-        else owedToMeOutstanding = toMoney(owedToMeOutstanding + conv);
-      } else {
-        if (d.direction === "i_owe") iOweOutstanding += outst;
-        else owedToMeOutstanding += outst;
-      }
-    }
-
-    const netWorth = toMoney(cashLike - iOweOutstanding + owedToMeOutstanding);
-
-    let payLaterUnpaid: number | null = null;
-    if (displayCurrency) {
-      const plRows = await prisma.expenseEntry.findMany({
-        where: {
-          userId,
-          payLater: true,
-          deletedAt: null,
-          voidedAt: null,
-          billDate: { lte: end },
-        },
-        select: { amount: true, billCurrency: true },
-      });
-      payLaterUnpaid = toMoney(
-        plRows.reduce(
-          (s, r) =>
-            s +
-            convertWithUsdMvrRate(
-              Number(r.amount),
-              (r.billCurrency ?? "USD").toUpperCase(),
-              displayCurrency,
-              rate,
-            ),
-          0,
-        ),
-      );
-    }
-
+    const stmt = await buildBalanceSheet(userId, asOf.as_of, displayCurrency ?? "USD");
     res.json({
-      as_of: asOf.as_of,
-      display_currency: displayCurrency ?? null,
-      cash_and_accounts: toMoney(cashLike),
-      outstanding_i_owe: toMoney(iOweOutstanding),
-      outstanding_owed_to_me: toMoney(owedToMeOutstanding),
-      net_worth: netWorth,
-      pay_later_unpaid: payLaterUnpaid,
+      as_of: stmt.as_of,
+      display_currency: stmt.display_currency,
+      cash_and_accounts: stmt.cash_and_accounts,
+      outstanding_i_owe: stmt.outstanding_i_owe,
+      outstanding_owed_to_me: stmt.outstanding_owed_to_me,
+      net_worth: stmt.net_worth,
+      pay_later_unpaid: stmt.pay_later_unpaid,
     });
   }),
 );
@@ -612,6 +393,7 @@ reportsRouter.get(
     const comparePrev =
       z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean().optional()).parse(req.query.compare) ??
       false;
+    const dateBasis = parseDateBasis(req.query.date_basis);
 
     if (displayCurrency) {
       const fxRow = await prisma.userSettings.findUnique({ where: { userId } });
@@ -621,7 +403,9 @@ reportsRouter.get(
         userId,
         deletedAt: null,
         voidedAt: null,
-        date: { gte: from, lte: to },
+        ...(dateBasis === "accrual"
+          ? { date: { gte: from, lte: to } }
+          : { receivedDate: { not: null, gte: from, lte: to } }),
         ...(q.account_id ? { accountId: q.account_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
       };
@@ -629,7 +413,9 @@ reportsRouter.get(
         userId,
         deletedAt: null,
         voidedAt: null,
-        billDate: { gte: from, lte: to },
+        ...(dateBasis === "accrual"
+          ? { billDate: { gte: from, lte: to } }
+          : { paidDate: { not: null, gte: from, lte: to } }),
         ...(q.account_id ? { accountId: q.account_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
       };
@@ -696,7 +482,9 @@ reportsRouter.get(
           userId,
           deletedAt: null,
           voidedAt: null,
-          date: { gte: prevFrom, lte: prevTo },
+          ...(dateBasis === "accrual"
+            ? { date: { gte: prevFrom, lte: prevTo } }
+            : { receivedDate: { not: null, gte: prevFrom, lte: prevTo } }),
           ...(q.account_id ? { accountId: q.account_id } : {}),
           ...(q.category_id ? { categoryId: q.category_id } : {}),
         };
@@ -704,7 +492,9 @@ reportsRouter.get(
           userId,
           deletedAt: null,
           voidedAt: null,
-          billDate: { gte: prevFrom, lte: prevTo },
+          ...(dateBasis === "accrual"
+            ? { billDate: { gte: prevFrom, lte: prevTo } }
+            : { paidDate: { not: null, gte: prevFrom, lte: prevTo } }),
           ...(q.account_id ? { accountId: q.account_id } : {}),
           ...(q.category_id ? { categoryId: q.category_id } : {}),
         };
@@ -765,6 +555,7 @@ reportsRouter.get(
         from: q.from,
         to: q.to,
         display_currency: displayCurrency,
+        date_basis: dateBasis,
         totals,
         rows,
         ...(previous_period ? { previous_period } : {}),

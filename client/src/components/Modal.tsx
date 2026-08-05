@@ -45,26 +45,26 @@ export function Modal({ open, title, onClose, children, size = "md" }: ModalProp
         aria-modal="true"
         aria-labelledby="modal-title"
         className={clsx(
-          "flex max-h-[min(92dvh,900px)] w-full flex-col overflow-hidden bg-white shadow-2xl sm:rounded-2xl",
-          "rounded-t-2xl sm:max-h-[85vh]",
+          "flex max-h-[min(92dvh,900px)] w-full flex-col overflow-hidden border border-border bg-card sm:rounded-[var(--radius-md)]",
+          "rounded-t-[var(--radius-md)] sm:max-h-[85vh]",
           size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg",
         )}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <h2 id="modal-title" className="text-lg font-bold text-slate-900">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
+          <h2 id="modal-title" className="text-sm font-semibold text-foreground">
             {title}
           </h2>
           <button
             type="button"
-            className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-xl text-2xl leading-none text-slate-600 active:bg-slate-100 hover:bg-slate-100"
+            className="flex h-7 w-7 touch-manipulation items-center justify-center rounded-[var(--radius-md)] text-lg leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="Close"
             onClick={onClose}
           >
             ×
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {children}
         </div>
       </div>

@@ -212,19 +212,23 @@ export function DebtsPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Card>
               <p className="text-xs uppercase text-slate-500">I owe</p>
-              <p className="mt-1 text-xl font-bold text-orange-700 tabular-nums sm:text-2xl">
+              <p className="mt-1 text-xl font-bold text-negative tabular-nums sm:text-2xl">
                 {summary.iOwe.toLocaleString(undefined, { style: "currency", currency: displayCurrency })}
               </p>
             </Card>
             <Card>
               <p className="text-xs uppercase text-slate-500">Owed to me</p>
-              <p className="mt-1 text-xl font-bold text-emerald-700 tabular-nums sm:text-2xl">
+              <p className="mt-1 text-xl font-bold text-positive tabular-nums sm:text-2xl">
                 {summary.owedToMe.toLocaleString(undefined, { style: "currency", currency: displayCurrency })}
               </p>
             </Card>
             <Card>
               <p className="text-xs uppercase text-slate-500">Net</p>
-              <p className="mt-1 text-xl font-bold text-slate-900 tabular-nums sm:text-2xl">
+              <p
+                className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl ${
+                  summary.net >= 0 ? "text-positive" : "text-negative"
+                }`}
+              >
                 {summary.net.toLocaleString(undefined, { style: "currency", currency: displayCurrency })}
               </p>
             </Card>
@@ -240,7 +244,7 @@ export function DebtsPage() {
             <DebtList items={openOwed} onSelect={(id) => setDetailId(id)} />
           </Card>
 
-          <details className="rounded-2xl border border-slate-200 bg-white p-4">
+          <details className="rounded-[var(--radius-md)] border border-border/80 bg-card p-3">
             <summary className="cursor-pointer text-sm font-semibold text-slate-800">
               Settled debts ({settled.length})
             </summary>

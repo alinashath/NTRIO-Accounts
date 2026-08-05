@@ -309,62 +309,65 @@ export function ExpensesPage() {
   }, []);
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 md:text-xl">Expenses</h2>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">Expenses</h2>
+          {!loading ? (
+            <p className="text-[11px] text-muted-foreground">
+              {total} entr{total === 1 ? "y" : "ies"}
+              {filtersActive ? " · filtered" : ""}
+            </p>
+          ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showVoided}
+              onChange={(e) => setShowVoided(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-border"
+            />
+            Voided
+          </label>
           <Button
             type="button"
             variant="ghost"
-            className="relative min-w-11 px-3"
+            className="relative gap-1 px-2"
             aria-label="Search and filters"
             title="Search and filters"
             onClick={() => setFilterModalOpen(true)}
           >
-            <Filter className="h-5 w-5 text-slate-700" aria-hidden />
+            <Filter className="h-3.5 w-3.5" aria-hidden />
+            Filters
             {filtersActive ? (
-              <span
-                className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-slate-900"
-                aria-hidden
-              />
+              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
             ) : null}
           </Button>
           <Button type="button" disabled={loading} onClick={() => setModalOpen(true)}>
-            Add expense
+            Add
           </Button>
         </div>
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={showVoided}
-          onChange={(e) => setShowVoided(e.target.checked)}
-          className="rounded border-slate-300"
-        />
-        Show voided in list
-      </label>
-
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <Modal
         open={filterModalOpen}
         title="Search & filters"
-        size="lg"
+        size="md"
         onClose={() => setFilterModalOpen(false)}
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
+          <TextField
+            label="Search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Description, notes, merchant, category…"
+          />
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField
-              label="Search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Description, notes, merchant, category, debt name…"
-            />
-            <TextField label="From date" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <TextField label="To date" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <TextField label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <TextField label="To" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             <Dropdown
               label="Category"
               value={filterCategoryId}
@@ -382,7 +385,7 @@ export function ExpensesPage() {
               placeholder="Any account"
             />
             <Dropdown
-              label="Type"
+              label="Settlement"
               value={settlement}
               onChange={(v) =>
                 setSettlement(
@@ -394,9 +397,9 @@ export function ExpensesPage() {
               searchable={false}
             />
           </div>
-          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+          <div className="flex flex-wrap justify-end gap-1.5 border-t border-border pt-3">
             <Button type="button" variant="ghost" onClick={clearListFilters}>
-              Clear filters
+              Clear
             </Button>
             <Button type="button" onClick={() => setFilterModalOpen(false)}>
               Done
@@ -451,71 +454,81 @@ export function ExpensesPage() {
       </Modal>
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="p-4">
-              <SkeletonLine className="mb-3 h-8 w-full" />
-              <SkeletonTableRows rows={8} />
-            </div>
-          ) : (
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="w-10 px-2 py-3 text-center" aria-label="Receipt" />
-                <th className="px-3 py-3">Bill / paid</th>
-                <th className="px-3 py-3">Description</th>
-                <th className="px-3 py-3">Vendor / contact</th>
-                <th className="px-3 py-3">Category</th>
-                <th className="px-3 py-3">Account</th>
-                <th className="px-3 py-3 text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${r.voided_at ? "opacity-60" : ""}`}
+        {loading ? (
+          <div className="space-y-2 p-3">
+            <SkeletonLine className="h-8 w-full" />
+            <SkeletonTableRows rows={6} />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+            No expenses{filtersActive ? " match these filters" : " yet"}.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/70">
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                className={`flex items-start gap-1 px-2.5 py-1.5 transition hover:bg-muted/50 ${
+                  r.voided_at ? "opacity-60" : ""
+                }`}
+              >
+                <button
+                  type="button"
                   onClick={() => setDetail(r)}
+                  className="flex min-w-0 flex-1 items-start gap-2 text-left"
                 >
-                  <td className="px-2 py-3 align-top text-center" onClick={(e) => e.stopPropagation()}>
-                    {r.attachment_url ? <ReceiptPreviewIcon url={r.attachment_url} /> : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 align-top">
-                    <div className="text-slate-900">{dateInputValue(r.bill_date)}</div>
-                    {r.paid_date ? (
-                      <div className="text-[11px] text-slate-500">Paid {dateInputValue(r.paid_date)}</div>
-                    ) : r.pay_later ? (
-                      <div className="text-[11px] text-slate-500">Unpaid</div>
-                    ) : null}
-                  </td>
-                  <td className="max-w-[10rem] truncate px-3 py-3">
-                    {r.description ?? r.merchant ?? "—"}
-                    {r.voided_at ? (
-                      <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-900">
-                        VOID
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-negative" aria-hidden />
+                  <span className="w-[3.75rem] shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                    {dateInputValue(r.bill_date).slice(5)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-medium text-foreground">
+                        {r.description ?? r.merchant ?? r.category_name ?? "Expense"}
                       </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-3">{r.contact_name ?? r.merchant ?? "—"}</td>
-                  <td className="px-3 py-3">{r.category_name ?? "—"}</td>
-                  <td className="px-3 py-3">{r.account_name}</td>
-                  <td className="px-3 py-3 text-right">
-                    <DisplayAmountCell
-                      amount={r.amount}
-                      nativeCurrency={r.account_currency || "USD"}
-                      className="font-medium text-orange-700"
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          )}
-        </div>
+                      {r.voided_at ? (
+                        <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
+                          VOID
+                        </span>
+                      ) : null}
+                      {r.pay_later ? (
+                        <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-800">
+                          Unpaid
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                      {[r.contact_name ?? r.merchant, r.category_name, r.account_name]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                      {r.paid_date ? ` · paid ${dateInputValue(r.paid_date).slice(5)}` : ""}
+                    </span>
+                  </span>
+                  <DisplayAmountCell
+                    amount={r.amount}
+                    nativeCurrency={
+                      r.pay_later
+                        ? r.bill_currency || r.account_currency || "USD"
+                        : r.account_currency || "USD"
+                    }
+                    tone="negative"
+                    className="shrink-0 pt-0.5 text-xs font-medium"
+                  />
+                </button>
+                {r.attachment_url ? (
+                  <ReceiptPreviewIcon
+                    url={r.attachment_url}
+                    className="mt-0.5 !rounded-[var(--radius-md)] !border-border !bg-transparent !p-0.5 !shadow-none"
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
         {!loading && rows.length > 0 ? (
-          <div className="flex flex-col items-center gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:justify-between">
-            <p className="text-xs text-slate-600">
-              Showing {rows.length} of {total} (newest first)
+          <div className="flex items-center justify-between gap-2 border-t border-border px-2.5 py-1.5">
+            <p className="text-[11px] text-muted-foreground">
+              {rows.length} of {total}
             </p>
             {hasMore ? (
               <Button
@@ -527,17 +540,15 @@ export function ExpensesPage() {
                 {loadingMore ? "Loading…" : "Load more"}
               </Button>
             ) : (
-              <span className="text-xs text-slate-400">End of list</span>
+              <span className="text-[11px] text-muted-foreground">End</span>
             )}
           </div>
-        ) : null}
-        {!loading && !rows.length ? (
-          <p className="p-4 text-center text-sm text-slate-500">No expenses match these filters.</p>
         ) : null}
       </Card>
     </div>
   );
 }
+
 
 function ExpenseForm({
   userId,
@@ -697,7 +708,7 @@ function ExpenseForm({
 
       {step === 0 ? (
         <>
-          <fieldset className="space-y-2 rounded-xl border border-slate-200 p-3">
+          <fieldset className="space-y-2 rounded-[var(--radius-md)] border border-border p-3">
             <legend className="px-1 text-sm font-medium text-slate-800">Settlement</legend>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
               <input

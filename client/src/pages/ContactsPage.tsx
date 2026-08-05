@@ -130,7 +130,7 @@ export function ContactsPage() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   to={`/contacts/${c.id}`}
-                  className="inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50"
+                  className="inline-flex h-7 items-center justify-center rounded-[var(--radius-md)] px-2 text-xs font-medium text-foreground ring-1 ring-border hover:bg-muted"
                 >
                   Open
                 </Link>

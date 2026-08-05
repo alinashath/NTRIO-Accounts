@@ -14,6 +14,7 @@ import { apiFetch } from "@/api/http";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { chartTheme } from "@/lib/chartTheme";
 import { formatMoney } from "@/lib/money";
 import type { CategoryDetailDto } from "../../../shared/types";
 
@@ -105,7 +106,7 @@ export function ReportsCategoryDetailPage() {
                   <Line
                     type="monotone"
                     dataKey="total"
-                    stroke={data.kind === "income" ? "#16a34a" : "#f97316"}
+                    stroke={data.kind === "income" ? chartTheme.income : chartTheme.expense}
                     strokeWidth={2}
                     dot={false}
                     name="Total"
@@ -135,7 +136,7 @@ export function ReportsCategoryDetailPage() {
                         <DisplayAmountCell
                           amount={t.amount}
                           nativeCurrency={t.currency}
-                          className={t.kind === "income" ? "text-emerald-700" : "text-orange-700"}
+                          tone={t.kind === "income" ? "positive" : "negative"}
                         />
                       </td>
                     </tr>

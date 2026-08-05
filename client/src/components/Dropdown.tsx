@@ -162,7 +162,7 @@ export function Dropdown({
       ? createPortal(
           <div
             ref={panelRef}
-            className="fixed z-[500] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+            className="fixed z-[500] flex flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-card"
             style={{
               top: panelPos.top,
               left: panelPos.left,
@@ -209,7 +209,7 @@ export function Dropdown({
                   type="button"
                   role="option"
                   aria-selected={value === ""}
-                  className="min-h-12 w-full touch-manipulation px-3 py-3 text-left text-base text-slate-600 hover:bg-slate-50 active:bg-slate-100"
+                  className="h-8 w-full touch-manipulation px-2.5 text-left text-sm text-muted-foreground hover:bg-muted"
                   onClick={() => {
                     onChange("");
                     setOpen(false);
@@ -225,8 +225,8 @@ export function Dropdown({
                   role="option"
                   aria-selected={value === o.value}
                   className={clsx(
-                    "flex min-h-12 w-full touch-manipulation px-3 py-3 text-left text-base active:bg-slate-100 hover:bg-slate-50",
-                    value === o.value ? "bg-slate-100 font-semibold text-slate-900" : "text-slate-800",
+                    "flex h-8 w-full touch-manipulation items-center px-2.5 text-left text-sm hover:bg-muted",
+                    value === o.value ? "bg-muted font-medium text-foreground" : "text-foreground",
                   )}
                   onClick={() => {
                     onChange(o.value);
@@ -241,7 +241,7 @@ export function Dropdown({
               <div className="border-t border-slate-100 p-2">
                 <button
                   type="button"
-                  className="w-full touch-manipulation rounded-lg bg-sky-50 px-3 py-3 text-left text-sm font-medium text-sky-900 hover:bg-sky-100 active:bg-sky-100 disabled:opacity-50"
+                  className="w-full touch-manipulation rounded-[var(--radius-md)] bg-muted px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
                   disabled={adding}
                   onClick={() => void handleAddNotFound()}
                 >
@@ -257,7 +257,7 @@ export function Dropdown({
 
   return (
     <div className="relative w-full">
-      <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-foreground">{label}</span>
       <button
         ref={triggerRef}
         type="button"
@@ -266,16 +266,16 @@ export function Dropdown({
         aria-expanded={open}
         aria-controls={listId}
         className={clsx(
-          "flex min-h-12 w-full touch-manipulation items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-3 text-left text-base text-slate-900 shadow-sm",
-          disabled ? "cursor-not-allowed opacity-50" : "active:bg-slate-50",
+          "flex h-8 w-full touch-manipulation items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border bg-card px-2.5 text-left text-sm text-foreground",
+          disabled ? "cursor-not-allowed opacity-50" : "hover:bg-muted/40",
         )}
         onClick={() => !disabled && setOpen((o) => !o)}
       >
-        <span className={clsx("min-w-0 flex-1 truncate", !selected && "text-slate-500")}>
+        <span className={clsx("min-w-0 flex-1 truncate", !selected && "text-muted-foreground")}>
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown
-          className={clsx("h-5 w-5 shrink-0 text-slate-500 transition", open && "rotate-180")}
+          className={clsx("h-3.5 w-3.5 shrink-0 text-muted-foreground transition", open && "rotate-180")}
         />
       </button>
       {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}

@@ -1,14 +1,63 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap");
 @import "tailwindcss";
 
-/* Mobile-first: comfortable reading, tap feedback, notches */
+/* NTrio Accounts — monochrome Soft UI (design-system/MASTER.md) */
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #171717;
+  --color-on-primary: #ffffff;
+  --color-secondary: #525252;
+  --color-accent: #404040;
+  --color-background: #fafafa;
+  --color-foreground: #171717;
+  --color-muted: #f0f0f0;
+  --color-muted-foreground: #737373;
+  --color-card: #ffffff;
+  --color-border: #e5e5e5;
+  --color-destructive: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #ea580c;
+  --color-ring: #171717;
+
+  --color-positive: #16a34a;
+  --color-negative: #dc2626;
+
+  --shadow-soft: none;
+  --shadow-raised: 0 -1px 0 rgb(0 0 0 / 0.06);
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.5rem;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
 body {
-  -webkit-tap-highlight-color: rgb(15 23 42 / 0.08);
-  overscroll-behavior-y: none;
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-tap-highlight-color: rgb(0 0 0 / 0.08);
+  overscroll-behavior-y: contain;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @layer utilities {
@@ -17,5 +66,11 @@ body {
   }
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+  .shadow-raised {
+    box-shadow: var(--shadow-raised);
   }
 }

@@ -71,7 +71,7 @@ export function AccountsPage() {
                 <p className="text-lg font-semibold text-slate-900">{a.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{a.currency}</p>
                 <p className="mt-2 text-2xl font-bold">
-                  <DisplayAmountCell amount={a.balance} nativeCurrency={a.currency} className="text-slate-900" />
+                  <DisplayAmountCell amount={a.balance} nativeCurrency={a.currency} tone="auto" className="font-semibold" />
                 </p>
               </Link>
               <Button type="button" variant="ghost" className="shrink-0 text-sm" onClick={() => setEditAccount(a)}>

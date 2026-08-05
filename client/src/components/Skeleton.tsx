@@ -1,14 +1,14 @@
 /** Simple pulse placeholders while data loads. */
 
 export function SkeletonLine({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-slate-200 ${className}`} aria-hidden />;
+  return <div className={`animate-pulse rounded-md bg-muted ${className}`} aria-hidden />;
 }
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <SkeletonLine className="h-4 w-24" />
-      <SkeletonLine className="mt-3 h-8 w-40" />
+    <div className="rounded-[var(--radius-md)] border border-border/80 bg-card p-3">
+      <SkeletonLine className="h-3 w-20" />
+      <SkeletonLine className="mt-2 h-5 w-32" />
     </div>
   );
 }
