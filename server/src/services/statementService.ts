@@ -1,4 +1,5 @@
 import { convertWithUsdMvrRate } from "../lib/displayFx.js";
+import { getUsdMvrRate, loadFxRateResolver } from "../lib/fxRates.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { transferCreditToDestination } from "./balanceService.js";
@@ -8,6 +9,8 @@ export type DisplayCurrency = "USD" | "MVR";
 /** Accrual = earned / bill (incurred) date. Cash = received / paid (transaction) date. */
 export type DateBasis = "accrual" | "cash";
 
+export { getUsdMvrRate };
+
 function dayEnd(ymd: string) {
   return new Date(`${ymd}T23:59:59Z`);
 }
@@ -16,16 +19,15 @@ function dayStart(ymd: string) {
   return new Date(`${ymd}T00:00:00Z`);
 }
 
+function ymdFromDb(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 /** Previous calendar day as YYYY-MM-DD (UTC). */
 export function previousYmd(ymd: string): string {
   const d = dayStart(ymd);
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
-}
-
-export async function getUsdMvrRate(userId: string): Promise<number> {
-  const row = await prisma.userSettings.findUnique({ where: { userId } });
-  return Number(row?.globalUsdMvrRate ?? 15.42);
 }
 
 function conv(
@@ -148,7 +150,8 @@ export async function buildBalanceSheet(
   displayCurrency: DisplayCurrency,
 ): Promise<BalanceSheetStatement> {
   const end = dayEnd(asOfYmd);
-  const rate = await getUsdMvrRate(userId);
+  /** Point-in-time: convert all sheet lines at the as-of date rate. */
+  const rate = await getUsdMvrRate(userId, asOfYmd);
   const accounts = await prisma.account.findMany({
     where: { userId },
     orderBy: [{ type: "asc" }, { name: "asc" }],
@@ -332,7 +335,7 @@ export async function buildCashFlowStatement(
 ): Promise<CashFlowStatement> {
   const from = dayStart(fromYmd);
   const to = dayEnd(toYmd);
-  const rate = await getUsdMvrRate(userId);
+  const rateFor = await loadFxRateResolver(userId);
   const accounts = await prisma.account.findMany({
     where: { userId },
     orderBy: { name: "asc" },
@@ -381,9 +384,8 @@ export async function buildCashFlowStatement(
         },
         include: { category: true },
       }),
-      prisma.accountTransfer.aggregate({
+      prisma.accountTransfer.findMany({
         where: { userId, fromAccountId: a.id, date: { gte: from, lte: to } },
-        _sum: { amount: true },
       }),
       prisma.accountTransfer.findMany({
         where: { userId, toAccountId: a.id, date: { gte: from, lte: to } },
@@ -402,7 +404,11 @@ export async function buildCashFlowStatement(
     for (const r of incRows) {
       const amt = Number(r.amount);
       incomeSum += amt;
-      const converted = conv(amt, a.currency, displayCurrency, rate);
+      const asOf =
+        dateBasis === "accrual"
+          ? ymdFromDb(r.date)
+          : ymdFromDb(r.receivedDate ?? r.date);
+      const converted = conv(amt, a.currency, displayCurrency, rateFor(asOf));
       cashFromIncome = toMoney(cashFromIncome + converted);
       const key = r.categoryId ?? "uncategorized";
       const label = r.category?.name ?? "Uncategorized";
@@ -415,7 +421,11 @@ export async function buildCashFlowStatement(
     for (const r of expRows) {
       const amt = Number(r.amount);
       expenseSum += amt;
-      const converted = conv(amt, a.currency, displayCurrency, rate);
+      const asOf =
+        dateBasis === "accrual"
+          ? ymdFromDb(r.billDate)
+          : ymdFromDb(r.paidDate ?? r.billDate);
+      const converted = conv(amt, a.currency, displayCurrency, rateFor(asOf));
       cashPaidExpenses = toMoney(cashPaidExpenses + converted);
       const key = r.categoryId ?? "uncategorized";
       const label = r.category?.name ?? "Uncategorized";
@@ -424,19 +434,34 @@ export async function buildCashFlowStatement(
       expenseByCat.set(key, prev);
     }
 
-    const transferOut = Number(tout._sum.amount ?? 0);
+    const transferOut = toMoney(tout.reduce((s, t) => s + Number(t.amount), 0));
     const transferIn = toMoney(tin.reduce((s, t) => s + transferCreditToDestination(t), 0));
-    transfersMemo = toMoney(
-      transfersMemo +
-        conv(transferIn, a.currency, displayCurrency, rate) -
-        conv(transferOut, a.currency, displayCurrency, rate),
-    );
+    let transferInConv = 0;
+    let transferOutConv = 0;
+    for (const t of tin) {
+      transferInConv = toMoney(
+        transferInConv +
+          conv(
+            transferCreditToDestination(t),
+            a.currency,
+            displayCurrency,
+            rateFor(ymdFromDb(t.date)),
+          ),
+      );
+    }
+    for (const t of tout) {
+      transferOutConv = toMoney(
+        transferOutConv +
+          conv(Number(t.amount), a.currency, displayCurrency, rateFor(ymdFromDb(t.date))),
+      );
+    }
+    transfersMemo = toMoney(transfersMemo + transferInConv - transferOutConv);
 
     let debtIn = 0;
     let debtOut = 0;
     for (const p of debtPay) {
       const cash = p.accountAmount != null ? Number(p.accountAmount) : Number(p.amount);
-      const converted = conv(cash, a.currency, displayCurrency, rate);
+      const converted = conv(cash, a.currency, displayCurrency, rateFor(ymdFromDb(p.date)));
       if (p.debt.direction === "i_owe") {
         debtOut += cash;
         debtRepayments = toMoney(debtRepayments + converted);
@@ -450,7 +475,9 @@ export async function buildCashFlowStatement(
     for (const r of adjRows) {
       const amt = Number(r.amount);
       adjSum += amt;
-      adjustments = toMoney(adjustments + conv(amt, a.currency, displayCurrency, rate));
+      adjustments = toMoney(
+        adjustments + conv(amt, a.currency, displayCurrency, rateFor(ymdFromDb(r.date))),
+      );
     }
 
     const moneyIn = toMoney(incomeSum + transferIn + debtIn + Math.max(adjSum, 0));
@@ -492,7 +519,12 @@ export async function buildCashFlowStatement(
     ]);
     for (const r of orphanInc) {
       const ccy = r.currency ?? "USD";
-      const converted = conv(Number(r.amount), ccy, displayCurrency, rate);
+      const converted = conv(
+        Number(r.amount),
+        ccy,
+        displayCurrency,
+        rateFor(ymdFromDb(r.date)),
+      );
       cashFromIncome = toMoney(cashFromIncome + converted);
       const key = r.categoryId ?? "uncategorized";
       const label = r.category?.name ?? "Uncategorized";
@@ -502,7 +534,12 @@ export async function buildCashFlowStatement(
     }
     for (const r of orphanExp) {
       const ccy = r.debt?.currency ?? r.billCurrency ?? "USD";
-      const converted = conv(Number(r.amount), ccy, displayCurrency, rate);
+      const converted = conv(
+        Number(r.amount),
+        ccy,
+        displayCurrency,
+        rateFor(ymdFromDb(r.billDate)),
+      );
       cashPaidExpenses = toMoney(cashPaidExpenses + converted);
       const key = r.categoryId ?? "uncategorized";
       const label = r.category?.name ?? "Uncategorized";
@@ -522,8 +559,12 @@ export async function buildCashFlowStatement(
   for (const a of accounts) {
     const b0 = await accountBalanceAsOf(a.id, beginYmd);
     const b1 = await accountBalanceAsOf(a.id, toYmd);
-    cashBeginning = toMoney(cashBeginning + conv(b0, a.currency, displayCurrency, rate));
-    cashEnding = toMoney(cashEnding + conv(b1, a.currency, displayCurrency, rate));
+    cashBeginning = toMoney(
+      cashBeginning + conv(b0, a.currency, displayCurrency, rateFor(beginYmd)),
+    );
+    cashEnding = toMoney(
+      cashEnding + conv(b1, a.currency, displayCurrency, rateFor(toYmd)),
+    );
   }
 
   const impliedEnding = toMoney(cashBeginning + netChange);
@@ -593,7 +634,7 @@ export async function buildIncomeStatement(
 ): Promise<IncomeStatement> {
   const from = dayStart(fromYmd);
   const to = dayEnd(toYmd);
-  const rate = await getUsdMvrRate(userId);
+  const rateFor = await loadFxRateResolver(userId);
 
   const incomeWhere =
     dateBasis === "accrual"
@@ -640,7 +681,11 @@ export async function buildIncomeStatement(
   let totalIncome = 0;
   for (const r of incomeRows) {
     const ccy = r.account?.currency ?? r.currency ?? "USD";
-    const amount = conv(Number(r.amount), ccy, displayCurrency, rate);
+    const asOf =
+      dateBasis === "accrual"
+        ? ymdFromDb(r.date)
+        : ymdFromDb(r.receivedDate ?? r.date);
+    const amount = conv(Number(r.amount), ccy, displayCurrency, rateFor(asOf));
     totalIncome = toMoney(totalIncome + amount);
     const key = r.categoryId ?? "uncategorized";
     const prev = incomeMap.get(key) ?? {
@@ -656,7 +701,11 @@ export async function buildIncomeStatement(
   let totalExpenses = 0;
   for (const r of expenseRows) {
     const ccy = r.account?.currency ?? r.debt?.currency ?? r.billCurrency ?? "USD";
-    const amount = conv(Number(r.amount), ccy, displayCurrency, rate);
+    const asOf =
+      dateBasis === "accrual"
+        ? ymdFromDb(r.billDate)
+        : ymdFromDb(r.paidDate ?? r.billDate);
+    const amount = conv(Number(r.amount), ccy, displayCurrency, rateFor(asOf));
     totalExpenses = toMoney(totalExpenses + amount);
     const key = r.categoryId ?? "uncategorized";
     const prev = expenseMap.get(key) ?? {

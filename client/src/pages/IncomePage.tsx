@@ -504,6 +504,7 @@ export function IncomePage() {
                   <DisplayAmountCell
                     amount={r.amount}
                     nativeCurrency={r.account_currency || r.currency || "USD"}
+                    asOfDate={dateInputValue(r.date)}
                     tone="positive"
                     className="shrink-0 pt-0.5 text-xs font-medium"
                   />

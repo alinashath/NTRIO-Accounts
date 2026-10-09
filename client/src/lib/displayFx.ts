@@ -10,7 +10,7 @@ export function convertWithUsdMvrRate(
   const a = fromCurrency.toUpperCase();
   const b = toCurrency.toUpperCase();
   if (a === b) return toMoney(amount);
-  const r = usdMvrRate > 0 ? usdMvrRate : 15.42;
+  const r = usdMvrRate > 0 ? usdMvrRate : 20;
   if (a === "USD" && b === "MVR") return toMoney(amount * r);
   if (a === "MVR" && b === "USD") return toMoney(amount / r);
   return toMoney(amount);

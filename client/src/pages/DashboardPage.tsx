@@ -70,7 +70,7 @@ function useCompactCharts() {
 }
 
 export function DashboardPage() {
-  const { displayCurrency, globalUsdMvrRate } = useDisplayCurrency();
+  const { displayCurrency, getUsdMvrRateForDate } = useDisplayCurrency();
   const compactCharts = useCompactCharts();
   const initial = thisMonthRange();
 
@@ -188,7 +188,7 @@ export function DashboardPage() {
           row.amount,
           row.account_currency || row.currency || "USD",
           displayCurrency,
-          globalUsdMvrRate,
+          getUsdMvrRateForDate(key),
         );
       }
     }
@@ -203,7 +203,7 @@ export function DashboardPage() {
           row.amount,
           ccy,
           displayCurrency,
-          globalUsdMvrRate,
+          getUsdMvrRateForDate(key),
         );
       }
     }
@@ -211,7 +211,7 @@ export function DashboardPage() {
       d.net = d.income - d.expense;
     }
     return days;
-  }, [displayCurrency, expenses, globalUsdMvrRate, income, periodFrom, periodTo]);
+  }, [displayCurrency, expenses, getUsdMvrRateForDate, income, periodFrom, periodTo]);
 
   const useWeeklyBuckets = compactCharts || periodDays > 45;
 
@@ -639,6 +639,7 @@ export function DashboardPage() {
                     <DisplayAmountCell
                       amount={r.nativeAmount}
                       nativeCurrency={r.nativeCurrency}
+                      asOfDate={r.date}
                       prefix={r.kind === "income" ? "+" : "−"}
                       tone={r.kind === "income" ? "positive" : "negative"}
                       className="text-xs font-medium"

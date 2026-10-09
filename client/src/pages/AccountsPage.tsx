@@ -5,6 +5,7 @@ import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
 import { Button, Card, TextField } from "@/components/ui";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
+import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
 import { ACCOUNT_CURRENCIES, defaultTransferExchangeRate } from "@/lib/fx";
 import type { AccountDto, AccountType } from "../../../shared/types";
 
@@ -292,6 +293,7 @@ function TransferForm({
   const [notes, setNotes] = useState("");
   const [rate, setRate] = useState("");
   const [busy, setBusy] = useState(false);
+  const { globalUsdMvrRate } = useDisplayCurrency();
 
   const fromAcc = accounts.find((a) => a.id === fromId);
   const toAcc = accounts.find((a) => a.id === toId);
@@ -299,11 +301,15 @@ function TransferForm({
 
   useEffect(() => {
     if (!fromAcc || !toAcc) return;
-    const d = defaultTransferExchangeRate(fromAcc.currency, toAcc.currency);
+    const d = defaultTransferExchangeRate(
+      fromAcc.currency,
+      toAcc.currency,
+      globalUsdMvrRate,
+    );
     if (d != null) setRate(String(d));
     else if (fromAcc.currency === toAcc.currency) setRate("");
     else setRate("");
-  }, [fromAcc, toAcc]);
+  }, [fromAcc, globalUsdMvrRate, toAcc]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

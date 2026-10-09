@@ -511,6 +511,7 @@ export function ExpensesPage() {
                         ? r.bill_currency || r.account_currency || "USD"
                         : r.account_currency || "USD"
                     }
+                    asOfDate={dateInputValue(r.bill_date ?? r.date)}
                     tone="negative"
                     className="shrink-0 pt-0.5 text-xs font-medium"
                   />
@@ -1033,6 +1034,7 @@ function ExpenseDetailPanel({
                   <DisplayAmountCell
                     amount={s.amount}
                     nativeCurrency={row.account_currency || "USD"}
+                    asOfDate={dateInputValue(row.bill_date ?? row.date)}
                     className="text-xs text-slate-800"
                   />{" "}
                   ({s.category_id.slice(0, 8)}…)

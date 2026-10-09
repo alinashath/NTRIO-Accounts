@@ -244,6 +244,7 @@ export function ContactDetailPage() {
                             <DisplayAmountCell
                               amount={ln.amount}
                               nativeCurrency={ln.currency}
+                              asOfDate={ln.bill_date ?? ln.date}
                               tone="negative"
                               className="font-medium"
                             />
@@ -372,6 +373,7 @@ export function ContactDetailPage() {
                           <DisplayAmountCell
                             amount={ln.amount}
                             nativeCurrency={ln.currency}
+                            asOfDate={ln.kind === "expense" ? (ln.bill_date ?? ln.date) : ln.date}
                             tone={ln.kind === "income" ? "positive" : "negative"}
                             className="font-medium"
                           />

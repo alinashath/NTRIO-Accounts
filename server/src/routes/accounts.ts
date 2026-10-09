@@ -144,7 +144,7 @@ accountsRouter.post(
       if (body.exchange_rate === undefined || body.exchange_rate <= 0) {
         res.status(400).json({
           error:
-            "exchange_rate is required for cross-currency transfers (to-currency units per 1 from-currency unit, e.g. 1 USD = 15.42 MVR → 15.42).",
+            "exchange_rate is required for cross-currency transfers (to-currency units per 1 from-currency unit, e.g. 1 USD = 20 MVR → 20).",
         });
         return;
       }

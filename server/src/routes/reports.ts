@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { convertWithUsdMvrRate } from "../lib/displayFx.js";
+import { loadFxRateResolver } from "../lib/fxRates.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import {
@@ -95,18 +96,23 @@ reportsRouter.get(
       categoryName = cat.name;
     }
 
-    const rateRow = displayCurrency
-      ? await prisma.userSettings.findUnique({ where: { userId } })
-      : null;
-    const rate = Number(rateRow?.globalUsdMvrRate ?? 15.42);
+    const rateFor = displayCurrency ? await loadFxRateResolver(userId) : null;
 
-    const sumConvertedIncome = (rows: { amount: unknown; currency: string; account: { currency: string } | null }[]) =>
+    const sumConvertedIncome = (
+      rows: {
+        amount: unknown;
+        currency: string;
+        date: Date;
+        account: { currency: string } | null;
+      }[],
+    ) =>
       toMoney(
         rows.reduce((s, r) => {
           const ccy = r.account?.currency ?? r.currency ?? "USD";
           const amt = Number(r.amount);
-          if (!displayCurrency) return s + amt;
-          return s + convertWithUsdMvrRate(amt, ccy, displayCurrency, rate);
+          if (!displayCurrency || !rateFor) return s + amt;
+          const asOf = r.date.toISOString().slice(0, 10);
+          return s + convertWithUsdMvrRate(amt, ccy, displayCurrency, rateFor(asOf));
         }, 0),
       );
 
@@ -114,6 +120,7 @@ reportsRouter.get(
       rows: {
         amount: unknown;
         billCurrency: string;
+        billDate: Date;
         account: { currency: string } | null;
         debt: { currency: string } | null;
       }[],
@@ -122,8 +129,9 @@ reportsRouter.get(
         rows.reduce((s, r) => {
           const ccy = r.account?.currency ?? r.debt?.currency ?? r.billCurrency ?? "USD";
           const amt = Number(r.amount);
-          if (!displayCurrency) return s + amt;
-          return s + convertWithUsdMvrRate(amt, ccy, displayCurrency, rate);
+          if (!displayCurrency || !rateFor) return s + amt;
+          const asOf = r.billDate.toISOString().slice(0, 10);
+          return s + convertWithUsdMvrRate(amt, ccy, displayCurrency, rateFor(asOf));
         }, 0),
       );
 
@@ -396,8 +404,7 @@ reportsRouter.get(
     const dateBasis = parseDateBasis(req.query.date_basis);
 
     if (displayCurrency) {
-      const fxRow = await prisma.userSettings.findUnique({ where: { userId } });
-      const rate = Number(fxRow?.globalUsdMvrRate ?? 15.42);
+      const rateFor = await loadFxRateResolver(userId);
 
       const incomeWhere = {
         userId,
@@ -440,8 +447,9 @@ reportsRouter.get(
         name: string,
         rawAmt: number,
         ccy: string,
+        asOfYmd: string,
       ) => {
-        const conv = convertWithUsdMvrRate(rawAmt, ccy, displayCurrency, rate);
+        const conv = convertWithUsdMvrRate(rawAmt, ccy, displayCurrency, rateFor(asOfYmd));
         const key = `${kind}\t${categoryId ?? ""}`;
         const prev = aggMap.get(key);
         if (prev) prev.total = toMoney(prev.total + conv);
@@ -451,12 +459,20 @@ reportsRouter.get(
       for (const r of incomeRows) {
         const name = r.category?.name ?? "Uncategorized";
         const ccy = r.account?.currency ?? r.currency ?? "USD";
-        bump("income", r.categoryId, name, Number(r.amount), ccy);
+        const asOf =
+          dateBasis === "accrual"
+            ? r.date.toISOString().slice(0, 10)
+            : (r.receivedDate ?? r.date).toISOString().slice(0, 10);
+        bump("income", r.categoryId, name, Number(r.amount), ccy, asOf);
       }
       for (const r of expenseRows) {
         const name = r.category?.name ?? "Uncategorized";
         const ccy = r.account?.currency ?? r.debt?.currency ?? r.billCurrency ?? "USD";
-        bump("expense", r.categoryId, name, Number(r.amount), ccy);
+        const asOf =
+          dateBasis === "accrual"
+            ? r.billDate.toISOString().slice(0, 10)
+            : (r.paidDate ?? r.billDate).toISOString().slice(0, 10);
+        bump("expense", r.categoryId, name, Number(r.amount), ccy, asOf);
       }
 
       const rowsArr = Array.from(aggMap.values()).sort((a, b) => {
@@ -508,18 +524,32 @@ reportsRouter.get(
             include: { account: true, debt: true, category: true },
           }),
         ]);
-        const bumpPrev = (kind: "income" | "expense", categoryId: string | null, rawAmt: number, ccy: string) => {
-          const conv = convertWithUsdMvrRate(rawAmt, ccy, displayCurrency, rate);
+        const bumpPrev = (
+          kind: "income" | "expense",
+          categoryId: string | null,
+          rawAmt: number,
+          ccy: string,
+          asOfYmd: string,
+        ) => {
+          const conv = convertWithUsdMvrRate(rawAmt, ccy, displayCurrency, rateFor(asOfYmd));
           const key = `${kind}\t${categoryId ?? ""}`;
           prevTotalsMap.set(key, toMoney((prevTotalsMap.get(key) ?? 0) + conv));
         };
         for (const r of incPrev) {
           const ccy = r.account?.currency ?? r.currency ?? "USD";
-          bumpPrev("income", r.categoryId, Number(r.amount), ccy);
+          const asOf =
+            dateBasis === "accrual"
+              ? r.date.toISOString().slice(0, 10)
+              : (r.receivedDate ?? r.date).toISOString().slice(0, 10);
+          bumpPrev("income", r.categoryId, Number(r.amount), ccy, asOf);
         }
         for (const r of expPrev) {
           const ccy = r.account?.currency ?? r.debt?.currency ?? r.billCurrency ?? "USD";
-          bumpPrev("expense", r.categoryId, Number(r.amount), ccy);
+          const asOf =
+            dateBasis === "accrual"
+              ? r.billDate.toISOString().slice(0, 10)
+              : (r.paidDate ?? r.billDate).toISOString().slice(0, 10);
+          bumpPrev("expense", r.categoryId, Number(r.amount), ccy, asOf);
         }
       }
 

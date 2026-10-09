@@ -48,7 +48,7 @@ It does **not** specify UI layout, interaction patterns, or presentation.
 3. The user may **set or change currencies at any time** (account currency, entry currency, debt currency, and display/reporting preferences). The system must support conversion when movements cross currencies.
 4. Cross-currency **transfers** require an exchange rate: units of destination currency per 1 unit of source currency.
 5. Cross-currency **debt payments** record both the debt reduction (debt currency) and the cash movement (account currency), with a derived or supplied rate.
-6. Users maintain one or more **FX rates** for reporting/display conversion between currencies they use. Rates are user-controlled and may be updated at any time.
+6. Users maintain a **daily FX rate history** (sparse: a rate saved for date `D` applies to all dates from `D` until the next saved rate). Display and report conversion uses the rate effective on each amount’s recognition date. If no rate exists on or before that date, the system uses **20 MVR per 1 USD**. The current Settings rate is the latest/current value used for undated amounts and transfer defaults.
 7. All stored money amounts use fixed precision of **2 decimal places**. Exchange rates may use higher precision.
 
 ### 2.4 Money arithmetic
@@ -153,13 +153,13 @@ Expense charges onto debt are allowed only for direction `i_owe`.
 | Net worth / balance sheet | Cash positions and debt outstanding as of a date; pay-later unpaid as liability where applicable |
 | Export | Machine-readable export of period income and expense (e.g. CSV). PDF optional / future |
 
-Reports may convert amounts into a **user-selected display currency** using the user’s FX settings.
+Reports may convert amounts into a **user-selected display currency** using the FX rate effective on each amount’s date (daily history with carry-forward; default 20 MVR per 1 USD when no prior rate exists).
 
 ### 3.10 Settings
 
 | Function | Description |
 |----------|-------------|
-| FX rates | User-defined rates for converting between currencies they use; editable at any time |
+| FX rates | Daily USD↔MVR rate history; saving a rate for a date carries forward until the next change; editable anytime |
 | Categories maintenance | As in §3.3 |
 | User administration | List / create users when admin policy allows |
 
@@ -226,7 +226,8 @@ User
  ├── Contact ─── IncomeEntry / ExpenseEntry / Debt
  ├── Debt ────── DebtPayment / ExpenseEntry (charges)
  ├── RecurringSchedule ── IncomeEntry / ExpenseEntry (optional)
- └── UserSettings (FX preferences)
+ ├── UserSettings (current FX)
+ └── FxDailyRate (sparse daily FX history)
 ```
 
 ### 5.2 Entities and attributes
@@ -242,10 +243,19 @@ User
 | Attribute | Type | Notes |
 |-----------|------|--------|
 | user_id | UUID PK | |
-| FX rate map / global rates | decimal(s) | User-defined; editable anytime (e.g. quote currency per base) |
+| global_usd_mvr_rate | decimal(18,8) | Current MVR per 1 USD (header / defaults); default 20 |
 | updated_at | timestamp | |
 
-*Implementation may store a primary pair rate (e.g. units of currency B per 1 unit of A) and extend to a rate table as more currencies are used.*
+#### FxDailyRate
+| Attribute | Type | Notes |
+|-----------|------|--------|
+| id | UUID | |
+| user_id | UUID | |
+| rate_date | date | Day the rate becomes effective |
+| usd_mvr_rate | decimal(18,8) | MVR units per 1 USD |
+| created_at / updated_at | timestamp | |
+
+*Sparse history: unique `(user_id, rate_date)`. Lookup = latest row with `rate_date ≤ as-of`; else 20. Baseline row at 1970-01-01 with rate 20 may be seeded per user.*
 
 #### Account
 | Attribute | Type | Notes |
@@ -446,7 +456,7 @@ Cross-cutting API expectations:
 | Accrual | Recognition on earned / bill date |
 | Cash basis | Recognition when cash hits an account |
 | Display currency | User-selected currency for aggregated reporting |
-| Exchange rate | Conversion factor between two currencies, set by the user |
+| Exchange rate | Conversion factor between two currencies; display FX uses dated daily history (carry-forward), while transfers/debt payments may store a transaction-local rate |
 
 ---
 

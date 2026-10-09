@@ -65,7 +65,7 @@ type CashflowRes = {
 };
 
 export function ReportsCashflowTab() {
-  const { displayCurrency, globalUsdMvrRate } = useDisplayCurrency();
+  const { displayCurrency, getUsdMvrRateForDate } = useDisplayCurrency();
   const initial = thisMonthRange();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
@@ -159,10 +159,15 @@ export function ReportsCashflowTab() {
     return rows
       .map((r) => ({
         name: r.name,
-        net: convertWithUsdMvrRate(r.net_flow, r.currency || "USD", displayCurrency, globalUsdMvrRate),
+        net: convertWithUsdMvrRate(
+          r.net_flow,
+          r.currency || "USD",
+          displayCurrency,
+          getUsdMvrRateForDate(applied.to),
+        ),
       }))
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
-  }, [displayCurrency, globalUsdMvrRate, rows]);
+  }, [applied.to, displayCurrency, getUsdMvrRateForDate, rows]);
 
   return (
     <div className="space-y-3">
@@ -507,6 +512,7 @@ export function ReportsCashflowTab() {
                           <DisplayAmountCell
                             amount={r.money_in}
                             nativeCurrency={r.currency || "USD"}
+                            asOfDate={applied.to}
                             className="font-medium text-positive"
                           />
                         </td>
@@ -514,6 +520,7 @@ export function ReportsCashflowTab() {
                           <DisplayAmountCell
                             amount={r.money_out}
                             nativeCurrency={r.currency || "USD"}
+                            asOfDate={applied.to}
                             className="font-medium text-negative"
                           />
                         </td>
@@ -521,6 +528,7 @@ export function ReportsCashflowTab() {
                           <DisplayAmountCell
                             amount={r.net_flow}
                             nativeCurrency={r.currency || "USD"}
+                            asOfDate={applied.to}
                             className={
                               r.net_flow >= 0 ? "font-medium text-positive" : "font-medium text-negative"
                             }

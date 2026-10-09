@@ -7,7 +7,7 @@ import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
 import type { CategoryDto, SettingsUserDto } from "../../../shared/types";
 
 export function SettingsPage() {
-  const { refreshFx, globalUsdMvrRate } = useDisplayCurrency();
+  const { refreshFx, globalUsdMvrRate, fxRates } = useDisplayCurrency();
   const [incomeCats, setIncomeCats] = useState<CategoryDto[]>([]);
   const [expenseCats, setExpenseCats] = useState<CategoryDto[]>([]);
   const [users, setUsers] = useState<SettingsUserDto[]>([]);
@@ -15,7 +15,13 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [fxInput, setFxInput] = useState("");
+  const [fxDate, setFxDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [fxBusy, setFxBusy] = useState(false);
+
+  const recentFxRates = useMemo(() => {
+    const sorted = [...fxRates].sort((a, b) => b.rate_date.localeCompare(a.rate_date));
+    return sorted.filter((r) => r.rate_date !== "1970-01-01").slice(0, 12);
+  }, [fxRates]);
 
   const refresh = useCallback(async () => {
     const [inc, exp] = await Promise.all([
@@ -64,6 +70,10 @@ export function SettingsPage() {
 
       <Card>
         <h3 className="text-sm font-semibold text-slate-900">Global exchange rate</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Saving stores a daily rate for the chosen date. That rate applies forward until you save a
+          newer one. Dates before any saved rate use 1 USD = 20 MVR.
+        </p>
         <form
           className="mt-4 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
@@ -73,11 +83,15 @@ export function SettingsPage() {
               setError("Enter a positive rate (MVR per 1 USD).");
               return;
             }
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(fxDate)) {
+              setError("Enter a valid rate date.");
+              return;
+            }
             setFxBusy(true);
             setError(null);
             void apiFetch("/api/settings", {
               method: "PATCH",
-              body: JSON.stringify({ global_usd_mvr_rate: v }),
+              body: JSON.stringify({ global_usd_mvr_rate: v, rate_date: fxDate }),
             })
               .then(() => refreshFx())
               .catch((err) => setError(err instanceof Error ? err.message : "Failed"))
@@ -95,10 +109,35 @@ export function SettingsPage() {
               onChange={(e) => setFxInput(e.target.value)}
             />
           </div>
+          <div className="min-w-[10rem]">
+            <TextField
+              label="Effective date"
+              type="date"
+              value={fxDate}
+              onChange={(e) => setFxDate(e.target.value)}
+            />
+          </div>
           <Button type="submit" disabled={fxBusy}>
             {fxBusy ? "Saving…" : "Save rate"}
           </Button>
         </form>
+        {recentFxRates.length ? (
+          <div className="mt-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Recent rates
+            </h4>
+            <ul className="mt-2 divide-y divide-slate-100 text-sm">
+              {recentFxRates.map((r) => (
+                <li key={r.rate_date} className="flex justify-between gap-2 py-1.5">
+                  <span className="text-slate-600">{r.rate_date}</span>
+                  <span className="tabular-nums text-slate-900">
+                    1 USD = {r.usd_mvr_rate.toFixed(4)} MVR
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Card>
 
       <Card>

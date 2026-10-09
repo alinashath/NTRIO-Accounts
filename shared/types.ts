@@ -7,6 +7,17 @@ export interface SettingsUserDto {
   created_at: string;
 }
 
+/** GET / PATCH /api/settings */
+export interface FxDailyRateDto {
+  rate_date: string;
+  usd_mvr_rate: number;
+}
+
+export interface SettingsDto {
+  global_usd_mvr_rate: number;
+  fx_rates: FxDailyRateDto[];
+}
+
 export type AccountType = "bank" | "cash" | "wallet";
 
 export interface AccountDto {

@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
+import {
+  ensureFxBaseline,
+  listFxDailyRates,
+  upsertFxDailyRate,
+} from "../lib/fxRates.js";
 import { createServiceRoleSupabase } from "../lib/supabaseService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/http.js";
@@ -39,14 +44,22 @@ settingsRouter.get(
       create: { userId },
       update: {},
     });
+    await ensureFxBaseline(userId);
+    const fx_rates = await listFxDailyRates(userId);
     res.json({
       global_usd_mvr_rate: Number(row.globalUsdMvrRate),
+      fx_rates,
     });
   }),
 );
 
 const patchSchema = z.object({
   global_usd_mvr_rate: z.number().positive().max(1_000_000),
+  /** Optional ISO date (YYYY-MM-DD); defaults to today UTC. */
+  rate_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 settingsRouter.patch(
@@ -54,13 +67,40 @@ settingsRouter.patch(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const body = patchSchema.parse(req.body);
-    const row = await prisma.userSettings.upsert({
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const rateDate = body.rate_date ?? todayYmd;
+
+    await upsertFxDailyRate(userId, body.global_usd_mvr_rate, rateDate);
+
+    // Keep user_settings.global as the current rate when saving today/future,
+    // or when the saved date is the latest point in history.
+    const shouldUpdateCurrent = rateDate >= todayYmd;
+    await prisma.userSettings.upsert({
       where: { userId },
       create: { userId, globalUsdMvrRate: body.global_usd_mvr_rate },
-      update: { globalUsdMvrRate: body.global_usd_mvr_rate },
+      update: shouldUpdateCurrent
+        ? { globalUsdMvrRate: body.global_usd_mvr_rate }
+        : {},
     });
+
+    if (!shouldUpdateCurrent) {
+      const latest = await prisma.fxDailyRate.findFirst({
+        where: { userId },
+        orderBy: { rateDate: "desc" },
+      });
+      if (latest && latest.rateDate.toISOString().slice(0, 10) === rateDate) {
+        await prisma.userSettings.update({
+          where: { userId },
+          data: { globalUsdMvrRate: body.global_usd_mvr_rate },
+        });
+      }
+    }
+
+    const refreshed = await prisma.userSettings.findUniqueOrThrow({ where: { userId } });
+    const fx_rates = await listFxDailyRates(userId);
     res.json({
-      global_usd_mvr_rate: Number(row.globalUsdMvrRate),
+      global_usd_mvr_rate: Number(refreshed.globalUsdMvrRate),
+      fx_rates,
     });
   }),
 );

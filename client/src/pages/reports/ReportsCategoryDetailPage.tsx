@@ -136,6 +136,7 @@ export function ReportsCategoryDetailPage() {
                         <DisplayAmountCell
                           amount={t.amount}
                           nativeCurrency={t.currency}
+                          asOfDate={t.date}
                           tone={t.kind === "income" ? "positive" : "negative"}
                         />
                       </td>
