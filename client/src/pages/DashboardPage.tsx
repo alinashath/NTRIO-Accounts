@@ -1,30 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
-import { eachDayOfInterval, format, parseISO, startOfWeek, differenceInCalendarDays } from "date-fns";
 import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+  eachDayOfInterval,
+  format,
+  parseISO,
+  startOfWeek,
+  differenceInCalendarDays,
+} from "date-fns";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Minus,
+} from "lucide-react";
 import { apiFetch } from "@/api/http";
+import { AccountsCard } from "@/components/AccountsCard";
+import { CashMovementCard } from "@/components/CashMovementCard";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
 import { SkeletonCard, SkeletonLine } from "@/components/Skeleton";
-import { Card, StatCard } from "@/components/ui";
+import { Sparkline } from "@/components/Sparkline";
+import {
+  colorForCategory,
+  TopExpensesCard,
+  type TopExpenseRow,
+} from "@/components/TopExpensesCard";
+import { StatCard } from "@/components/ui";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
-import { chartAxisProps, chartTheme } from "@/lib/chartTheme";
+import { chartTheme } from "@/lib/chartTheme";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
 import { formatMoney, formatMoneyAmountOnly } from "@/lib/money";
-import {
-  formatSharePct,
-  formatVsPrior,
-} from "@/lib/periodCompare";
+import { cn } from "@/lib/utils";
+import { formatSharePct, formatVsPrior, pctChange } from "@/lib/periodCompare";
 import {
   comparablePriorPeriod,
   DASHBOARD_PERIOD_PRESETS,
@@ -69,8 +84,77 @@ function useCompactCharts() {
   return compact;
 }
 
+function periodTitle(preset: RangePreset): string {
+  switch (preset) {
+    case "this_week":
+      return "This week";
+    case "this_month":
+      return "This month";
+    case "last_month":
+      return "Last month";
+    case "this_year":
+      return "This year";
+    default:
+      return "This period";
+  }
+}
+
+function priorTitle(preset: RangePreset): string {
+  switch (preset) {
+    case "this_week":
+      return "vs previous week";
+    case "this_month":
+      return "vs previous month";
+    case "this_year":
+      return "vs previous year (YTD)";
+    default:
+      return "vs prior period";
+  }
+}
+
+/** Compact range for card subtitles, e.g. Oct 1–11 or Sep 28–Oct 4. */
+function shortRangeLabel(fromYmd: string, toYmd: string): string {
+  const from = parseISO(fromYmd);
+  const to = parseISO(toYmd);
+  if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) {
+    return `${format(from, "MMM d")}–${format(to, "d")}`;
+  }
+  return `${format(from, "MMM d")}–${format(to, "MMM d")}`;
+}
+
+function DeltaBadge({
+  current,
+  prior,
+  higherIsBetter,
+}: {
+  current: number;
+  prior: number;
+  higherIsBetter: boolean;
+}) {
+  const pct = pctChange(current, prior);
+  const delta = current - prior;
+  const flat = Math.abs(delta) < 0.005 || pct === 0;
+  const up = delta > 0;
+  const good = flat ? null : up === higherIsBetter;
+  const variant = flat ? "neutral" : good ? "positive" : "negative";
+  const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight;
+  const label =
+    pct == null
+      ? flat
+        ? "Flat"
+        : `${up ? "+" : "−"}${formatMoneyAmountOnly(Math.abs(delta))}`
+      : `${pct > 0 ? "+" : ""}${pct.toFixed(0)}%`;
+
+  return (
+    <Badge variant={variant} className="gap-0.5">
+      <Icon className="h-3 w-3" aria-hidden />
+      <span>{label}</span>
+    </Badge>
+  );
+}
+
 export function DashboardPage() {
-  const { displayCurrency, getUsdMvrRateForDate } = useDisplayCurrency();
+  const { displayCurrency, globalUsdMvrRate, getUsdMvrRateForDate } = useDisplayCurrency();
   const compactCharts = useCompactCharts();
   const initial = thisMonthRange();
 
@@ -86,7 +170,7 @@ export function DashboardPage() {
   const [income, setIncome] = useState<IncomeEntryDto[]>([]);
   const [expenses, setExpenses] = useState<ExpenseEntryDto[]>([]);
   const [debts, setDebts] = useState<DebtDto[]>([]);
-  const [cats, setCats] = useState<CatRow[]>([]);
+  const [topExpenses, setTopExpenses] = useState<TopExpenseRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -102,31 +186,35 @@ export function DashboardPage() {
       setLoading(true);
       const prev = comparablePriorPeriod(periodFrom, periodTo, rangePreset);
       try {
-        const [accs, pnlRes, pnlPrior, nwRes, nwPrior, inc, exp, d, br] = await Promise.all([
-          apiFetch<AccountDto[]>("/api/accounts"),
-          apiFetch<Pnl>(
-            `/api/reports/pnl?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-          ),
-          apiFetch<Pnl>(
-            `/api/reports/pnl?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-          ),
-          apiFetch<NetWorth>(
-            `/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-          ),
-          apiFetch<NetWorth>(
-            `/api/reports/net-worth?as_of=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-          ),
-          apiFetch<IncomeEntryDto[]>(
-            `/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
-          ),
-          apiFetch<ExpenseEntryDto[]>(
-            `/api/expenses?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
-          ),
-          apiFetch<DebtDto[]>("/api/debts?status=open"),
-          apiFetch<{ rows: CatRow[] }>(
-            `/api/reports/category-breakdown?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-          ),
-        ]);
+        const [accs, pnlRes, pnlPrior, nwRes, nwPrior, inc, exp, d, br, brPrior] =
+          await Promise.all([
+            apiFetch<AccountDto[]>("/api/accounts"),
+            apiFetch<Pnl>(
+              `/api/reports/pnl?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+            apiFetch<Pnl>(
+              `/api/reports/pnl?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+            apiFetch<NetWorth>(
+              `/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+            apiFetch<NetWorth>(
+              `/api/reports/net-worth?as_of=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+            apiFetch<IncomeEntryDto[]>(
+              `/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
+            ),
+            apiFetch<ExpenseEntryDto[]>(
+              `/api/expenses?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
+            ),
+            apiFetch<DebtDto[]>("/api/debts?status=open"),
+            apiFetch<{ rows: CatRow[] }>(
+              `/api/reports/category-breakdown?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+            apiFetch<{ rows: CatRow[] }>(
+              `/api/reports/category-breakdown?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+            ),
+          ]);
         if (cancelled) return;
         setAccounts(accs);
         setPnl(pnlRes);
@@ -137,7 +225,23 @@ export function DashboardPage() {
         setIncome(inc);
         setExpenses(exp);
         setDebts(d);
-        setCats(br.rows.filter((r) => r.kind === "expense").slice(0, 5));
+        const currentExp = br.rows
+          .filter((r) => r.kind === "expense")
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+        const priorByName = new Map(
+          brPrior.rows
+            .filter((r) => r.kind === "expense")
+            .map((r) => [r.name, r.total] as const),
+        );
+        setTopExpenses(
+          currentExp.map((r, i) => ({
+            name: r.name,
+            current: r.total,
+            previous: priorByName.get(r.name) ?? 0,
+            color: colorForCategory(i),
+          })),
+        );
         setError(null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -251,16 +355,16 @@ export function DashboardPage() {
     };
   }, [dailyTrend, periodDays]);
 
-  const categoryChart = useMemo(() => {
-    const total = cats.reduce((s, c) => s + c.total, 0) || 1;
-    return cats
-      .map((c) => ({
-        name: c.name,
-        total: c.total,
-        pct: (c.total / total) * 100,
-      }))
-      .sort((a, b) => b.total - a.total);
-  }, [cats]);
+  const incomeSpark = useMemo(() => dailyTrend.map((d) => d.income), [dailyTrend]);
+  const expenseSpark = useMemo(() => dailyTrend.map((d) => d.expense), [dailyTrend]);
+  const netSpark = useMemo(() => dailyTrend.map((d) => d.net), [dailyTrend]);
+
+  const priorRange = useMemo(
+    () => comparablePriorPeriod(periodFrom, periodTo, rangePreset),
+    [periodFrom, periodTo, rangePreset],
+  );
+  const topExpensesPeriodLabel = shortRangeLabel(periodFrom, periodTo);
+  const topExpensesPriorLabel = shortRangeLabel(priorRange.from, priorRange.to);
 
   const recent = useMemo(() => {
     type Row = {
@@ -305,43 +409,38 @@ export function DashboardPage() {
     (d) => d.due_date && new Date(d.due_date) < today && d.outstanding > 0,
   );
 
+  const rangeLabel = `${format(parseISO(periodFrom), "MMM d")} – ${format(parseISO(periodTo), "MMM d, yyyy")}`;
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">Dashboard</h2>
-        <PeriodFilterBar
-          from={applied.from}
-          to={applied.to}
-          preset={rangePreset}
-          presets={DASHBOARD_PERIOD_PRESETS}
-          onApply={({ from, to, preset }) => {
-            setRangePreset(preset);
-            setApplied({ from, to });
-          }}
-        />
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Home</h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground sm:hidden">{rangeLabel}</p>
+        </div>
+        <div className="w-full min-w-0 sm:w-auto [&_button]:h-11 [&_button]:w-full [&_button]:justify-start sm:[&_button]:h-8 sm:[&_button]:w-auto">
+          <PeriodFilterBar
+            from={applied.from}
+            to={applied.to}
+            preset={rangePreset}
+            presets={DASHBOARD_PERIOD_PRESETS}
+            onApply={({ from, to, preset }) => {
+              setRangePreset(preset);
+              setApplied({ from, to });
+            }}
+          />
+        </div>
       </div>
-      {prevPeriodLabel ? (
-        <p className="text-[11px] text-muted-foreground">
-          {rangePreset === "this_month"
-            ? "vs previous month"
-            : rangePreset === "this_week"
-              ? "vs previous week"
-              : rangePreset === "this_year"
-                ? "vs previous year (YTD)"
-                : "vs prior period"}{" "}
-          ({prevPeriodLabel}) · {displayCurrency}
-        </p>
-      ) : null}
 
       {error ? (
-        <Card>
+        <Card className="p-4">
           <p className="text-sm text-destructive">{error}</p>
         </Card>
       ) : null}
 
       {overdue.length > 0 && !loading ? (
         <div
-          className="rounded-[var(--radius-md)] border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground"
+          className="rounded-[var(--radius-lg)] border border-border bg-muted/80 px-3 py-2.5 text-sm text-foreground"
           role="status"
         >
           <strong>{overdue.length}</strong> overdue debt
@@ -350,20 +449,146 @@ export function DashboardPage() {
       ) : null}
 
       {loading && !error ? (
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-          <div className="col-span-full space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
-            <SkeletonLine className="h-4 w-40" />
-            <SkeletonLine className="h-40 w-full" />
+        <div className="space-y-3">
+          <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4 space-y-3">
+            <SkeletonLine className="h-4 w-32" />
+            <SkeletonLine className="h-10 w-full" />
+            <div className="grid grid-cols-2 gap-3">
+              <SkeletonLine className="h-24 w-full" />
+              <SkeletonLine className="h-24 w-full" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         </div>
       ) : null}
 
       {!loading && !error ? (
         <>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {/* 1. Period income / expense — primary mobile card */}
+          <Card className="overflow-hidden gap-0">
+            <CardHeader className="pb-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <CardTitle>{periodTitle(rangePreset)}</CardTitle>
+                  <CardDescription className="mt-1">
+                    {priorTitle(rangePreset)}
+                    {prevPeriodLabel ? (
+                      <span className="hidden sm:inline"> · {prevPeriodLabel}</span>
+                    ) : null}
+                    {" · "}
+                    {displayCurrency}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0 rounded-[var(--radius-md)] bg-muted/50 p-3">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Income
+                    </p>
+                    {pnl && pnlPrev ? (
+                      <DeltaBadge
+                        current={pnl.total_income}
+                        prior={pnlPrev.total_income}
+                        higherIsBetter
+                      />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xl font-bold tabular-nums tracking-tight text-positive sm:text-2xl">
+                    {pnl ? formatMoneyAmountOnly(pnl.total_income) : "—"}
+                  </p>
+                  {pnlPrev ? (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                      Prior {formatMoneyAmountOnly(pnlPrev.total_income)}
+                    </p>
+                  ) : null}
+                  <Sparkline
+                    className="mt-2"
+                    values={incomeSpark}
+                    color={chartTheme.income}
+                    height={44}
+                    label="Income trend this period"
+                  />
+                </div>
+
+                <div className="min-w-0 rounded-[var(--radius-md)] bg-muted/50 p-3">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Expenses
+                    </p>
+                    {pnl && pnlPrev ? (
+                      <DeltaBadge
+                        current={pnl.total_expenses}
+                        prior={pnlPrev.total_expenses}
+                        higherIsBetter={false}
+                      />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xl font-bold tabular-nums tracking-tight text-negative sm:text-2xl">
+                    {pnl ? formatMoneyAmountOnly(pnl.total_expenses) : "—"}
+                  </p>
+                  {pnlPrev ? (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                      Prior {formatMoneyAmountOnly(pnlPrev.total_expenses)}
+                    </p>
+                  ) : null}
+                  <Sparkline
+                    className="mt-2"
+                    values={expenseSpark}
+                    color={chartTheme.expense}
+                    height={44}
+                    label="Expense trend this period"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center gap-3 rounded-[var(--radius-md)] border border-border/70 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Net
+                    </p>
+                    {pnl && pnlPrev ? (
+                      <DeltaBadge current={pnl.net} prior={pnlPrev.net} higherIsBetter />
+                    ) : null}
+                    {compares?.incomeKept ? (
+                      <span className="text-[11px] text-muted-foreground">{compares.incomeKept}</span>
+                    ) : null}
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-lg font-bold tabular-nums tracking-tight sm:text-xl",
+                      pnl && pnl.net < 0 ? "text-negative" : "text-positive",
+                    )}
+                  >
+                    {pnl ? formatMoneyAmountOnly(pnl.net) : "—"}
+                  </p>
+                </div>
+                <Sparkline
+                  className="w-24 shrink-0 sm:w-32"
+                  values={netSpark}
+                  color={chartTheme.net}
+                  height={40}
+                  label="Net trend this period"
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="justify-between text-[11px] text-muted-foreground">
+              <span>Earned − billed</span>
+              <span className="tabular-nums">
+                Avg spend {formatMoney(trendTotals.avgDailySpend, displayCurrency)}/day
+              </span>
+            </CardFooter>
+          </Card>
+
+          {/* 2. Balance snapshot */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-3">
             <StatCard
               title="Net worth"
               value={nw ? formatMoneyAmountOnly(nw.net_worth) : "—"}
@@ -373,53 +598,6 @@ export function DashboardPage() {
               deltaTone={compares?.netWorth.tone}
             />
             <StatCard
-              title="Income"
-              value={pnl ? formatMoneyAmountOnly(pnl.total_income) : "—"}
-              tone="positive"
-              hint={`${periodFrom} → ${periodTo} · earned date`}
-              delta={compares?.income.text}
-              deltaTone={compares?.income.tone}
-            />
-            <StatCard
-              title="Expenses"
-              value={pnl ? formatMoneyAmountOnly(pnl.total_expenses) : "—"}
-              tone="negative"
-              hint="Bill date (includes unpaid pay-later)"
-              delta={
-                compares
-                  ? [compares.expenses.text, compares.expenseShare].filter(Boolean).join(" · ")
-                  : undefined
-              }
-              deltaTone={compares?.expenses.tone}
-            />
-            <StatCard
-              title="Net"
-              value={pnl ? formatMoneyAmountOnly(pnl.net) : "—"}
-              tone={pnl && pnl.net < 0 ? "negative" : "positive"}
-              hint="Earned − billed"
-              delta={
-                compares
-                  ? [compares.net.text, compares.incomeKept].filter(Boolean).join(" · ")
-                  : undefined
-              }
-              deltaTone={compares?.net.tone}
-            />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <StatCard
-              title="Pay later unpaid"
-              value={
-                nw?.pay_later_unpaid != null
-                  ? formatMoneyAmountOnly(nw.pay_later_unpaid)
-                  : "—"
-              }
-              tone={nw?.pay_later_unpaid && nw.pay_later_unpaid > 0 ? "negative" : "neutral"}
-              hint="Open bills not yet paid from accounts"
-              delta={compares?.payLater.text}
-              deltaTone={compares?.payLater.tone}
-            />
-            <StatCard
               title="Cash & accounts"
               value={nw ? formatMoneyAmountOnly(nw.cash_and_accounts) : "—"}
               tone="accent"
@@ -427,229 +605,101 @@ export function DashboardPage() {
               delta={compares?.cash.text}
               deltaTone={compares?.cash.tone}
             />
+            <div className="col-span-2 lg:col-span-1">
+              <StatCard
+                title="Pay later unpaid"
+                value={
+                  nw?.pay_later_unpaid != null
+                    ? formatMoneyAmountOnly(nw.pay_later_unpaid)
+                    : "—"
+                }
+                tone={nw?.pay_later_unpaid && nw.pay_later_unpaid > 0 ? "negative" : "neutral"}
+                hint="Open bills not yet paid from accounts"
+                delta={compares?.payLater.text}
+                deltaTone={compares?.payLater.tone}
+              />
+            </div>
           </div>
 
+          {/* 3. Cash movement + accounts */}
           <div className="grid gap-3 lg:grid-cols-5">
-            <Card className="lg:col-span-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h3 className="text-xs font-semibold text-foreground">Cash movement</h3>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {useWeeklyBuckets ? "Weekly · " : "Daily · "}
-                    earned / bill date
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 h-56 sm:h-60">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={trend} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      {...chartAxisProps}
-                      interval={useWeeklyBuckets ? 0 : "preserveStartEnd"}
-                      tick={{ ...chartAxisProps.tick, fontSize: compactCharts ? 10 : 11 }}
-                    />
-                    <YAxis
-                      {...chartAxisProps}
-                      width={compactCharts ? 36 : 48}
-                      tickFormatter={(v: number) =>
-                        Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(v)
-                      }
-                    />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [
-                        formatMoney(v, displayCurrency),
-                        name === "income" ? "Income" : name === "expense" ? "Expense" : "Net",
-                      ]}
-                      contentStyle={{
-                        borderRadius: 6,
-                        borderColor: chartTheme.tooltipBorder,
-                        background: chartTheme.tooltipBg,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: 11 }}
-                      formatter={(value) =>
-                        value === "income" ? "Income" : value === "expense" ? "Expense" : "Net"
-                      }
-                    />
-                    <Bar
-                      dataKey="income"
-                      fill={chartTheme.income}
-                      name="income"
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={compactCharts ? 24 : 16}
-                    />
-                    <Bar
-                      dataKey="expense"
-                      fill={chartTheme.expense}
-                      name="expense"
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={compactCharts ? 24 : 16}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="net"
-                      name="net"
-                      stroke={chartTheme.net}
-                      strokeWidth={2}
-                      dot={false}
-                      strokeDasharray="4 3"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-2 sm:grid-cols-4">
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Income
-                  </dt>
-                  <dd className="mt-0.5 text-xs font-bold tabular-nums text-positive">
-                    {formatMoney(trendTotals.incomeTotal, displayCurrency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Expense
-                  </dt>
-                  <dd className="mt-0.5 text-xs font-bold tabular-nums text-negative">
-                    {formatMoney(trendTotals.expenseTotal, displayCurrency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Net
-                  </dt>
-                  <dd
-                    className={`mt-0.5 text-xs font-bold tabular-nums ${
-                      trendTotals.net >= 0 ? "text-positive" : "text-negative"
-                    }`}
-                  >
-                    {formatMoney(trendTotals.net, displayCurrency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Avg / day
-                  </dt>
-                  <dd className="mt-0.5 text-xs font-bold tabular-nums text-foreground">
-                    {formatMoney(trendTotals.avgDailySpend, displayCurrency)}
-                  </dd>
-                </div>
-              </dl>
-            </Card>
+            <CashMovementCard
+              className="lg:col-span-3"
+              data={trend}
+              currency={displayCurrency}
+              weekly={useWeeklyBuckets}
+              compact={compactCharts}
+              incomeTotal={trendTotals.incomeTotal}
+              expenseTotal={trendTotals.expenseTotal}
+              netTotal={trendTotals.net}
+              avgDailySpend={trendTotals.avgDailySpend}
+            />
 
-            <Card className="overflow-hidden p-0 lg:col-span-2">
-              <div className="flex items-center justify-between border-b border-border px-2.5 py-1.5">
-                <h3 className="text-xs font-semibold text-foreground">Top expenses</h3>
-                <span className="text-[10px] text-muted-foreground">by category</span>
-              </div>
-              {categoryChart.length ? (
+            <AccountsCard
+              className="lg:col-span-2"
+              accounts={accounts}
+              displayCurrency={displayCurrency}
+              usdMvrRate={globalUsdMvrRate}
+            />
+          </div>
+
+          {/* 4. Top expenses + recent */}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <TopExpensesCard
+              rows={topExpenses}
+              currency={displayCurrency}
+              periodLabel={topExpensesPeriodLabel}
+              priorLabel={topExpensesPriorLabel}
+            />
+
+            <Card className="gap-0 overflow-hidden">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>Recent</CardTitle>
+                  <span className="text-[10px] text-muted-foreground">{recent.length} in period</span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
                 <ul className="divide-y divide-border/70">
-                  {categoryChart.map((c, i) => (
-                    <li key={c.name} className="px-2.5 py-1.5">
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full"
-                            style={{
-                              background: chartTheme.categories[i % chartTheme.categories.length],
-                            }}
-                            aria-hidden
-                          />
-                          <span className="truncate font-medium text-foreground">{c.name}</span>
-                        </span>
-                        <span className="shrink-0 tabular-nums text-negative">
-                          {formatMoneyAmountOnly(c.total)}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.max(c.pct, 2)}%`,
-                              background: chartTheme.categories[i % chartTheme.categories.length],
-                            }}
-                          />
-                        </div>
-                        <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
-                          {c.pct.toFixed(0)}%
-                        </span>
-                      </div>
+                  {recent.map((r) => (
+                    <li
+                      key={`${r.kind}-${r.id}`}
+                      className="flex min-h-12 items-center gap-2.5 px-4 py-2.5 text-sm"
+                    >
+                      <span
+                        className={cn(
+                          "h-2 w-2 shrink-0 rounded-full",
+                          r.kind === "income" ? "bg-positive" : "bg-negative",
+                        )}
+                        aria-hidden
+                      />
+                      <span className="w-12 shrink-0 tabular-nums text-muted-foreground sm:w-[4.25rem]">
+                        {format(parseISO(r.date), compactCharts ? "M/d" : "MMM d")}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-foreground">{r.label}</span>
+                      {r.attachment_url ? (
+                        <ReceiptPreviewIcon
+                          url={r.attachment_url}
+                          className="!min-h-9 !min-w-9 !rounded-[var(--radius-md)] !border-border !bg-transparent !p-1.5 !shadow-none sm:!min-h-0 sm:!min-w-0 sm:!p-1"
+                        />
+                      ) : null}
+                      <DisplayAmountCell
+                        amount={r.nativeAmount}
+                        nativeCurrency={r.nativeCurrency}
+                        asOfDate={r.date}
+                        prefix={r.kind === "income" ? "+" : "−"}
+                        tone={r.kind === "income" ? "positive" : "negative"}
+                        className="text-sm font-medium"
+                      />
                     </li>
                   ))}
+                  {!recent.length ? (
+                    <li className="px-4 py-3 text-sm text-muted-foreground">
+                      No activity in this period.
+                    </li>
+                  ) : null}
                 </ul>
-              ) : (
-                <p className="px-2.5 py-2 text-xs text-muted-foreground">No expense categories in this period.</p>
-              )}
-            </Card>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <Card className="p-2.5">
-              <h3 className="text-xs font-semibold text-foreground">Accounts</h3>
-              <ul className="mt-1.5 divide-y divide-border text-xs">
-                {accounts.map((a) => (
-                  <li key={a.id} className="flex justify-between gap-2 py-1.5">
-                    <span className="truncate text-foreground">{a.name}</span>
-                    <DisplayAmountCell
-                      amount={a.balance}
-                      nativeCurrency={a.currency}
-                      tone="auto"
-                      className="font-medium"
-                    />
-                  </li>
-                ))}
-                {!accounts.length ? (
-                  <li className="py-1.5 text-muted-foreground">No accounts yet.</li>
-                ) : null}
-              </ul>
-            </Card>
-
-            <Card className="overflow-hidden p-0">
-              <div className="flex items-center justify-between border-b border-border px-2.5 py-1.5">
-                <h3 className="text-xs font-semibold text-foreground">Recent</h3>
-                <span className="text-[10px] text-muted-foreground">{recent.length} in period</span>
-              </div>
-              <ul className="divide-y divide-border/70">
-                {recent.map((r) => (
-                  <li
-                    key={`${r.kind}-${r.id}`}
-                    className="flex items-center gap-2 px-2.5 py-1 text-xs"
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                        r.kind === "income" ? "bg-positive" : "bg-negative"
-                      }`}
-                      aria-hidden
-                    />
-                    <span className="w-[4.25rem] shrink-0 tabular-nums text-muted-foreground">
-                      {format(parseISO(r.date), "MMM d")}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-foreground">{r.label}</span>
-                    {r.attachment_url ? (
-                      <ReceiptPreviewIcon
-                        url={r.attachment_url}
-                        className="!rounded-[var(--radius-md)] !border-border !bg-transparent !p-1 !shadow-none"
-                      />
-                    ) : null}
-                    <DisplayAmountCell
-                      amount={r.nativeAmount}
-                      nativeCurrency={r.nativeCurrency}
-                      asOfDate={r.date}
-                      prefix={r.kind === "income" ? "+" : "−"}
-                      tone={r.kind === "income" ? "positive" : "negative"}
-                      className="text-xs font-medium"
-                    />
-                  </li>
-                ))}
-                {!recent.length ? (
-                  <li className="px-2.5 py-2 text-xs text-muted-foreground">No activity in this period.</li>
-                ) : null}
-              </ul>
+              </CardContent>
             </Card>
           </div>
         </>

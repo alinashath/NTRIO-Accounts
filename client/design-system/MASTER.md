@@ -27,12 +27,14 @@
 | Muted FG | `#737373` | `--color-muted-foreground` | Hints, meta |
 | Card | `#FFFFFF` | `--color-card` | Panels |
 | Border | `#E5E5E5` | `--color-border` | Soft borders |
-| Destructive | `#404040` | `--color-destructive` | Errors (weight + copy, not hue) |
-| Success | `#171717` | `--color-success` | Income / positive (dark) |
-| Warning | `#737373` | `--color-warning` | Expense / caution (mid gray) |
+| Destructive | `#D3212C` | `--color-destructive` | Errors / expense (Fintech Emerald) |
+| Success | `#069C56` | `--color-success` | Income / positive (Fintech Emerald) |
+| Warning | `#737373` | `--color-warning` | Caution meta |
 | Ring | `#171717` | `--color-ring` | Focus rings |
+| Positive | `#069C56` | `--color-positive` | Money in / gains |
+| Negative | `#D3212C` | `--color-negative` | Money out / losses |
 
-**Chart series:** Income `#171717` (solid), Expense `#A3A3A3` (lighter fill + dashed), Net `#525252` (dotted). Differentiate with value, pattern, and labels — not hue.
+**Chart series (Fintech Emerald):** Income `#069C56`, Expense `#D3212C`, Net `#2563EB` (dashed). Also use labels and patterns — not hue alone.
 
 ## Typography
 

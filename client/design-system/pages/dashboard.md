@@ -2,46 +2,41 @@
 
 Overrides `design-system/MASTER.md` for the home dashboard.
 
-## Layout
+## Layout (mobile-first)
 
-- Max width: `max-w-5xl` (app shell)
-- Order (mobile → desktop):
-  1. Page title + period context
-  2. Alert (overdue debts) if any
-  3. KPI grid (2-col mobile, 4-col desktop)
-  4. Cash / pay-later strip
-  5. Trend chart (full width) then category ranking
-  6. Accounts + recent activity (stacked mobile, 2-col `lg`)
+1. Page title + full-width period control
+2. Alert (overdue debts) if any
+3. **Period pulse card** (primary): income + expenses with prior-period deltas, sparklines, net row
+4. Balance snapshot: net worth · cash · pay-later
+5. Cash movement chart + **Accounts** (prominent balances)
+6. Top expenses + recent activity
+
+## Period pulse card
+
+- First viewport focus on mobile
+- Two equal columns: Income / Expenses
+- Each shows amount, prior amount, `% vs prior` badge (↑ good for income, ↓ good for expenses), sparkline
+- Net strip with delta badge + small sparkline
+- Footer: basis note + avg daily spend
 
 ## Charts
 
-### Income vs expense (30 days)
+- **Sparklines:** Area (Recharts) on income / expense / net — trend only; numbers live beside
+- **Cash movement (`CashMovementCard`)** — product mock:
+  - Diverging bars (income above zero, expenses below)
+  - Net curve (Fintech Emerald gradient) + dotted OLS trend line
+  - Live readout (drag/hover day → In / Out / Net; idle shows trend)
+  - Footer stats: Income · Expense · Net · Avg spend / day
+- **Top expenses:** Horizontal bars with % labels (not pie)
 
-- **Type:** Composed chart — grouped bars (income/expense) + net line
-- **Why:** Trend over time + rate of change; net line surfaces the story bars alone miss
-- **Mobile:** Aggregate to weekly buckets under ~480px; taller chart (`h-72`); fewer X ticks
-- **A11y:** Legend + period totals row under chart (income / expense / net + burn rate)
+## Components
 
-### Top expense categories
-
-- **Type:** Horizontal bar (not pie) — skill grade C for pie; bars AAA with value labels
-- **Max categories:** 5 + optional “Other”
-- **Always show:** amount, % of expense total, sorted descending
-- **Fallback:** compact list under chart with same numbers
-
-## KPI cards
-
-- Tone: positive → near-black weight; negative → muted gray weight (monochrome)
-- Optional delta vs prior period when available
-- Dense padding; hint tooltips keep ≥44px hit target on mobile
-
-## Color
-
-- Monochrome only — no teal/green/orange accents on this page
+- shadcn-style `Card` / `Badge` under `components/ui/`
+- Existing `StatCard` for secondary KPIs
+- Lucide for delta arrows (no emoji)
 
 ## Avoid
 
-- Donut/pie as sole category view
+- Leading with net worth before period P&L
+- Pie-only category view
 - Charts without numeric summary
-- Glass overlays that reduce contrast on KPIs
-- Hue-based status (use +/− prefixes, labels, and gray levels instead)

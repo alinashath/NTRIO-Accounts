@@ -1,7 +1,7 @@
-/** Chart colors — green income / red expense + category accents */
+/** Chart colors — Fintech Emerald income / expense + category accents */
 export const chartTheme = {
-  income: "#16a34a",
-  expense: "#dc2626",
+  income: "#069C56",
+  expense: "#D3212C",
   net: "#2563eb",
   grid: "#E5E5E5",
   tick: "#737373",
