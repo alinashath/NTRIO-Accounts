@@ -1,5 +1,6 @@
 import { Apple, Pencil, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
 import { ListRow, PanelCard } from "@/components/design";
 import { Dropdown, type DropdownOption } from "@/components/Dropdown";
@@ -11,6 +12,7 @@ import type {
   EggStyle,
   KitchenDayDto,
   KitchenDayRoomDto,
+  ShoppingSummaryDto,
 } from "../../../../shared/types";
 
 function todayYmd() {
@@ -66,6 +68,7 @@ export function KitchenOrdersPage() {
   const [date, setDate] = useState(todayYmd);
   const [day, setDay] = useState<KitchenDayDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [orderModal, setOrderModal] = useState<{
     room: KitchenDayRoomDto;
     editing?: BreakfastOrderDto;
@@ -82,19 +85,40 @@ export function KitchenOrdersPage() {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Failed"));
   }, [load]);
 
+  function noteShopping(shopping?: ShoppingSummaryDto) {
+    if (!shopping) return;
+    if (shopping.buy_line_count === 0) {
+      setMsg("Order saved · inventory usage updated · shopping list clear for this date");
+    } else {
+      setMsg(
+        `Order saved · inventory usage updated · shopping list has ${shopping.buy_line_count} line${
+          shopping.buy_line_count === 1 ? "" : "s"
+        } to buy`,
+      );
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-page-title text-ink">Breakfast orders</h1>
           <p className="mt-1 text-caption">
-            Pick a date · rooms & stays managed in Occupancy.
+            Pick a date · rooms &amp; stays in Occupancy · saving updates stock Used and shopping list.
           </p>
         </div>
         <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
       {error ? <p className="text-sm font-medium text-debit">{error}</p> : null}
+      {msg ? (
+        <p className="text-sm font-medium text-credit">
+          {msg}{" "}
+          <Link to={`/stock/shopping`} className="font-semibold text-action underline">
+            Open shopping list
+          </Link>
+        </p>
+      ) : null}
 
       {(day?.rooms ?? []).map((room) => (
         <PanelCard
@@ -189,8 +213,9 @@ export function KitchenOrdersPage() {
             usedGuests={orderModal.room.orders
               .filter((o) => o.status !== "cancelled" && o.id !== orderModal.editing?.id)
               .map((o) => o.guest_number)}
-            onDone={() => {
+            onDone={(shopping) => {
               setOrderModal(null);
+              noteShopping(shopping);
               void load().catch(() => {});
             }}
             onError={setError}
@@ -207,8 +232,9 @@ export function KitchenOrdersPage() {
           <ExtrasForm
             date={date}
             room={extrasRoom}
-            onDone={() => {
+            onDone={(shopping) => {
               setExtrasRoom(null);
+              noteShopping(shopping);
               void load().catch(() => {});
             }}
             onError={setError}
@@ -305,7 +331,7 @@ function OrderForm({
   servingTimes: string[];
   editing?: BreakfastOrderDto;
   usedGuests: number[];
-  onDone: () => void;
+  onDone: (shopping?: ShoppingSummaryDto) => void;
   onError: (s: string) => void;
 }) {
   const availableGuests = [1, 2, 3].filter((g) => !usedGuests.includes(g) || g === editing?.guest_number);
@@ -358,17 +384,24 @@ function OrderForm({
         status,
       };
       if (editing) {
-        await apiFetch(`/api/kitchen/orders/${editing.id}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
+        const res = await apiFetch<BreakfastOrderDto & { shopping?: ShoppingSummaryDto }>(
+          `/api/kitchen/orders/${editing.id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          },
+        );
+        onDone(res.shopping);
       } else {
-        await apiFetch("/api/kitchen/orders", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        const res = await apiFetch<BreakfastOrderDto & { shopping?: ShoppingSummaryDto }>(
+          "/api/kitchen/orders",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
+        onDone(res.shopping);
       }
-      onDone();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -498,7 +531,7 @@ function ExtrasForm({
 }: {
   date: string;
   room: KitchenDayRoomDto;
-  onDone: () => void;
+  onDone: (shopping?: ShoppingSummaryDto) => void;
   onError: (s: string) => void;
 }) {
   const [fruits, setFruits] = useState<string[]>(room.extras.fruits);
@@ -525,7 +558,7 @@ function ExtrasForm({
     }
     setSaving(true);
     try {
-      await apiFetch("/api/kitchen/extras", {
+      const res = await apiFetch<{ shopping?: ShoppingSummaryDto }>("/api/kitchen/extras", {
         method: "PUT",
         body: JSON.stringify({
           date,
@@ -538,7 +571,7 @@ function ExtrasForm({
           water_bottle: water,
         }),
       });
-      onDone();
+      onDone(res.shopping);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed");
     } finally {

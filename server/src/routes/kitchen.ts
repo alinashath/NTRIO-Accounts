@@ -14,6 +14,10 @@ import {
   type ExtrasLike,
   type OrderLike,
 } from "../services/breakfastRequirements.js";
+import {
+  applyKitchenUsageForDate,
+  shoppingSummaryForDate,
+} from "../services/stockPlanning.js";
 
 export const kitchenRouter = Router();
 kitchenRouter.use(requireAuth);
@@ -531,16 +535,20 @@ kitchenRouter.put(
         waterBottle: body.water_bottle,
       },
     });
+    const dateStr = ymd(row.date);
+    await applyKitchenUsageForDate(userId, dateStr);
+    const shopping = await shoppingSummaryForDate(userId, dateStr);
     res.json({
       id: row.id,
       room_id: row.roomId,
-      date: ymd(row.date),
+      date: dateStr,
       fruits: row.fruits,
       pancake: row.pancake,
       honey: row.honey,
       nutella: row.nutella,
       cereal: row.cereal,
       water_bottle: row.waterBottle,
+      shopping,
     });
   }),
 );
@@ -603,7 +611,9 @@ kitchenRouter.post(
         },
         include: { room: true },
       });
-      res.status(201).json(mapOrder(created));
+      await applyKitchenUsageForDate(userId, body.breakfast_date);
+      const shopping = await shoppingSummaryForDate(userId, body.breakfast_date);
+      res.status(201).json({ ...mapOrder(created), shopping });
     } catch (e: unknown) {
       const msg = e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002"
         ? "An order already exists for this room, date, and guest number"
@@ -665,7 +675,10 @@ kitchenRouter.patch(
       },
       include: { room: true },
     });
-    res.json(mapOrder(updated));
+    const dateStr = ymd(existing.breakfastDate);
+    await applyKitchenUsageForDate(userId, dateStr);
+    const shopping = await shoppingSummaryForDate(userId, dateStr);
+    res.json({ ...mapOrder(updated), shopping });
   }),
 );
 
@@ -681,7 +694,9 @@ kitchenRouter.delete(
       res.status(404).json({ error: "Order not found" });
       return;
     }
+    const dateStr = ymd(existing.breakfastDate);
     await prisma.breakfastOrder.delete({ where: { id } });
+    await applyKitchenUsageForDate(userId, dateStr);
     res.status(204).send();
   }),
 );
@@ -761,7 +776,7 @@ kitchenRouter.get(
   }),
 );
 
-/** Post computed kitchen usage into stock ledger Used for the date (idempotent replace of auto-used kitchen codes). */
+/** Post computed kitchen usage into stock ledger Used for the date (idempotent). Also runs automatically when orders/extras change. */
 kitchenRouter.post(
   "/apply-usage",
   asyncHandler(async (req, res) => {
@@ -769,56 +784,9 @@ kitchenRouter.post(
     const body = z
       .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
       .parse(req.body);
-    const date = parseYmd(body.date);
     await ensureKitchenStockSeed(userId);
-
-    const [orders, extras, items] = await Promise.all([
-      loadOrdersForDate(userId, date),
-      loadExtrasForDate(userId, date),
-      prisma.stockItem.findMany({ where: { userId, kind: "kitchen", isActive: true } }),
-    ]);
-
-    const needs = computeIngredientNeeds(toOrderLikes(orders), toExtrasLikes(extras));
-    const byCode = new Map(items.filter((i) => i.code).map((i) => [i.code!, i]));
-
-    const updated: string[] = [];
-    for (const [code, qty] of needs.entries()) {
-      const item = byCode.get(code);
-      if (!item) continue;
-
-      const prev = await prisma.stockLedgerDay.findFirst({
-        where: {
-          userId,
-          stockItemId: item.id,
-          date: { lt: date },
-        },
-        orderBy: { date: "desc" },
-      });
-      const opening = prev
-        ? dec(prev.opening) + dec(prev.received) - dec(prev.used)
-        : 0;
-
-      await prisma.stockLedgerDay.upsert({
-        where: {
-          userId_stockItemId_date: { userId, stockItemId: item.id, date },
-        },
-        create: {
-          userId,
-          stockItemId: item.id,
-          date,
-          opening,
-          received: 0,
-          used: qty,
-          waste: 0,
-          expenditure: 0,
-        },
-        update: {
-          used: qty,
-        },
-      });
-      updated.push(code);
-    }
-
-    res.json({ date: body.date, updated_codes: updated });
+    const result = await applyKitchenUsageForDate(userId, body.date);
+    const shopping = await shoppingSummaryForDate(userId, body.date);
+    res.json({ ...result, shopping });
   }),
 );

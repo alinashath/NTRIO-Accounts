@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NTRIO Staff Help Manual — Occupancy, Kitchen &amp; Stock</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 20mm 16mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #111827;
+      margin: 0;
+    }
+    h1 {
+      font-size: 22pt;
+      font-weight: 700;
+      margin: 0 0 6pt;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 14pt;
+      font-weight: 700;
+      margin: 22pt 0 8pt;
+      padding-bottom: 4pt;
+      border-bottom: 1.5px solid #E5E7EB;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      font-weight: 700;
+      margin: 14pt 0 6pt;
+      page-break-after: avoid;
+    }
+    p, li { margin: 0 0 6pt; }
+    ul, ol { margin: 0 0 10pt; padding-left: 1.2em; }
+    li { margin-bottom: 3pt; }
+    .cover {
+      padding: 48pt 0 24pt;
+      border-bottom: 2px solid #111827;
+      margin-bottom: 18pt;
+    }
+    .brand {
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin: 0 0 12pt;
+    }
+    .subtitle {
+      font-size: 12pt;
+      color: #4B5563;
+      margin: 0 0 16pt;
+    }
+    .meta {
+      font-size: 9.5pt;
+      color: #4B5563;
+    }
+    .callout {
+      border: 1px solid #E5E7EB;
+      background: #F6F7F9;
+      border-radius: 6px;
+      padding: 10pt 12pt;
+      margin: 10pt 0 14pt;
+      page-break-inside: avoid;
+    }
+    .callout strong { display: block; margin-bottom: 3pt; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8pt 0 14pt;
+      font-size: 10pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #E5E7EB;
+      padding: 6pt 8pt;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #F3F4F6;
+      font-weight: 600;
+    }
+    .step { margin-bottom: 4pt; }
+    .role {
+      display: inline-block;
+      font-size: 9pt;
+      font-weight: 600;
+      border: 1px solid #D1D5DB;
+      border-radius: 4px;
+      padding: 1pt 6pt;
+      margin-right: 4pt;
+      color: #374151;
+    }
+    .toc ol { margin-top: 6pt; }
+    .toc a { color: #111827; text-decoration: none; }
+    .footer-note {
+      margin-top: 28pt;
+      padding-top: 10pt;
+      border-top: 1px solid #E5E7EB;
+      font-size: 9pt;
+      color: #4B5563;
+    }
+    .page-break { page-break-before: always; }
+    .keep { page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+
+  <section class="cover">
+    <p class="brand">NTRIO</p>
+    <h1>Staff Help Manual</h1>
+    <p class="subtitle">Occupancy · Kitchen · Stock</p>
+    <p class="meta">
+      For Isola Alifu breakfast &amp; stock operations<br />
+      Version 1.1 · October 2026
+    </p>
+  </section>
+
+  <section class="toc keep">
+    <h2>Contents</h2>
+    <ol>
+      <li>Getting started</li>
+      <li>Who uses what</li>
+      <li>Occupancy — rooms &amp; stays</li>
+      <li>Kitchen — breakfast orders</li>
+      <li>Kitchen — server summary &amp; KOT</li>
+      <li>Kitchen — recipes</li>
+      <li>Stock — inventory, shopping, reports</li>
+      <li>Daily checklist</li>
+      <li>Tips &amp; troubleshooting</li>
+    </ol>
+  </section>
+
+  <h2>1. Getting started</h2>
+  <ol>
+    <li class="step">Open the NTRIO app in your browser and <strong>sign in</strong>.</li>
+    <li class="step">You land on <strong>Workspaces</strong>. Choose one:
+      <ul>
+        <li><strong>Occupancy</strong> — rooms and guest stays (calendar)</li>
+        <li><strong>Kitchen</strong> — breakfast orders, server list, KOT</li>
+        <li><strong>Stock</strong> — inventory, shopping list, cost reports</li>
+        <li><strong>Accounts</strong> — money (not covered in this guide)</li>
+      </ul>
+    </li>
+    <li class="step">Tap the <strong>NTRIO</strong> header anytime to return to Workspaces.</li>
+    <li class="step">On phone, use the <strong>bottom tabs</strong>. On desktop, use the top links. <strong>More</strong> opens other workspaces and Sign out.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Golden rule</strong>
+    Put stays in <em>Occupancy</em> first. Then take breakfast orders in <em>Kitchen</em> for that date. Stock and KOT use those orders automatically.
+  </div>
+
+  <h2>2. Who uses what</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Main screens</th>
+        <th>Typical tasks</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Front desk / house</td>
+        <td>Occupancy → Stays, Rooms</td>
+        <td>Add rooms, add/remove guest stays</td>
+      </tr>
+      <tr>
+        <td>Breakfast / F&amp;B</td>
+        <td>Kitchen → Orders, KOT</td>
+        <td>Take orders, extras, share KOT &amp; server list</td>
+      </tr>
+      <tr>
+        <td>Kitchen prep</td>
+        <td>Kitchen → KOT, Recipes</td>
+        <td>Prep quantities, schedule by room/time</td>
+      </tr>
+      <tr>
+        <td>Store / purchasing</td>
+        <td>Stock → Inventory, Shopping</td>
+        <td>Update stock, buy shortfalls</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="page-break">3. Occupancy — rooms &amp; stays</h2>
+  <p><span class="role">Front desk</span> Path: Workspaces → <strong>Occupancy</strong></p>
+
+  <h3>3.1 Rooms</h3>
+  <ol>
+    <li>Open the <strong>Rooms</strong> tab.</li>
+    <li>Tap <strong>Add room</strong>, enter the room number (e.g. 101), save.</li>
+    <li>Delete only if the room has no breakfast history (system will block otherwise).</li>
+  </ol>
+  <p>Rooms appear on the stay calendar and on Kitchen breakfast boards.</p>
+
+  <h3>3.2 Stay calendar (Stay view)</h3>
+  <ol>
+    <li>Open <strong>Stays</strong> (home of Occupancy).</li>
+    <li>Use the arrows to change <strong>month</strong>.</li>
+    <li>Grid = <strong>rooms down</strong>, <strong>dates across</strong>.</li>
+    <li><strong>Filled (dark) cell</strong> = occupied. Number = guest count.</li>
+    <li><strong>Empty cell</strong> = vacant. Tap to start <strong>Add stay</strong> for that room/date.</li>
+    <li>Or tap <strong>Add stay</strong> at the top and fill the form.</li>
+  </ol>
+
+  <div class="callout keep">
+    <strong>Add stay fields</strong>
+    <ul>
+      <li><strong>Room</strong> — which room</li>
+      <li><strong>From / To</strong> — inclusive dates (every night in range is filled)</li>
+      <li><strong>Occupants</strong> — how many guests in the room</li>
+      <li><strong>Notes</strong> — optional (e.g. guest name, booking ref)</li>
+    </ul>
+  </div>
+
+  <h3>3.3 Remove a stay</h3>
+  <ol>
+    <li>Tap a filled cell, or a row under <strong>Stays this month</strong>.</li>
+    <li>Confirm <strong>Remove stay</strong>.</li>
+  </ol>
+  <p>Removing a stay clears occupancy for those dates (unless another stay still covers them).</p>
+
+  <h2>4. Kitchen — breakfast orders</h2>
+  <p><span class="role">F&amp;B / night staff</span> Path: Workspaces → <strong>Kitchen</strong> → Orders</p>
+
+  <h3>4.1 Pick the date</h3>
+  <p>Set the <strong>Date</strong> at the top to the breakfast morning you are preparing for.</p>
+
+  <h3>4.2 Per room</h3>
+  <p>Each room card shows occupants (from Occupancy) and how many breakfast guests are already ordered.</p>
+  <table>
+    <thead>
+      <tr><th>Icon / action</th><th>Use it for</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>People (occupants)</td><td>One-day occupant override only. Prefer Occupancy for from–to stays.</td></tr>
+      <tr><td>Fruit / extras</td><td>Fruits (2–3 types or none), pancake, honey, Nutella, cereal, water bottle</td></tr>
+      <tr><td>Add breakfast (+)</td><td>New guest breakfast order for that room</td></tr>
+      <tr><td>Tap an existing order</td><td>Edit, mark served/cancelled, or remove</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 Breakfast order fields</h3>
+  <ul>
+    <li><strong>Guest number</strong> — 1, 2, or 3 in that room (one order per guest)</li>
+    <li><strong>Breakfast type</strong>
+      <ul>
+        <li><strong>Maldivian</strong> — 5 Roshi · 1 Mashuni · Egg (default omelette) · optional stir-fried potato</li>
+        <li><strong>Continental</strong> — 3 bread · 2 sausages · 2 butter · 1 jam · Egg (default fried)</li>
+      </ul>
+    </li>
+    <li><strong>Egg style</strong> — omelette, fried, boiled, or scrambled</li>
+    <li><strong>Beverages</strong> — juice, tea, coffee, milk, sugar (tick what is needed)</li>
+    <li><strong>Serving time</strong> — normal window times, or tick <em>Special time outside 7:00–9:30</em> for early/late (departing guests). Outside times are flagged for the kitchen.</li>
+    <li><strong>Special requests</strong> — free text</li>
+    <li><strong>Status</strong> — Pending → Served (or Cancelled)</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Important</strong>
+    Occupied rooms do <em>not</em> automatically get breakfast. Only guests with a saved order appear on the server summary and KOT.
+  </div>
+
+  <h2 class="page-break">5. Kitchen — server summary &amp; KOT</h2>
+  <p><span class="role">Servers &amp; kitchen</span> Path: Kitchen → <strong>KOT</strong></p>
+  <p>Choose the same <strong>Date</strong> as Orders.</p>
+
+  <h3>5.1 Breakfast summary for servers</h3>
+  <p>List of rooms with Maldivian / Continental counts, juice, tea/coffee, special requests, and outside-window flags.</p>
+  <p><strong>Share actions</strong> (icon row):</p>
+  <ul>
+    <li><strong>Copy</strong> — paste into WhatsApp / Viber as text</li>
+    <li><strong>CSV</strong> — spreadsheet download</li>
+    <li><strong>PNG</strong> — large readable image for chat apps</li>
+    <li><strong>Print</strong> — print or Save as PDF from the browser</li>
+  </ul>
+
+  <h3>5.2 KOT / Kitchen plan</h3>
+  <p>Totals the kitchen needs to prep (Roshi, Mashuni, sausages, eggs by style, potato, pancakes, etc.).</p>
+  <ul>
+    <li>Only items with quantity <strong>greater than zero</strong> are shown and exported.</li>
+    <li><strong>Preparation schedule</strong> lists each guest by time, room, type, and egg style.</li>
+    <li>Same share icons: Copy · CSV · PNG · Print — use <strong>PNG</strong> for WhatsApp / Viber.</li>
+  </ul>
+
+  <h2>6. Kitchen — recipes</h2>
+  <p><span class="role">Supervisor</span> Path: Kitchen → <strong>Recipes</strong></p>
+  <p>Recipes link stock items to breakfast rules (what gets consumed when an order is placed). Change only if you know the Isola Alifu portion rules. Stock items must exist under Stock → Inventory first.</p>
+
+  <h2>7. Stock — inventory, shopping, reports</h2>
+  <p><span class="role">Store</span> Path: Workspaces → <strong>Stock</strong></p>
+
+  <h3>7.1 How inventory is deducted (Used)</h3>
+  <ol>
+    <li>When you <strong>save a breakfast order</strong> or room extras, NTRIO calculates ingredients from Isola Alifu Use rules.</li>
+    <li>Those quantities are written to the stock ledger as <strong>Used</strong> for that breakfast date (automatic).</li>
+    <li>Balance = Opening + Received − Used. A “Low” tag appears when Balance is under <strong>Min stock</strong>.</li>
+    <li>Stock → Inventory → <strong>Re-sync breakfast usage</strong> re-runs the same calculation if you need to refresh.</li>
+    <li>Enter <strong>Received</strong> when deliveries arrive. Set <strong>Min stock</strong> on each item (tap the row) so shopping tops up to that level.</li>
+  </ol>
+
+  <h3>7.2 Shopping list (after orders)</h3>
+  <ol>
+    <li>Place / edit breakfast orders for the date (Kitchen → Orders). The app updates usage and shopping.</li>
+    <li>Open Stock → <strong>Shopping</strong> for the same date (or tap the link shown after saving an order).</li>
+    <li><strong>To buy</strong> includes:
+      <ul>
+        <li><strong>Order shortfall</strong> — not enough on hand for that morning’s orders</li>
+        <li><strong>Below min</strong> — after covering orders, stock would fall under Min stock (or is already under min)</li>
+        <li><strong>Not in stock</strong> — required ingredient missing from the inventory catalog</li>
+      </ul>
+    </li>
+    <li>Formula: buy enough so <em>on hand + buy − order need ≥ Min stock</em>.</li>
+    <li>Copy / Download / Print the list for purchasing. On-hand for shopping is Opening + Received (before Used), so the list does not double-count.</li>
+  </ol>
+
+  <h3>7.3 Inventory screen</h3>
+  <ol>
+    <li>Pick the <strong>date</strong>.</li>
+    <li>Tap a row to edit Opening, Received, Used, Waste, Expenditure, and <strong>Min stock</strong>.</li>
+    <li><strong>Add stock item</strong> for new kitchen or other items (e.g. toilet tissue).</li>
+    <li><strong>Download inventory</strong> for a CSV backup.</li>
+  </ol>
+
+  <h3>7.4 Cost &amp; waste reports</h3>
+  <p>Choose a date range to see consumption, spend, cost context, and waste. Download CSV if needed for Accounts.</p>
+
+  <h2>8. Daily checklist</h2>
+  <table>
+    <thead>
+      <tr><th>When</th><th>Who</th><th>Do this</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>On booking / check-in</td>
+        <td>Front desk</td>
+        <td>Add or update stay in Occupancy (from–to + occupants)</td>
+      </tr>
+      <tr>
+        <td>Evening before breakfast</td>
+        <td>F&amp;B</td>
+        <td>Kitchen → Orders for tomorrow’s date: breakfasts + extras (usage + shopping update automatically)</td>
+      </tr>
+      <tr>
+        <td>After orders saved</td>
+        <td>Kitchen / F&amp;B</td>
+        <td>KOT tab → download PNG or copy → send on WhatsApp/Viber</td>
+      </tr>
+      <tr>
+        <td>Same evening</td>
+        <td>Store</td>
+        <td>Stock → Shopping for that date → buy shortfalls and min-stock top-ups; enter Received when stock arrives</td>
+      </tr>
+      <tr>
+        <td>Morning service</td>
+        <td>Servers</td>
+        <td>Use server summary; kitchen uses KOT schedule</td>
+      </tr>
+      <tr>
+        <td>After service</td>
+        <td>F&amp;B</td>
+        <td>Mark orders Served; update inventory used/waste if required</td>
+      </tr>
+      <tr>
+        <td>On check-out</td>
+        <td>Front desk</td>
+        <td>Remove stay if dates need clearing</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>9. Tips &amp; troubleshooting</h2>
+  <ul>
+    <li><strong>Room missing on Kitchen?</strong> Add it under Occupancy → Rooms.</li>
+    <li><strong>Calendar empty?</strong> Add a stay (from–to). Occupancy does not invent guests.</li>
+    <li><strong>KOT empty?</strong> No breakfast orders for that date, or all cancelled. Orders drive KOT.</li>
+    <li><strong>Shopping empty but you expected buys?</strong> Check the same date as orders; set Min stock &gt; 0; enter Opening/Received so on-hand is correct.</li>
+    <li><strong>Balance looks wrong after cancelling orders?</strong> Saving/removing orders re-syncs Used. Or tap Re-sync breakfast usage on Inventory.</li>
+    <li><strong>Outside window flag?</strong> Guest chose a time outside 7:00–9:30 — prep early/late.</li>
+    <li><strong>PNG not opening in chat?</strong> Download PNG (not CSV). Text Copy also works in WhatsApp/Viber.</li>
+    <li><strong>Wrong month on calendar?</strong> Use the left/right arrows in Stay view.</li>
+    <li><strong>Cannot delete room?</strong> Remove breakfast order history for that room first, or ask a supervisor.</li>
+    <li><strong>Sign out</strong> — More → Sign out (or desktop top bar).</li>
+  </ul>
+
+  <div class="callout keep">
+    <strong>Need help?</strong>
+    Ask your supervisor. Do not share login passwords. Keep guest notes professional (names/refs only).
+  </div>
+
+  <p class="footer-note">
+    NTRIO Staff Help Manual · Occupancy, Kitchen &amp; Stock · Internal use · Oct 2026
+  </p>
+
+</body>
+</html>

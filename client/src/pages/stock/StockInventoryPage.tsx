@@ -88,7 +88,10 @@ export function StockInventoryPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-page-title text-ink">Inventory</h1>
-          <p className="mt-1 text-caption">Opening + Received − Used = Balance. Min stock and Use notes from the PDF.</p>
+          <p className="mt-1 text-caption">
+            Opening + Received − Used = Balance. Kitchen Used syncs when breakfast orders are saved. Set Min stock so
+            shopping list replenishes.
+          </p>
         </div>
         <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
@@ -109,7 +112,7 @@ export function StockInventoryPage() {
           Download inventory
         </Button>
         <Button type="button" variant="secondary" disabled={applying} onClick={() => void applyKitchenUsage()}>
-          {applying ? "Applying…" : "Apply breakfast usage"}
+          {applying ? "Applying…" : "Re-sync breakfast usage"}
         </Button>
         <Button type="button" onClick={() => setAddOpen(true)}>
           Add stock item

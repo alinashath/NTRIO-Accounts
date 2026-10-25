@@ -5,11 +5,7 @@ import { dec, parseYmd, ymd } from "../lib/dates.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/http.js";
 import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
-import {
-  computeIngredientNeeds,
-  type ExtrasLike,
-  type OrderLike,
-} from "../services/breakfastRequirements.js";
+import { buildShoppingListForDate } from "../services/stockPlanning.js";
 
 export const stockRouter = Router();
 stockRouter.use(requireAuth);
@@ -371,85 +367,9 @@ stockRouter.get(
     const q = z
       .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
       .parse(req.query);
-    const date = parseYmd(q.date);
     await ensureKitchenStockSeed(userId);
-
-    const [orders, extras, items] = await Promise.all([
-      prisma.breakfastOrder.findMany({
-        where: { userId, breakfastDate: date },
-        include: { room: true },
-      }),
-      prisma.roomDayExtras.findMany({
-        where: { userId, date },
-        include: { room: true },
-      }),
-      prisma.stockItem.findMany({ where: { userId, isActive: true } }),
-    ]);
-
-    const orderLikes: OrderLike[] = orders.map((o) => ({
-      breakfastType: o.breakfastType,
-      eggStyle: o.eggStyle,
-      potato: o.potato,
-      juice: o.juice,
-      tea: o.tea,
-      coffee: o.coffee,
-      milk: o.milk,
-      sugar: o.sugar,
-      status: o.status,
-      servingTime: o.servingTime,
-      outsideNormalWindow: o.outsideNormalWindow,
-      specialRequests: o.specialRequests,
-      roomNumber: o.room.number,
-      guestNumber: o.guestNumber,
-    }));
-    const extrasLikes: ExtrasLike[] = extras.map((e) => ({
-      roomNumber: e.room.number,
-      fruits: e.fruits,
-      pancake: e.pancake,
-      honey: e.honey,
-      nutella: e.nutella,
-      cereal: e.cereal,
-      waterBottle: e.waterBottle,
-    }));
-
-    const needs = computeIngredientNeeds(orderLikes, extrasLikes);
-    const byCode = new Map(items.filter((i) => i.code).map((i) => [i.code!, i]));
-
-    const lines = [];
-    for (const [code, required] of needs.entries()) {
-      const item = byCode.get(code);
-      if (!item) continue;
-      const ledger = await prisma.stockLedgerDay.findUnique({
-        where: {
-          userId_stockItemId_date: { userId, stockItemId: item.id, date },
-        },
-      });
-      let bal: number;
-      if (ledger) {
-        bal = balanceOf(dec(ledger.opening), dec(ledger.received), dec(ledger.used));
-      } else {
-        bal = await previousBalance(userId, item.id, date);
-      }
-      const toBuy = Math.max(0, required - bal);
-      lines.push({
-        code,
-        stock_item_id: item.id,
-        name: item.name,
-        unit: item.unit,
-        required,
-        on_hand: bal,
-        to_buy: toBuy,
-        use_notes: item.useNotes,
-        pack_info: item.packInfo,
-      });
-    }
-
-    lines.sort((a, b) => a.name.localeCompare(b.name));
-    res.json({
-      date: q.date,
-      items: lines,
-      buy_items: lines.filter((l) => l.to_buy > 0),
-    });
+    const list = await buildShoppingListForDate(userId, q.date);
+    res.json(list);
   }),
 );
 

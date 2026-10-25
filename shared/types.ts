@@ -431,22 +431,35 @@ export interface StockInventoryRowDto {
   ledger_id: string | null;
 }
 
+export type ShoppingReason = "order_shortfall" | "min_stock" | "missing_item";
+
 export interface ShoppingListLineDto {
   code: string;
-  stock_item_id: string;
+  stock_item_id: string | null;
   name: string;
   unit: string;
   required: number;
   on_hand: number;
+  min_stock: number;
   to_buy: number;
+  projected_after_use: number;
+  reasons: ShoppingReason[];
   use_notes: string | null;
   pack_info: string | null;
+}
+
+export interface ShoppingSummaryDto {
+  buy_line_count: number;
+  order_shortfall_count: number;
+  min_stock_count: number;
+  missing_item_count: number;
 }
 
 export interface ShoppingListDto {
   date: string;
   items: ShoppingListLineDto[];
   buy_items: ShoppingListLineDto[];
+  summary: ShoppingSummaryDto;
 }
 
 export interface StockReportDto {
