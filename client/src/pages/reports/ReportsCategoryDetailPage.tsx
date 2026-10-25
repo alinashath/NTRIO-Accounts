@@ -16,7 +16,7 @@ import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
 import { chartTheme } from "@/lib/chartTheme";
 import { formatMoney } from "@/lib/money";
-import type { CategoryDetailDto } from "../../../shared/types";
+import type { CategoryDetailDto } from "../../../../shared/types";
 
 function isUuid(s: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
@@ -74,7 +74,7 @@ export function ReportsCategoryDetailPage() {
     };
   }, [categoryId, detailUrl, uncategorized]);
 
-  const backHref = `/reports/pnl?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const backHref = `/accounts/reports/pnl?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 
   return (
     <div className="space-y-6">

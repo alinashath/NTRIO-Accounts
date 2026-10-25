@@ -13,7 +13,7 @@ import {
 
 /** Shared compact control height for buttons + inputs */
 export const controlClass =
-  "h-8 touch-manipulation rounded-[var(--radius-md)] border border-border bg-card px-2.5 text-xs text-foreground";
+  "h-11 touch-manipulation rounded-sm border border-border bg-surface px-3 text-sm text-ink";
 
 type PeriodFilterBarProps = {
   from: string;
@@ -96,10 +96,10 @@ export function PeriodFilterBar({
                   applyNamedPreset(opt.id);
                 }}
                 className={clsx(
-                  "h-8 rounded-[var(--radius-md)] px-2.5 text-xs font-medium transition",
+                  "min-h-11 rounded-sm px-3 text-sm font-semibold touch-manipulation",
                   draftPreset === opt.id
-                    ? "bg-primary text-on-primary"
-                    : "bg-muted text-foreground hover:bg-muted/80",
+                    ? "bg-ink text-white"
+                    : "bg-neutral-bg text-ink hover:bg-border",
                 )}
               >
                 {opt.label}

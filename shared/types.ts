@@ -286,3 +286,215 @@ export interface DebtDetailDto extends DebtDto {
   payments: DebtPaymentDto[];
   expense_charges: DebtExpenseChargeDto[];
 }
+
+/** Kitchen / Stock (Isola Alifu breakfast ops) */
+
+export type BreakfastType = "maldivian" | "continental";
+export type EggStyle = "omelette" | "fried" | "boiled" | "scrambled";
+export type BreakfastOrderStatus = "pending" | "served" | "cancelled";
+export type StockItemKind = "kitchen" | "other";
+export type FruitType = "watermelon" | "apple" | "papaya" | "orange";
+
+export interface RoomDto {
+  id: string;
+  number: string;
+}
+
+export interface RoomStayDto {
+  id: string;
+  room_id: string;
+  room_number: string;
+  from_date: string;
+  to_date: string;
+  occupant_count: number;
+  notes: string | null;
+  created_at: string;
+  days_filled?: number;
+}
+
+export interface BreakfastOrderDto {
+  id: string;
+  room_id: string;
+  room_number: string;
+  breakfast_date: string;
+  guest_number: number;
+  serving_time: string;
+  outside_normal_window: boolean;
+  breakfast_type: BreakfastType;
+  egg_style: EggStyle;
+  potato: boolean;
+  juice: boolean;
+  tea: boolean;
+  coffee: boolean;
+  milk: boolean;
+  sugar: boolean;
+  special_requests: string | null;
+  status: BreakfastOrderStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoomDayExtrasDto {
+  id: string | null;
+  fruits: string[];
+  pancake: boolean;
+  honey: boolean;
+  nutella: boolean;
+  cereal: boolean;
+  water_bottle: boolean;
+}
+
+export interface KitchenDayRoomDto {
+  id: string;
+  number: string;
+  occupant_count: number;
+  notes: string | null;
+  breakfast_participants: number;
+  orders: BreakfastOrderDto[];
+  extras: RoomDayExtrasDto;
+}
+
+export interface KitchenDayDto {
+  date: string;
+  serving_times: string[];
+  rooms: KitchenDayRoomDto[];
+}
+
+export interface ServerSummaryRowDto {
+  date: string;
+  breakfast_time: string;
+  room_number: string;
+  maldivian: number;
+  continental: number;
+  juice: number;
+  tea_or_coffee: number;
+  special_requests: string[];
+  outside_normal_window: boolean;
+}
+
+export interface KitchenPlanDto {
+  roshi: number;
+  mashuni_cups: number;
+  sausages: number;
+  eggs_omelette: number;
+  eggs_fried: number;
+  eggs_boiled: number;
+  eggs_scrambled: number;
+  potato_servings: number;
+  pancakes: number;
+  schedule: Array<{
+    room_number: string;
+    guest_number: number;
+    serving_time: string;
+    breakfast_type: BreakfastType;
+    egg_style: EggStyle;
+    outside_normal_window: boolean;
+    special_requests: string | null;
+  }>;
+}
+
+export interface KitchenSummariesDto {
+  date: string;
+  server_summary: ServerSummaryRowDto[];
+  kitchen_plan: KitchenPlanDto;
+}
+
+export interface StockItemDto {
+  id: string;
+  code: string | null;
+  name: string;
+  unit: string;
+  kind: StockItemKind;
+  min_stock: number;
+  use_notes: string | null;
+  pack_info: string | null;
+  sort_order: number;
+}
+
+export interface StockInventoryRowDto {
+  stock_item_id: string;
+  code: string | null;
+  name: string;
+  unit: string;
+  kind: StockItemKind;
+  use_notes: string | null;
+  pack_info: string | null;
+  min_stock: number;
+  opening: number;
+  received: number;
+  used: number;
+  waste: number;
+  expenditure: number;
+  unit_cost: number | null;
+  balance: number;
+  below_min: boolean;
+  ledger_id: string | null;
+}
+
+export interface ShoppingListLineDto {
+  code: string;
+  stock_item_id: string;
+  name: string;
+  unit: string;
+  required: number;
+  on_hand: number;
+  to_buy: number;
+  use_notes: string | null;
+  pack_info: string | null;
+}
+
+export interface ShoppingListDto {
+  date: string;
+  items: ShoppingListLineDto[];
+  buy_items: ShoppingListLineDto[];
+}
+
+export interface StockReportDto {
+  from: string;
+  to: string;
+  guest_count: number;
+  ingredient_consumption: Array<{
+    stock_item_id: string;
+    name: string;
+    unit: string;
+    used: number;
+    waste: number;
+    expenditure: number;
+  }>;
+  expenditure: number;
+  cost_per_guest: number | null;
+  food_waste: {
+    total_waste_qty: number;
+    total_used_qty: number;
+    lines: Array<{
+      stock_item_id: string;
+      name: string;
+      unit: string;
+      waste: number;
+    }>;
+  };
+}
+
+export type RecipeApplyTo = "maldivian" | "continental" | "room_extras" | "custom";
+
+export interface RecipeLineDto {
+  id: string;
+  stock_item_id: string;
+  stock_item_name: string;
+  stock_item_unit: string;
+  stock_item_code: string | null;
+  qty_per_serving: number;
+  notes: string | null;
+}
+
+export interface RecipeDto {
+  id: string;
+  name: string;
+  apply_to: RecipeApplyTo;
+  code: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  lines: RecipeLineDto[];
+}

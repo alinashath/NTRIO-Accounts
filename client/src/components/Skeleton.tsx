@@ -1,12 +1,12 @@
-/** Simple pulse placeholders while data loads. */
+/** DESIGN.md: skeleton rows in --border colour, no spinners over content. */
 
 export function SkeletonLine({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-muted ${className}`} aria-hidden />;
+  return <div className={`rounded-sm bg-border ${className}`} aria-hidden />;
 }
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-[var(--radius-md)] border border-border/80 bg-card p-3">
+    <div className="rounded-[var(--radius)] border border-border bg-surface p-4">
       <SkeletonLine className="h-3 w-20" />
       <SkeletonLine className="mt-2 h-5 w-32" />
     </div>

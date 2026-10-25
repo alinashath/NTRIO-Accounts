@@ -3,43 +3,25 @@ import {
   eachDayOfInterval,
   format,
   parseISO,
-  startOfWeek,
   differenceInCalendarDays,
 } from "date-fns";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Minus,
-} from "lucide-react";
+import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
 import { AccountsCard } from "@/components/AccountsCard";
 import { CashMovementCard } from "@/components/CashMovementCard";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
+import { Modal } from "@/components/Modal";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
-import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
-import { SkeletonCard, SkeletonLine } from "@/components/Skeleton";
-import { Sparkline } from "@/components/Sparkline";
+import { SkeletonLine } from "@/components/Skeleton";
 import {
-  colorForCategory,
   TopExpensesCard,
   type TopExpenseRow,
 } from "@/components/TopExpensesCard";
-import { StatCard } from "@/components/ui";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Amount, ListRow, PanelCard, PctChangeTag, StatRow } from "@/components/design";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
-import { chartTheme } from "@/lib/chartTheme";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
-import { formatMoney, formatMoneyAmountOnly } from "@/lib/money";
-import { cn } from "@/lib/utils";
-import { formatSharePct, formatVsPrior, pctChange } from "@/lib/periodCompare";
+import { formatUnsignedAmount } from "@/lib/amountFormat";
+import { formatSharePct } from "@/lib/periodCompare";
 import {
   comparablePriorPeriod,
   DASHBOARD_PERIOD_PRESETS,
@@ -70,20 +52,6 @@ type CatRow = {
   total: number;
 };
 
-function useCompactCharts() {
-  const [compact, setCompact] = useState(
-    () => (typeof window !== "undefined" ? window.matchMedia("(max-width: 639px)").matches : true),
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const onChange = () => setCompact(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return compact;
-}
-
 function periodTitle(preset: RangePreset): string {
   switch (preset) {
     case "this_week":
@@ -112,7 +80,6 @@ function priorTitle(preset: RangePreset): string {
   }
 }
 
-/** Compact range for card subtitles, e.g. Oct 1–11 or Sep 28–Oct 4. */
 function shortRangeLabel(fromYmd: string, toYmd: string): string {
   const from = parseISO(fromYmd);
   const to = parseISO(toYmd);
@@ -122,51 +89,18 @@ function shortRangeLabel(fromYmd: string, toYmd: string): string {
   return `${format(from, "MMM d")}–${format(to, "MMM d")}`;
 }
 
-function DeltaBadge({
-  current,
-  prior,
-  higherIsBetter,
-}: {
-  current: number;
-  prior: number;
-  higherIsBetter: boolean;
-}) {
-  const pct = pctChange(current, prior);
-  const delta = current - prior;
-  const flat = Math.abs(delta) < 0.005 || pct === 0;
-  const up = delta > 0;
-  const good = flat ? null : up === higherIsBetter;
-  const variant = flat ? "neutral" : good ? "positive" : "negative";
-  const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight;
-  const label =
-    pct == null
-      ? flat
-        ? "Flat"
-        : `${up ? "+" : "−"}${formatMoneyAmountOnly(Math.abs(delta))}`
-      : `${pct > 0 ? "+" : ""}${pct.toFixed(0)}%`;
-
-  return (
-    <Badge variant={variant} className="gap-0.5">
-      <Icon className="h-3 w-3" aria-hidden />
-      <span>{label}</span>
-    </Badge>
-  );
-}
-
 export function DashboardPage() {
   const { displayCurrency, globalUsdMvrRate, getUsdMvrRateForDate } = useDisplayCurrency();
-  const compactCharts = useCompactCharts();
   const initial = thisMonthRange();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initial);
+  const [infoHint, setInfoHint] = useState<string | null>(null);
 
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [pnlPrev, setPnlPrev] = useState<Pnl | null>(null);
   const [nw, setNw] = useState<NetWorth | null>(null);
-  const [nwPrev, setNwPrev] = useState<NetWorth | null>(null);
-  const [prevPeriodLabel, setPrevPeriodLabel] = useState<string | null>(null);
   const [income, setIncome] = useState<IncomeEntryDto[]>([]);
   const [expenses, setExpenses] = useState<ExpenseEntryDto[]>([]);
   const [debts, setDebts] = useState<DebtDto[]>([]);
@@ -186,7 +120,7 @@ export function DashboardPage() {
       setLoading(true);
       const prev = comparablePriorPeriod(periodFrom, periodTo, rangePreset);
       try {
-        const [accs, pnlRes, pnlPrior, nwRes, nwPrior, inc, exp, d, br, brPrior] =
+        const [accs, pnlRes, pnlPrior, nwRes, inc, exp, d, br, brPrior] =
           await Promise.all([
             apiFetch<AccountDto[]>("/api/accounts"),
             apiFetch<Pnl>(
@@ -197,9 +131,6 @@ export function DashboardPage() {
             ),
             apiFetch<NetWorth>(
               `/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`,
-            ),
-            apiFetch<NetWorth>(
-              `/api/reports/net-worth?as_of=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
             ),
             apiFetch<IncomeEntryDto[]>(
               `/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
@@ -220,8 +151,6 @@ export function DashboardPage() {
         setPnl(pnlRes);
         setPnlPrev(pnlPrior);
         setNw(nwRes);
-        setNwPrev(nwPrior);
-        setPrevPeriodLabel(`${prev.from} → ${prev.to}`);
         setIncome(inc);
         setExpenses(exp);
         setDebts(d);
@@ -235,11 +164,10 @@ export function DashboardPage() {
             .map((r) => [r.name, r.total] as const),
         );
         setTopExpenses(
-          currentExp.map((r, i) => ({
+          currentExp.map((r) => ({
             name: r.name,
             current: r.total,
             previous: priorByName.get(r.name) ?? 0,
-            color: colorForCategory(i),
           })),
         );
         setError(null);
@@ -255,23 +183,9 @@ export function DashboardPage() {
     };
   }, [asOf, displayCurrency, periodFrom, periodTo, rangePreset]);
 
-  const compares = useMemo(() => {
-    if (!pnl || !pnlPrev || !nw || !nwPrev) return null;
-    const incomeKept = formatSharePct(pnl.net, pnl.total_income, "of income kept");
-    const expenseShare = formatSharePct(pnl.total_expenses, pnl.total_income, "of income");
-    return {
-      netWorth: formatVsPrior(nw.net_worth, nwPrev.net_worth, { higherIsBetter: true }),
-      cash: formatVsPrior(nw.cash_and_accounts, nwPrev.cash_and_accounts, { higherIsBetter: true }),
-      payLater: formatVsPrior(nw.pay_later_unpaid ?? 0, nwPrev.pay_later_unpaid ?? 0, {
-        higherIsBetter: false,
-      }),
-      income: formatVsPrior(pnl.total_income, pnlPrev.total_income, { higherIsBetter: true }),
-      expenses: formatVsPrior(pnl.total_expenses, pnlPrev.total_expenses, { higherIsBetter: false }),
-      net: formatVsPrior(pnl.net, pnlPrev.net, { higherIsBetter: true }),
-      incomeKept,
-      expenseShare,
-    };
-  }, [nw, nwPrev, pnl, pnlPrev]);
+  const incomeKept = pnl
+    ? formatSharePct(pnl.net, pnl.total_income, "of income kept")
+    : null;
 
   const dailyTrend = useMemo(() => {
     const start = parseISO(periodFrom);
@@ -311,53 +225,20 @@ export function DashboardPage() {
         );
       }
     }
-    for (const d of days) {
-      d.net = d.income - d.expense;
-    }
+    for (const d of days) d.net = d.income - d.expense;
     return days;
   }, [displayCurrency, expenses, getUsdMvrRateForDate, income, periodFrom, periodTo]);
-
-  const useWeeklyBuckets = compactCharts || periodDays > 45;
-
-  const trend = useMemo(() => {
-    if (!useWeeklyBuckets) {
-      return dailyTrend.map(({ day, income, expense, net }) => ({ day, income, expense, net }));
-    }
-    const buckets = new Map<
-      string,
-      { day: string; sort: string; income: number; expense: number; net: number }
-    >();
-    for (const row of dailyTrend) {
-      const weekStart = startOfWeek(new Date(row.key), { weekStartsOn: 1 });
-      const sort = format(weekStart, "yyyy-MM-dd");
-      const label = `W ${format(weekStart, "MMM d")}`;
-      const cur = buckets.get(sort) ?? { day: label, sort, income: 0, expense: 0, net: 0 };
-      cur.income += row.income;
-      cur.expense += row.expense;
-      cur.net += row.net;
-      buckets.set(sort, cur);
-    }
-    return [...buckets.values()]
-      .sort((a, b) => (a.sort < b.sort ? -1 : 1))
-      .map(({ day, income, expense, net }) => ({ day, income, expense, net }));
-  }, [dailyTrend, useWeeklyBuckets]);
 
   const trendTotals = useMemo(() => {
     const incomeTotal = dailyTrend.reduce((s, d) => s + d.income, 0);
     const expenseTotal = dailyTrend.reduce((s, d) => s + d.expense, 0);
-    const net = incomeTotal - expenseTotal;
-    const days = Math.max(periodDays, 1);
     return {
       incomeTotal,
       expenseTotal,
-      net,
-      avgDailySpend: expenseTotal / days,
+      net: incomeTotal - expenseTotal,
+      avgDailySpend: expenseTotal / Math.max(periodDays, 1),
     };
   }, [dailyTrend, periodDays]);
-
-  const incomeSpark = useMemo(() => dailyTrend.map((d) => d.income), [dailyTrend]);
-  const expenseSpark = useMemo(() => dailyTrend.map((d) => d.expense), [dailyTrend]);
-  const netSpark = useMemo(() => dailyTrend.map((d) => d.net), [dailyTrend]);
 
   const priorRange = useMemo(
     () => comparablePriorPeriod(periodFrom, periodTo, rangePreset),
@@ -374,7 +255,6 @@ export function DashboardPage() {
       nativeAmount: number;
       nativeCurrency: string;
       kind: "income" | "expense";
-      attachment_url: string | null;
     };
     const rows: Row[] = [
       ...income
@@ -386,7 +266,6 @@ export function DashboardPage() {
           nativeAmount: r.amount,
           nativeCurrency: r.account_currency || r.currency,
           kind: "income" as const,
-          attachment_url: r.attachment_url,
         })),
       ...expenses
         .filter((r) => !r.pay_later && r.paid_date)
@@ -397,12 +276,21 @@ export function DashboardPage() {
           nativeAmount: r.amount,
           nativeCurrency: r.account_currency || "USD",
           kind: "expense" as const,
-          attachment_url: r.attachment_url,
         })),
     ];
     rows.sort((a, b) => (a.date < b.date ? 1 : -1));
     return rows.slice(0, 12);
   }, [expenses, income]);
+
+  const recentByDate = useMemo(() => {
+    const map = new Map<string, typeof recent>();
+    for (const r of recent) {
+      const list = map.get(r.date) ?? [];
+      list.push(r);
+      map.set(r.date, list);
+    }
+    return [...map.entries()];
+  }, [recent]);
 
   const today = new Date();
   const overdue = debts.filter(
@@ -412,298 +300,274 @@ export function DashboardPage() {
   const rangeLabel = `${format(parseISO(periodFrom), "MMM d")} – ${format(parseISO(periodTo), "MMM d, yyyy")}`;
 
   return (
-    <div className="space-y-3 sm:space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">Home</h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground sm:hidden">{rangeLabel}</p>
-        </div>
-        <div className="w-full min-w-0 sm:w-auto [&_button]:h-11 [&_button]:w-full [&_button]:justify-start sm:[&_button]:h-8 sm:[&_button]:w-auto">
-          <PeriodFilterBar
-            from={applied.from}
-            to={applied.to}
-            preset={rangePreset}
-            presets={DASHBOARD_PERIOD_PRESETS}
-            onApply={({ from, to, preset }) => {
-              setRangePreset(preset);
-              setApplied({ from, to });
-            }}
-          />
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-page-title text-ink">Home</h1>
+        <PeriodFilterBar
+          from={applied.from}
+          to={applied.to}
+          preset={rangePreset}
+          presets={DASHBOARD_PERIOD_PRESETS}
+          onApply={({ from, to, preset }) => {
+            setRangePreset(preset);
+            setApplied({ from, to });
+          }}
+        />
       </div>
 
       {error ? (
-        <Card className="p-4">
-          <p className="text-sm text-destructive">{error}</p>
-        </Card>
+        <PanelCard title="Error">
+          <p className="px-4 pb-4 text-sm text-debit">{error}</p>
+        </PanelCard>
       ) : null}
 
       {overdue.length > 0 && !loading ? (
         <div
-          className="rounded-[var(--radius-lg)] border border-border bg-muted/80 px-3 py-2.5 text-sm text-foreground"
+          className="rounded-[var(--radius)] border border-border bg-surface px-4 py-3 text-sm text-ink"
           role="status"
         >
           <strong>{overdue.length}</strong> overdue debt
-          {overdue.length > 1 ? "s" : ""} — review on Debts.
+          {overdue.length > 1 ? "s" : ""} — review on{" "}
+          <Link to="/accounts/debts" className="font-semibold text-action">
+            Debts
+          </Link>
+          .
         </div>
       ) : null}
 
       {loading && !error ? (
-        <div className="space-y-3">
-          <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4 space-y-3">
-            <SkeletonLine className="h-4 w-32" />
-            <SkeletonLine className="h-10 w-full" />
-            <div className="grid grid-cols-2 gap-3">
-              <SkeletonLine className="h-24 w-full" />
-              <SkeletonLine className="h-24 w-full" />
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="space-y-3 rounded-[var(--radius)] border border-border bg-surface p-4"
+            >
+              <SkeletonLine className="h-4 w-32 bg-border" />
+              <SkeletonLine className="h-8 w-full bg-border" />
+              <SkeletonLine className="h-8 w-3/4 bg-border" />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
+          ))}
         </div>
       ) : null}
 
       {!loading && !error ? (
         <>
-          {/* 1. Period income / expense — primary mobile card */}
-          <Card className="overflow-hidden gap-0">
-            <CardHeader className="pb-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <CardTitle>{periodTitle(rangePreset)}</CardTitle>
-                  <CardDescription className="mt-1">
-                    {priorTitle(rangePreset)}
-                    {prevPeriodLabel ? (
-                      <span className="hidden sm:inline"> · {prevPeriodLabel}</span>
-                    ) : null}
-                    {" · "}
-                    {displayCurrency}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="min-w-0 rounded-[var(--radius-md)] bg-muted/50 p-3">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Income
-                    </p>
-                    {pnl && pnlPrev ? (
-                      <DeltaBadge
-                        current={pnl.total_income}
-                        prior={pnlPrev.total_income}
-                        higherIsBetter
-                      />
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-xl font-bold tabular-nums tracking-tight text-positive sm:text-2xl">
-                    {pnl ? formatMoneyAmountOnly(pnl.total_income) : "—"}
-                  </p>
-                  {pnlPrev ? (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-                      Prior {formatMoneyAmountOnly(pnlPrev.total_income)}
-                    </p>
-                  ) : null}
-                  <Sparkline
-                    className="mt-2"
-                    values={incomeSpark}
-                    color={chartTheme.income}
-                    height={44}
-                    label="Income trend this period"
+          <PanelCard title={periodTitle(rangePreset)} caption={priorTitle(rangePreset)}>
+            <StatRow
+              label="Income"
+              change={
+                pnl && pnlPrev ? (
+                  <PctChangeTag
+                    current={pnl.total_income}
+                    prior={pnlPrev.total_income}
+                    higherIsBetter
                   />
-                </div>
-
-                <div className="min-w-0 rounded-[var(--radius-md)] bg-muted/50 p-3">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Expenses
-                    </p>
-                    {pnl && pnlPrev ? (
-                      <DeltaBadge
-                        current={pnl.total_expenses}
-                        prior={pnlPrev.total_expenses}
-                        higherIsBetter={false}
-                      />
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-xl font-bold tabular-nums tracking-tight text-negative sm:text-2xl">
-                    {pnl ? formatMoneyAmountOnly(pnl.total_expenses) : "—"}
-                  </p>
-                  {pnlPrev ? (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-                      Prior {formatMoneyAmountOnly(pnlPrev.total_expenses)}
-                    </p>
-                  ) : null}
-                  <Sparkline
-                    className="mt-2"
-                    values={expenseSpark}
-                    color={chartTheme.expense}
-                    height={44}
-                    label="Expense trend this period"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center gap-3 rounded-[var(--radius-md)] border border-border/70 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Net
-                    </p>
-                    {pnl && pnlPrev ? (
-                      <DeltaBadge current={pnl.net} prior={pnlPrev.net} higherIsBetter />
-                    ) : null}
-                    {compares?.incomeKept ? (
-                      <span className="text-[11px] text-muted-foreground">{compares.incomeKept}</span>
-                    ) : null}
-                  </div>
-                  <p
-                    className={cn(
-                      "mt-0.5 text-lg font-bold tabular-nums tracking-tight sm:text-xl",
-                      pnl && pnl.net < 0 ? "text-negative" : "text-positive",
-                    )}
-                  >
-                    {pnl ? formatMoneyAmountOnly(pnl.net) : "—"}
-                  </p>
-                </div>
-                <Sparkline
-                  className="w-24 shrink-0 sm:w-32"
-                  values={netSpark}
-                  color={chartTheme.net}
-                  height={40}
-                  label="Net trend this period"
+                ) : null
+              }
+              value={
+                <Amount
+                  value={pnl?.total_income ?? 0}
+                  currency={displayCurrency}
+                  tone="credit"
+                  size="lg"
                 />
-              </div>
-            </CardContent>
-            <CardFooter className="justify-between text-[11px] text-muted-foreground">
-              <span>Earned − billed</span>
-              <span className="tabular-nums">
-                Avg spend {formatMoney(trendTotals.avgDailySpend, displayCurrency)}/day
+              }
+              priorCaption={
+                pnlPrev
+                  ? `Prior ${formatUnsignedAmount(pnlPrev.total_income, displayCurrency)}`
+                  : undefined
+              }
+            />
+            <StatRow
+              label="Expenses"
+              change={
+                pnl && pnlPrev ? (
+                  <PctChangeTag
+                    current={pnl.total_expenses}
+                    prior={pnlPrev.total_expenses}
+                    higherIsBetter={false}
+                  />
+                ) : null
+              }
+              value={
+                <Amount
+                  value={pnl?.total_expenses ?? 0}
+                  currency={displayCurrency}
+                  tone="debit"
+                  size="lg"
+                />
+              }
+              priorCaption={
+                pnlPrev
+                  ? `Prior ${formatUnsignedAmount(pnlPrev.total_expenses, displayCurrency)}`
+                  : undefined
+              }
+            />
+            <StatRow
+              label="Net"
+              change={
+                pnl && pnlPrev ? (
+                  <PctChangeTag current={pnl.net} prior={pnlPrev.net} higherIsBetter />
+                ) : null
+              }
+              value={
+                <Amount
+                  value={pnl?.net ?? 0}
+                  currency={displayCurrency}
+                  tone="auto"
+                  size="lg"
+                />
+              }
+              caption={incomeKept ?? undefined}
+            />
+            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
+              <span className="text-caption">Avg spend per day</span>
+              <span className="text-sm font-semibold tabular-nums text-ink">
+                {formatUnsignedAmount(trendTotals.avgDailySpend, displayCurrency)}
               </span>
-            </CardFooter>
-          </Card>
-
-          {/* 2. Balance snapshot */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-3">
-            <StatCard
-              title="Net worth"
-              value={nw ? formatMoneyAmountOnly(nw.net_worth) : "—"}
-              tone={nw && nw.net_worth < 0 ? "negative" : "positive"}
-              hint={`As of ${asOf} in ${displayCurrency}`}
-              delta={compares?.netWorth.text}
-              deltaTone={compares?.netWorth.tone}
-            />
-            <StatCard
-              title="Cash & accounts"
-              value={nw ? formatMoneyAmountOnly(nw.cash_and_accounts) : "—"}
-              tone="accent"
-              hint="Sum of account balances in display currency"
-              delta={compares?.cash.text}
-              deltaTone={compares?.cash.tone}
-            />
-            <div className="col-span-2 lg:col-span-1">
-              <StatCard
-                title="Pay later unpaid"
-                value={
-                  nw?.pay_later_unpaid != null
-                    ? formatMoneyAmountOnly(nw.pay_later_unpaid)
-                    : "—"
-                }
-                tone={nw?.pay_later_unpaid && nw.pay_later_unpaid > 0 ? "negative" : "neutral"}
-                hint="Open bills not yet paid from accounts"
-                delta={compares?.payLater.text}
-                deltaTone={compares?.payLater.tone}
-              />
             </div>
-          </div>
+          </PanelCard>
 
-          {/* 3. Cash movement + accounts */}
-          <div className="grid gap-3 lg:grid-cols-5">
-            <CashMovementCard
-              className="lg:col-span-3"
-              data={trend}
-              currency={displayCurrency}
-              weekly={useWeeklyBuckets}
-              compact={compactCharts}
-              incomeTotal={trendTotals.incomeTotal}
-              expenseTotal={trendTotals.expenseTotal}
-              netTotal={trendTotals.net}
-              avgDailySpend={trendTotals.avgDailySpend}
+          <PanelCard title="Balance position">
+            <ListRow
+              primary="Cash & accounts"
+              secondary={
+                <button
+                  type="button"
+                  className="text-caption underline-offset-2 hover:underline"
+                  onClick={() =>
+                    setInfoHint("Sum of account balances in the selected display currency.")
+                  }
+                >
+                  What is this?
+                </button>
+              }
+              right={
+                <Amount
+                  value={nw?.cash_and_accounts ?? 0}
+                  currency={displayCurrency}
+                  tone="plain"
+                  signed={false}
+                />
+              }
             />
-
-            <AccountsCard
-              className="lg:col-span-2"
-              accounts={accounts}
-              displayCurrency={displayCurrency}
-              usdMvrRate={globalUsdMvrRate}
+            <ListRow
+              primary="Pay later unpaid"
+              secondary={
+                <button
+                  type="button"
+                  className="text-caption underline-offset-2 hover:underline"
+                  onClick={() =>
+                    setInfoHint("Open bills not yet paid from accounts.")
+                  }
+                >
+                  What is this?
+                </button>
+              }
+              right={
+                <Amount
+                  value={nw?.pay_later_unpaid ?? 0}
+                  currency={displayCurrency}
+                  tone="debit"
+                />
+              }
             />
-          </div>
-
-          {/* 4. Top expenses + recent */}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <TopExpensesCard
-              rows={topExpenses}
-              currency={displayCurrency}
-              periodLabel={topExpensesPeriodLabel}
-              priorLabel={topExpensesPriorLabel}
+            <ListRow
+              primary="Net worth"
+              secondary={
+                <button
+                  type="button"
+                  className="text-caption underline-offset-2 hover:underline"
+                  onClick={() =>
+                    setInfoHint(`As of ${asOf} in ${displayCurrency}.`)
+                  }
+                >
+                  What is this?
+                </button>
+              }
+              right={
+                <Amount
+                  value={nw?.net_worth ?? 0}
+                  currency={displayCurrency}
+                  tone={(nw?.net_worth ?? 0) < 0 ? "debit" : "plain"}
+                  signed={(nw?.net_worth ?? 0) < 0}
+                />
+              }
             />
+          </PanelCard>
 
-            <Card className="gap-0 overflow-hidden">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle>Recent</CardTitle>
-                  <span className="text-[10px] text-muted-foreground">{recent.length} in period</span>
-                </div>
-              </CardHeader>
-              <CardContent className="px-0 pb-0">
-                <ul className="divide-y divide-border/70">
-                  {recent.map((r) => (
-                    <li
-                      key={`${r.kind}-${r.id}`}
-                      className="flex min-h-12 items-center gap-2.5 px-4 py-2.5 text-sm"
-                    >
-                      <span
-                        className={cn(
-                          "h-2 w-2 shrink-0 rounded-full",
-                          r.kind === "income" ? "bg-positive" : "bg-negative",
-                        )}
-                        aria-hidden
-                      />
-                      <span className="w-12 shrink-0 tabular-nums text-muted-foreground sm:w-[4.25rem]">
-                        {format(parseISO(r.date), compactCharts ? "M/d" : "MMM d")}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-foreground">{r.label}</span>
-                      {r.attachment_url ? (
-                        <ReceiptPreviewIcon
-                          url={r.attachment_url}
-                          className="!min-h-9 !min-w-9 !rounded-[var(--radius-md)] !border-border !bg-transparent !p-1.5 !shadow-none sm:!min-h-0 sm:!min-w-0 sm:!p-1"
+          <CashMovementCard
+            currency={displayCurrency}
+            incomeTotal={trendTotals.incomeTotal}
+            expenseTotal={trendTotals.expenseTotal}
+            chartHref="/accounts/cash-movement"
+          />
+
+          <AccountsCard
+            accounts={accounts}
+            displayCurrency={displayCurrency}
+            usdMvrRate={globalUsdMvrRate}
+          />
+
+          <TopExpensesCard
+            rows={topExpenses}
+            currency={displayCurrency}
+            periodLabel={topExpensesPeriodLabel}
+            priorLabel={topExpensesPriorLabel}
+          />
+
+          <PanelCard title="Recent transactions" href="/accounts/expenses" linkLabel="View all">
+            {recentByDate.length ? (
+              <ul>
+                {recentByDate.map(([date, rows]) => (
+                  <li key={date}>
+                    <p className="sticky top-0 border-t border-border bg-surface px-4 py-2 text-label">
+                      {format(parseISO(date), "EEE, MMM d")}
+                    </p>
+                    {rows.map((r) => (
+                      <div
+                        key={`${r.kind}-${r.id}`}
+                        className="flex items-center gap-3 border-t border-border px-4 py-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-ink">{r.label}</p>
+                          <p className="mt-0.5 text-caption">
+                            {format(parseISO(r.date), "MMM d")}
+                          </p>
+                        </div>
+                        <DisplayAmountCell
+                          amount={r.nativeAmount}
+                          nativeCurrency={r.nativeCurrency}
+                          asOfDate={r.date}
+                          prefix={r.kind === "income" ? "+" : "\u2212"}
+                          tone={r.kind === "income" ? "positive" : "negative"}
+                          className="text-sm font-semibold"
                         />
-                      ) : null}
-                      <DisplayAmountCell
-                        amount={r.nativeAmount}
-                        nativeCurrency={r.nativeCurrency}
-                        asOfDate={r.date}
-                        prefix={r.kind === "income" ? "+" : "−"}
-                        tone={r.kind === "income" ? "positive" : "negative"}
-                        className="text-sm font-medium"
-                      />
-                    </li>
-                  ))}
-                  {!recent.length ? (
-                    <li className="px-4 py-3 text-sm text-muted-foreground">
-                      No activity in this period.
-                    </li>
-                  ) : null}
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="px-4 pb-4">
+                <p className="text-caption">No activity in this period.</p>
+                <Link
+                  to="/accounts/income"
+                  className="mt-3 inline-flex min-h-11 items-center rounded-sm border border-action px-4 text-sm font-semibold text-action"
+                >
+                  Add first transaction
+                </Link>
+              </div>
+            )}
+          </PanelCard>
+
+          <p className="text-center text-caption">{rangeLabel}</p>
         </>
       ) : null}
+
+      <Modal open={infoHint != null} title="About this figure" onClose={() => setInfoHint(null)}>
+        <p className="text-sm text-ink">{infoHint}</p>
+      </Modal>
     </div>
   );
 }

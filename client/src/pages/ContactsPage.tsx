@@ -129,7 +129,7 @@ export function ContactsPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link
-                  to={`/contacts/${c.id}`}
+                  to={`/accounts/contacts/${c.id}`}
                   className="inline-flex h-7 items-center justify-center rounded-[var(--radius-md)] px-2 text-xs font-medium text-foreground ring-1 ring-border hover:bg-muted"
                 >
                   Open

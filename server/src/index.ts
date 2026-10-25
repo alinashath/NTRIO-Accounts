@@ -14,6 +14,9 @@ import { expensesRouter } from "./routes/expenses.js";
 import { incomeRouter } from "./routes/income.js";
 import { reportsRouter } from "./routes/reports.js";
 import { settingsRouter } from "./routes/settings.js";
+import { kitchenRouter } from "./routes/kitchen.js";
+import { stockRouter } from "./routes/stock.js";
+import { recipesRouter } from "./routes/recipes.js";
 import { notFound } from "./utils/http.js";
 
 const app = express();
@@ -58,6 +61,9 @@ app.use("/api/contacts", contactsRouter);
 app.use("/api/debts", debtsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/kitchen", kitchenRouter);
+app.use("/api/stock", stockRouter);
+app.use("/api/recipes", recipesRouter);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

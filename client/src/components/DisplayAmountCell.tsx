@@ -42,9 +42,9 @@ export function DisplayAmountCell({
     tone === "auto" ? (amount < 0 ? "negative" : "positive") : tone;
   const toneClass =
     resolvedTone === "positive"
-      ? "text-positive"
+      ? "text-credit"
       : resolvedTone === "negative"
-        ? "text-negative"
+        ? "text-debit"
         : undefined;
 
   return (

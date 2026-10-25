@@ -1,34 +1,83 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
-/* NTrio Accounts — monochrome Soft UI (design-system/MASTER.md) */
+/* Ntrio UI — DESIGN.md tokens */
+:root {
+  --font: "Inter", system-ui, sans-serif;
+
+  --ink: #111827;
+  --muted: #4b5563;
+  --border: #e5e7eb;
+  --ground: #f6f7f9;
+  --surface: #ffffff;
+  --action: #1d4ed8;
+  --credit: #047857;
+  --debit: #b91c1c;
+
+  --credit-bg: #ecfdf5;
+  --credit-ink: #065f46;
+  --debit-bg: #fef2f2;
+  --debit-ink: #991b1b;
+  --neutral-bg: #f3f4f6;
+  --neutral-ink: #374151;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s6: 24px;
+  --s8: 32px;
+  --tap: 44px;
+  --nav-h: 64px;
+}
+
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
 
-  --color-primary: #171717;
+  --color-ink: #111827;
+  --color-muted-label: #4b5563;
+  --color-ground: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-action: #1d4ed8;
+  --color-credit: #047857;
+  --color-debit: #b91c1c;
+  --color-credit-bg: #ecfdf5;
+  --color-credit-ink: #065f46;
+  --color-debit-bg: #fef2f2;
+  --color-debit-ink: #991b1b;
+  --color-neutral-bg: #f3f4f6;
+  --color-neutral-ink: #374151;
+
+  /* Aliases used across existing components */
+  --color-primary: #1d4ed8;
   --color-on-primary: #ffffff;
-  --color-secondary: #525252;
-  --color-accent: #404040;
-  --color-background: #fafafa;
-  --color-foreground: #171717;
-  --color-muted: #f0f0f0;
-  --color-muted-foreground: #737373;
+  --color-secondary: #4b5563;
+  --color-accent: #1d4ed8;
+  --color-background: #f6f7f9;
+  --color-foreground: #111827;
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: #4b5563;
   --color-card: #ffffff;
-  --color-border: #e5e5e5;
-  /* Fintech Emerald — income / expense money tones */
-  --color-destructive: #d3212c;
-  --color-success: #069c56;
-  --color-warning: #ea580c;
-  --color-ring: #171717;
-
-  --color-positive: #069c56;
-  --color-negative: #d3212c;
+  --color-border: #e5e7eb;
+  --color-destructive: #b91c1c;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-ring: #1d4ed8;
+  --color-positive: #047857;
+  --color-negative: #b91c1c;
 
   --shadow-soft: none;
-  --shadow-raised: 0 -1px 0 rgb(0 0 0 / 0.06);
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --shadow-raised: none;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-DEFAULT: 8px;
 }
 
 html {
@@ -39,15 +88,18 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  font-family: var(--font-sans);
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--ground);
+  color: var(--ink);
   -webkit-tap-highlight-color: rgb(0 0 0 / 0.08);
   overscroll-behavior-y: contain;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-ring);
+  outline: 2px solid var(--action);
   outline-offset: 2px;
 }
 
@@ -69,9 +121,44 @@ body {
     padding-top: env(safe-area-inset-top, 0px);
   }
   .shadow-soft {
-    box-shadow: var(--shadow-soft);
+    box-shadow: none;
   }
   .shadow-raised {
-    box-shadow: var(--shadow-raised);
+    box-shadow: none;
+  }
+  .text-label {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .text-caption {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .text-amount-lg {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .text-page-title {
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 700;
+  }
+  .text-section {
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  .min-tap {
+    min-height: var(--tap);
+    min-width: var(--tap);
   }
 }

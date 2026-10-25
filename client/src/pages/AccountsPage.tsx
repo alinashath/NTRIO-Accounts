@@ -67,7 +67,7 @@ export function AccountsPage() {
         {rows.map((a) => (
           <Card key={a.id} className="p-4">
             <div className="flex items-start justify-between gap-2">
-              <Link to={`/accounts/${a.id}`} className="min-w-0 flex-1 rounded-lg outline-offset-2 hover:bg-slate-50/80">
+              <Link to={`/accounts/ledger/${a.id}`} className="min-w-0 flex-1 rounded-lg outline-offset-2 hover:bg-slate-50/80">
                 <p className="text-xs uppercase tracking-wide text-slate-500">{a.type}</p>
                 <p className="text-lg font-semibold text-slate-900">{a.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{a.currency}</p>

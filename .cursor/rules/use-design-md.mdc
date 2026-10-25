@@ -1,0 +1,14 @@
+---
+description: Always follow DESIGN.md for Ntrio UI work
+alwaysApply: true
+---
+
+# Use DESIGN.md
+
+For any UI, layout, styling, or component work in this project:
+
+1. Read and follow root `DESIGN.md` (also mirrored at `.cursor/rules/ntrio-design.mdc`).
+2. Presentation only — do not change routes' API shapes, data models, or business logic unless explicitly asked.
+3. Use tokens and shared components under `client/src/components/design/` (`Amount`, `ChangeTag`, `PanelCard`, `ListRow`, `StatRow`, `ProgressBar`, `SegmentedControl`).
+4. No shadows, gradients, animations, emoji, or decorative colour. Numbers lead; colour only carries credit/debit meaning and is never the only signal.
+5. Mobile-first (390px), 44px touch targets, tabular amounts with currency code and +/− sign.

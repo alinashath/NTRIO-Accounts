@@ -47,16 +47,16 @@ export function LoginPage() {
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
       <div className="mb-6 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">NTrio</p>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-foreground">Accounts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Sign in to continue</p>
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">NTRIO</p>
+        <h1 className="mt-1 text-page-title text-ink">Accounts</h1>
+        <p className="mt-1 text-caption">Sign in to continue</p>
       </div>
       <Card>
         <form className="space-y-4" onSubmit={handleEmailLogin}>
-          <label className="block text-sm font-medium text-foreground">
+          <label className="block text-sm font-medium text-ink">
             Email
             <input
-              className="mt-1 w-full h-8 touch-manipulation rounded-[var(--radius-md)] border border-border bg-card px-2.5 text-sm text-foreground"
+              className="mt-1 h-11 w-full touch-manipulation rounded-sm border border-border bg-surface px-3 text-sm text-ink"
               type="email"
               autoComplete="email"
               inputMode="email"
@@ -65,10 +65,10 @@ export function LoginPage() {
               required
             />
           </label>
-          <label className="block text-sm font-medium text-foreground">
+          <label className="block text-sm font-medium text-ink">
             Password
             <input
-              className="mt-1 w-full h-8 touch-manipulation rounded-[var(--radius-md)] border border-border bg-card px-2.5 text-sm text-foreground"
+              className="mt-1 h-11 w-full touch-manipulation rounded-sm border border-border bg-surface px-3 text-sm text-ink"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -76,21 +76,17 @@ export function LoginPage() {
               required
             />
           </label>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button className="w-full touch-manipulation" type="submit" disabled={loading}>
+          {error ? <p className="text-sm text-debit">{error}</p> : null}
+          <Button className="w-full" type="submit" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-
-        <div className="my-5 text-center text-sm text-muted-foreground">or</div>
-
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full touch-manipulation"
-          disabled={loading}
-          onClick={() => void handleGoogle()}
-        >
+        <div className="my-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-caption">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <Button type="button" variant="secondary" className="w-full" onClick={() => void handleGoogle()} disabled={loading}>
           Continue with Google
         </Button>
       </Card>

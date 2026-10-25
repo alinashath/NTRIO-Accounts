@@ -1,13 +1,13 @@
-/** Chart colors — Fintech Emerald income / expense + category accents */
+/** Chart colors — DESIGN.md credit / debit / action only */
 export const chartTheme = {
-  income: "#069C56",
-  expense: "#D3212C",
-  net: "#2563eb",
-  grid: "#E5E5E5",
-  tick: "#737373",
-  tooltipBorder: "#E5E5E5",
+  income: "#047857",
+  expense: "#B91C1C",
+  net: "#1D4ED8",
+  grid: "#E5E7EB",
+  tick: "#4B5563",
+  tooltipBorder: "#E5E7EB",
   tooltipBg: "#FFFFFF",
-  categories: ["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#4f46e5", "#ca8a04"],
+  categories: ["#111827", "#4B5563", "#1D4ED8", "#047857", "#B91C1C", "#374151", "#6B7280"],
 } as const;
 
 export const chartAxisProps = {

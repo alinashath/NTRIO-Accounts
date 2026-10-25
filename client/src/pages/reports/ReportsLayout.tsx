@@ -2,9 +2,9 @@ import clsx from "clsx";
 import { NavLink, Outlet } from "react-router-dom";
 
 const tabs = [
-  { to: "/reports/pnl", label: "P&L" },
-  { to: "/reports/cashflow", label: "Cash flow" },
-  { to: "/reports/balance-sheet", label: "Balance sheet" },
+  { to: "/accounts/reports/pnl", label: "P&L" },
+  { to: "/accounts/reports/cashflow", label: "Cash flow" },
+  { to: "/accounts/reports/balance-sheet", label: "Balance sheet" },
 ] as const;
 
 export default function ReportsLayout() {

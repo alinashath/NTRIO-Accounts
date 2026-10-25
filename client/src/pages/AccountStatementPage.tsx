@@ -114,7 +114,7 @@ export function AccountStatementPage() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link to="/accounts" className="text-sm font-medium text-sky-700 hover:underline">
+          <Link to="/accounts/ledger" className="text-sm font-medium text-sky-700 hover:underline">
             ← Accounts
           </Link>
           {loading && !data ? (

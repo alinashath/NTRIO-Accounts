@@ -190,7 +190,7 @@ export function ReportsPnlTab() {
     q.set("kind", r.kind);
     q.set("from", applied.from);
     q.set("to", applied.to);
-    return `/reports/categories/${encodeURIComponent(id)}?${q.toString()}`;
+    return `/accounts/reports/categories/${encodeURIComponent(id)}?${q.toString()}`;
   }
 
   function categoryAmountCell(r: Cat) {

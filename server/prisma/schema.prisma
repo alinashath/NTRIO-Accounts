@@ -25,6 +25,14 @@ model User {
   settings            UserSettings?
   fxDailyRates        FxDailyRate[]
   accountBalanceAdjustments AccountBalanceAdjustment[]
+  rooms               Room[]
+  roomDays            RoomDay[]
+  roomStays           RoomStay[]
+  breakfastOrders     BreakfastOrder[]
+  roomDayExtras       RoomDayExtras[]
+  stockItems          StockItem[]
+  stockLedgerDays     StockLedgerDay[]
+  recipes             Recipe[]
 
   @@map("users")
 }
@@ -365,4 +373,235 @@ model AccountTransfer {
 
   @@index([userId, date])
   @@map("account_transfers")
+}
+
+// ─── Kitchen / Stock (Isola Alifu breakfast ops) ─────────────────────────────
+
+enum BreakfastType {
+  maldivian
+  continental
+}
+
+enum EggStyle {
+  omelette
+  fried
+  boiled
+  scrambled
+}
+
+enum BreakfastOrderStatus {
+  pending
+  served
+  cancelled
+}
+
+enum StockItemKind {
+  kitchen
+  other
+}
+
+model Room {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  number    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomDays        RoomDay[]
+  roomStays       RoomStay[]
+  breakfastOrders BreakfastOrder[]
+  roomDayExtras   RoomDayExtras[]
+
+  @@unique([userId, number])
+  @@index([userId])
+  @@map("rooms")
+}
+
+/// Guest stay with from/to dates; fills RoomDay occupancy for each date in range.
+model RoomStay {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  roomId        String   @map("room_id") @db.Uuid
+  fromDate      DateTime @map("from_date") @db.Date
+  toDate        DateTime @map("to_date") @db.Date
+  occupantCount Int      @default(1) @map("occupant_count")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([userId, fromDate, toDate])
+  @@index([userId, roomId])
+  @@map("room_stays")
+}
+
+/// Manual occupancy for a room on a date (occupant count). Breakfast is separate via orders.
+model RoomDay {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  roomId        String   @map("room_id") @db.Uuid
+  date          DateTime @db.Date
+  occupantCount Int      @default(0) @map("occupant_count")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId, date])
+  @@index([userId, date])
+  @@map("room_days")
+}
+
+model BreakfastOrder {
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  roomId               String                @map("room_id") @db.Uuid
+  breakfastDate        DateTime              @map("breakfast_date") @db.Date
+  guestNumber          Int                   @map("guest_number")
+  /// HH:mm local serving time
+  servingTime          String                @map("serving_time")
+  outsideNormalWindow  Boolean               @default(false) @map("outside_normal_window")
+  breakfastType        BreakfastType         @map("breakfast_type")
+  eggStyle             EggStyle              @map("egg_style")
+  /// Maldivian optional stir-fried potato
+  potato               Boolean               @default(false)
+  juice                Boolean               @default(false)
+  tea                  Boolean               @default(false)
+  coffee               Boolean               @default(false)
+  milk                 Boolean               @default(false)
+  sugar                Boolean               @default(false)
+  specialRequests      String?               @map("special_requests")
+  status               BreakfastOrderStatus  @default(pending)
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId, breakfastDate, guestNumber])
+  @@index([userId, breakfastDate])
+  @@map("breakfast_orders")
+}
+
+/// Per-room fruits and extras for a breakfast date (PDF: every room gets fruits/extras).
+model RoomDayExtras {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  roomId       String   @map("room_id") @db.Uuid
+  date         DateTime @db.Date
+  /// Subset of: watermelon, apple, papaya, orange (2–3 types)
+  fruits       String[] @default([])
+  pancake      Boolean  @default(false)
+  honey        Boolean  @default(false)
+  nutella      Boolean  @default(false)
+  cereal       Boolean  @default(false)
+  waterBottle  Boolean  @default(false) @map("water_bottle")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId, date])
+  @@index([userId, date])
+  @@map("room_day_extras")
+}
+
+model StockItem {
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  /// Stable key for recipe math (e.g. flour, eggs); null for custom non-food items
+  code        String?
+  name        String
+  unit        String
+  kind        StockItemKind @default(kitchen)
+  minStock    Decimal       @default(0) @map("min_stock") @db.Decimal(15, 4)
+  /// Human-readable Use rules from PDF
+  useNotes    String?       @map("use_notes")
+  /// Optional pack size info (e.g. 200 portions per pack)
+  packInfo    String?       @map("pack_info")
+  sortOrder   Int           @default(0) @map("sort_order")
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerDays  StockLedgerDay[]
+  recipeLines RecipeLine[]
+
+  @@unique([userId, code])
+  @@index([userId, kind])
+  @@map("stock_items")
+}
+
+/// Recipe linked to breakfast menu type or a custom named recipe.
+enum RecipeApplyTo {
+  maldivian
+  continental
+  room_extras
+  custom
+}
+
+model Recipe {
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  name        String
+  applyTo     RecipeApplyTo  @default(custom) @map("apply_to")
+  /// Optional stable code for seeded recipes (maldivian, continental, pancake, …)
+  code        String?
+  notes       String?
+  isActive    Boolean        @default(true) @map("is_active")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines RecipeLine[]
+
+  @@unique([userId, code])
+  @@index([userId, applyTo])
+  @@map("recipes")
+}
+
+model RecipeLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  recipeId    String  @map("recipe_id") @db.Uuid
+  stockItemId String  @map("stock_item_id") @db.Uuid
+  /// Quantity of stock item per one serving / one room-extras application
+  qtyPerServing Decimal @map("qty_per_serving") @db.Decimal(15, 4)
+  notes       String?
+
+  recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+
+  @@index([recipeId])
+  @@map("recipe_lines")
+}
+
+/// Daily inventory ledger: Opening, Received, Used, Balance, expenditure, waste.
+model StockLedgerDay {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  stockItemId  String   @map("stock_item_id") @db.Uuid
+  date         DateTime @db.Date
+  opening      Decimal  @default(0) @db.Decimal(15, 4)
+  received     Decimal  @default(0) @db.Decimal(15, 4)
+  used         Decimal  @default(0) @db.Decimal(15, 4)
+  /// Food waste quantity (for reporting)
+  waste        Decimal  @default(0) @db.Decimal(15, 4)
+  /// Expenditure for received goods on this date (currency units)
+  expenditure  Decimal  @default(0) @db.Decimal(15, 2)
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(15, 4)
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stockItemId, date])
+  @@index([userId, date])
+  @@map("stock_ledger_days")
 }

@@ -141,7 +141,7 @@ export function ContactDetailPage() {
   if (!id) {
     return (
       <p className="text-sm text-red-600">
-        Missing contact id. <Link to="/contacts" className="font-medium text-sky-700 underline">Back to contacts</Link>
+        Missing contact id. <Link to="/accounts/contacts" className="font-medium text-sky-700 underline">Back to contacts</Link>
       </p>
     );
   }
@@ -149,7 +149,7 @@ export function ContactDetailPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       <div>
-        <Link to="/contacts" className="text-sm font-medium text-sky-700 hover:underline">
+        <Link to="/accounts/contacts" className="text-sm font-medium text-sky-700 hover:underline">
           ← Contacts
         </Link>
         <h2 className="mt-1 text-lg font-bold text-slate-900 md:text-xl">
