@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { apiFetch } from "@/api/http";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
@@ -35,6 +36,7 @@ export function ReportsBalanceSheetTab() {
   const [stmt, setStmt] = useState<BalanceSheetRes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const statementRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -71,6 +73,13 @@ export function ReportsBalanceSheetTab() {
             setRangePreset(preset);
             setApplied({ from, to });
           }}
+          actions={
+            <ReportPdfButton
+              title="Statement of Financial Position"
+              targetRef={statementRef}
+              disabled={!stmt}
+            />
+          }
         />
       </div>
 
@@ -115,7 +124,7 @@ export function ReportsBalanceSheetTab() {
             </Card>
           </div>
 
-          <Card className="mx-auto max-w-2xl">
+          <Card ref={statementRef} className="mx-auto max-w-2xl">
             <StatementHeader
               title="Statement of Financial Position"
               subtitle={`As of ${format(parseISO(stmt.as_of), "MMMM d, yyyy")} · ${ccy}`}

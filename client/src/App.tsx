@@ -1,8 +1,13 @@
-import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import { DisplayCurrencyProvider } from "./context/DisplayCurrencyContext";
+import { OrganizationProvider, useOrganization } from "./context/OrganizationContext";
 import { WorkspaceLayout } from "./components/WorkspaceLayout";
 import { LoginPage } from "./pages/LoginPage";
+import { SignupPage } from "./pages/SignupPage";
+import { SelectOrganizationPage } from "./pages/SelectOrganizationPage";
+import { PendingApprovalPage } from "./pages/PendingApprovalPage";
+import { AdminOrgRequestsPage } from "./pages/AdminOrgRequestsPage";
 import { HubPage } from "./pages/HubPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -18,6 +23,12 @@ import { ReportsPnlTab } from "./pages/reports/ReportsPnlTab";
 import { ReportsCashflowTab } from "./pages/reports/ReportsCashflowTab";
 import { ReportsBalanceSheetTab } from "./pages/reports/ReportsBalanceSheetTab";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SettingsAccountPage } from "./pages/settings/SettingsAccountPage";
+import { SettingsUsersPage } from "./pages/settings/SettingsUsersPage";
+import { SettingsIncomeCategoriesPage } from "./pages/settings/SettingsIncomeCategoriesPage";
+import { SettingsExpenseCategoriesPage } from "./pages/settings/SettingsExpenseCategoriesPage";
+import { SettingsOrganizationPage } from "./pages/settings/SettingsOrganizationPage";
+import { SettingsExchangeRatePage } from "./pages/settings/SettingsExchangeRatePage";
 import { CashMovementPage } from "./pages/CashMovementPage";
 import { KitchenOrdersPage } from "./pages/kitchen/KitchenOrdersPage";
 import { KitchenSummariesPage } from "./pages/kitchen/KitchenSummariesPage";
@@ -28,15 +39,48 @@ import { StockInventoryPage } from "./pages/stock/StockInventoryPage";
 import { StockShoppingPage } from "./pages/stock/StockShoppingPage";
 import { StockReportsPage } from "./pages/stock/StockReportsPage";
 
+const GATE_ALLOW = new Set(["/pending-approval", "/admin", "/select-organization"]);
+
+function OrgGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const { ready, needsSelection, needsApproval, isSystemAdmin } = useOrganization();
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-ground text-muted-label">
+        Loading…
+      </div>
+    );
+  }
+
+  if (needsApproval && !GATE_ALLOW.has(location.pathname)) {
+    // System admin with no org is bootstrapped server-side; if still empty, allow /admin
+    if (isSystemAdmin && location.pathname.startsWith("/admin")) {
+      return children;
+    }
+    return <Navigate to="/pending-approval" replace />;
+  }
+
+  if (needsSelection && location.pathname !== "/select-organization") {
+    return <Navigate to="/select-organization" replace />;
+  }
+
+  return children;
+}
+
 function Protected() {
   const session = useAuthStore((s) => s.session);
   if (!session) {
     return <Navigate to="/login" replace />;
   }
   return (
-    <DisplayCurrencyProvider>
-      <Outlet />
-    </DisplayCurrencyProvider>
+    <OrganizationProvider>
+      <DisplayCurrencyProvider>
+        <OrgGate>
+          <Outlet />
+        </OrgGate>
+      </DisplayCurrencyProvider>
+    </OrganizationProvider>
   );
 }
 
@@ -76,7 +120,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
       <Route element={<Protected />}>
+        <Route path="/select-organization" element={<SelectOrganizationPage />} />
+        <Route path="/pending-approval" element={<PendingApprovalPage />} />
+        <Route path="/admin" element={<AdminOrgRequestsPage />} />
         <Route path="/" element={<HubPage />} />
 
         <Route path="/accounts" element={<AccountsShell />}>
@@ -96,8 +144,13 @@ export default function App() {
             <Route path="balance-sheet" element={<ReportsBalanceSheetTab />} />
           </Route>
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings/account" element={<SettingsAccountPage />} />
+          <Route path="settings/users" element={<SettingsUsersPage />} />
+          <Route path="settings/income-categories" element={<SettingsIncomeCategoriesPage />} />
+          <Route path="settings/expense-categories" element={<SettingsExpenseCategoriesPage />} />
+          <Route path="settings/organization" element={<SettingsOrganizationPage />} />
+          <Route path="settings/exchange-rate" element={<SettingsExchangeRatePage />} />
           <Route path="cash-movement" element={<CashMovementPage />} />
-          {/* Legacy /accounts/:accountId bookmarks */}
           <Route path=":id" element={<LegacyAccountRedirect />} />
         </Route>
 
@@ -119,7 +172,6 @@ export default function App() {
           <Route path="reports" element={<StockReportsPage />} />
         </Route>
 
-        {/* Legacy redirects */}
         <Route path="/contacts" element={<Navigate to="/accounts/contacts" replace />} />
         <Route path="/contacts/:id" element={<LegacyContactRedirect />} />
         <Route path="/income" element={<Navigate to="/accounts/income" replace />} />

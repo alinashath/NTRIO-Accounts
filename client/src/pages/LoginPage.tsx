@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { clearStoredActiveOrganization, getStoredOrganizationTitle } from "@/lib/orgStorage";
 import { useAuthStore } from "@/store/auth";
 import { Button, Card } from "@/components/ui";
 
@@ -10,6 +11,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [orgTitle] = useState(() => getStoredOrganizationTitle());
 
   if (session) {
     return <Navigate to="/" replace />;
@@ -29,27 +31,17 @@ export function LoginPage() {
       return;
     }
     if (data.session) {
+      clearStoredActiveOrganization();
       useAuthStore.getState().setSession(data.session);
     }
-  }
-
-  async function handleGoogle() {
-    setLoading(true);
-    setError(null);
-    const { error: err } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/` },
-    });
-    setLoading(false);
-    if (err) setError(err.message);
   }
 
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
       <div className="mb-6 text-center">
-        <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">NTRIO</p>
-        <h1 className="mt-1 text-page-title text-ink">Accounts</h1>
-        <p className="mt-1 text-caption">Sign in to continue</p>
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">{orgTitle}</p>
+        <h1 className="mt-1 text-page-title text-ink">Sign in</h1>
+        <p className="mt-1 text-caption">Multi-tenant accounts — each organization is isolated</p>
       </div>
       <Card>
         <form className="space-y-4" onSubmit={handleEmailLogin}>
@@ -81,14 +73,12 @@ export function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-        <div className="my-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-caption">or</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <Button type="button" variant="secondary" className="w-full" onClick={() => void handleGoogle()} disabled={loading}>
-          Continue with Google
-        </Button>
+        <p className="mt-4 text-center text-caption">
+          New organization?{" "}
+          <Link to="/signup" className="font-semibold text-action">
+            Request access
+          </Link>
+        </p>
       </Card>
     </div>
   );

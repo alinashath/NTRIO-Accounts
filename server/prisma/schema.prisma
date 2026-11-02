@@ -8,12 +8,76 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Shared workspace / brand for a set of app users (Settings → App users).
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String   @default("NTRIO") @db.VarChar(64)
+  /// Enabled workspace modules for this tenant (accounts | occupancy | kitchen | stock).
+  enabledModules String[] @default(["accounts", "occupancy", "kitchen", "stock"]) @map("enabled_modules")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Users whose last-selected / default workspace is this org.
+  activeUsers User[]             @relation("UserActiveOrganization")
+  members     OrganizationMember[]
+
+  @@map("organizations")
+}
+
+/// Many-to-many: one login can belong to multiple organizations.
+model OrganizationMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+enum OrgSetupRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+/// New-tenant signup: organization setup must be approved by the system admin.
+model OrganizationSetupRequest {
+  id                   String                @id @default(uuid()) @db.Uuid
+  requesterUserId      String                @map("requester_user_id") @db.Uuid
+  requesterEmail       String                @map("requester_email")
+  organizationTitle    String                @map("organization_title") @db.VarChar(64)
+  contactName          String?               @map("contact_name") @db.VarChar(120)
+  status               OrgSetupRequestStatus @default(pending)
+  rejectionReason      String?               @map("rejection_reason")
+  reviewedByEmail      String?               @map("reviewed_by_email")
+  reviewedAt           DateTime?             @map("reviewed_at")
+  createdOrganizationId String?              @map("created_organization_id") @db.Uuid
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  requester User @relation(fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([requesterUserId])
+  @@map("organization_setup_requests")
+}
+
 /// Application user profile keyed to Supabase Auth `auth.users.id`
 model User {
-  id        String   @id @db.Uuid
-  email     String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String   @id @db.Uuid
+  email          String?
+  /// Last selected organization (workspace) for this login.
+  organizationId String?  @map("organization_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
 
+  organization        Organization? @relation("UserActiveOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  memberships         OrganizationMember[]
+  orgSetupRequests    OrganizationSetupRequest[]
   accounts            Account[]
   categories          Category[]
   incomeEntries       IncomeEntry[]
@@ -34,6 +98,7 @@ model User {
   stockLedgerDays     StockLedgerDay[]
   recipes             Recipe[]
 
+  @@index([organizationId])
   @@map("users")
 }
 
@@ -42,6 +107,8 @@ model UserSettings {
   userId           String   @id @map("user_id") @db.Uuid
   /// MVR units per 1 USD (same convention as account transfers). Current / latest rate.
   globalUsdMvrRate Decimal  @default(20) @map("global_usd_mvr_rate") @db.Decimal(18, 8)
+  /// Wordmark shown in TopBar / Hub (e.g. NTRIO).
+  organizationTitle String  @default("NTRIO") @map("organization_title") @db.VarChar(64)
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

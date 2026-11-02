@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Filter } from "lucide-react";
 import { apiFetch } from "@/api/http";
@@ -7,7 +8,7 @@ import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
-import { Button, Card, TextField } from "@/components/ui";
+import { Button, Card, FormActions, FormStepHeader, TextField } from "@/components/ui";
 import { ACCOUNT_CURRENCIES } from "@/lib/fx";
 import { useAuthStore } from "@/store/auth";
 import type {
@@ -314,39 +315,39 @@ export function IncomePage() {
   }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">Income</h2>
+          <h2 className="text-page-title text-ink">Income</h2>
           {!loading ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="mt-0.5 text-caption">
               {total} entr{total === 1 ? "y" : "ies"}
               {filtersActive ? " · filtered" : ""}
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-caption">
             <input
               type="checkbox"
               checked={showVoided}
               onChange={(e) => setShowVoided(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-border"
+              className="h-4 w-4 rounded border-border"
             />
             Voided
           </label>
           <Button
             type="button"
             variant="ghost"
-            className="relative gap-1 px-2"
+            className="relative gap-1.5"
             aria-label="Search and filters"
             title="Search and filters"
             onClick={() => setFilterModalOpen(true)}
           >
-            <Filter className="h-3.5 w-3.5" aria-hidden />
+            <Filter className="h-4 w-4" aria-hidden />
             Filters
             {filtersActive ? (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-action" aria-hidden />
             ) : null}
           </Button>
           <Button type="button" disabled={loading} onClick={() => setModalOpen(true)}>
@@ -355,7 +356,7 @@ export function IncomePage() {
         </div>
       </div>
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Modal
         open={filterModalOpen}
@@ -409,7 +410,7 @@ export function IncomePage() {
         </div>
       </Modal>
 
-      <Modal open={modalOpen} title="New income" size="lg" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="New income" size="lg" variant="form" onClose={() => setModalOpen(false)}>
         <IncomeForm
           userId={userId}
           accounts={accounts}
@@ -426,9 +427,16 @@ export function IncomePage() {
         />
       </Modal>
 
-      <Modal open={detail !== null} title="Income details" onClose={() => setDetail(null)}>
+      <Modal
+        open={detail !== null}
+        title="Edit income"
+        size="lg"
+        variant="form"
+        onClose={() => setDetail(null)}
+      >
         {detail ? (
           <IncomeDetailPanel
+            key={detail.id}
             row={detail}
             userId={userId}
             accounts={accounts}
@@ -465,7 +473,7 @@ export function IncomePage() {
             {rows.map((r) => (
               <li
                 key={r.id}
-                className={`flex items-start gap-1 px-2.5 py-1.5 transition hover:bg-muted/50 ${
+                className={`flex min-h-11 items-start gap-2 px-3 py-2.5 transition hover:bg-neutral-bg/60 ${
                   r.voided_at ? "opacity-60" : ""
                 }`}
               >
@@ -665,108 +673,118 @@ function IncomeForm({
 
   return (
     <form
-      className="space-y-4"
+      className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (step === 2) void submitSave();
       }}
     >
-      <p className="text-xs font-medium text-slate-500">
-        Step {step + 1} of 3 — {stepTitles[step]}
-      </p>
+      <FormStepHeader step={step} total={3} titles={stepTitles} />
 
-      {step === 0 ? (
-        <>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              className="rounded border-slate-300"
-              checked={receivable}
-              onChange={(e) => {
-                setReceivable(e.target.checked);
-                if (e.target.checked) setAccountId("");
-              }}
-            />
-            Receivable (not deposited yet)
-          </label>
-          {receivable ? (
-            <Dropdown
-              label="Amount currency"
-              value={incomeCurrency}
-              onChange={setIncomeCurrency}
-              options={currencyOpts}
-              required
-            />
-          ) : (
-            <Dropdown
-              label="Deposit to (set account first)"
-              value={accountId}
-              onChange={setAccountId}
-              options={accountOptions}
-              disabled={accountOptions.length === 0}
-            />
-          )}
-          <TextField
-            label={`Amount (${amountCcy})`}
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-          />
-          <TextField label="Earned date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-          {!receivable ? (
+      <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
+        {step === 0 ? (
+          <>
+            <label
+              className={clsx(
+                "flex min-h-11 cursor-pointer touch-manipulation items-center gap-3 rounded-sm border px-3 py-2",
+                receivable ? "border-ink bg-neutral-bg" : "border-border bg-surface",
+              )}
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border accent-ink"
+                checked={receivable}
+                onChange={(e) => {
+                  setReceivable(e.target.checked);
+                  if (e.target.checked) setAccountId("");
+                }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-ink">Receivable</span>
+                <span className="mt-0.5 block text-caption">Not deposited yet — track as owed</span>
+              </span>
+            </label>
+            {receivable ? (
+              <Dropdown
+                label="Amount currency"
+                value={incomeCurrency}
+                onChange={setIncomeCurrency}
+                options={currencyOpts}
+                required
+              />
+            ) : (
+              <Dropdown
+                label="Deposit to (set account first)"
+                value={accountId}
+                onChange={setAccountId}
+                options={accountOptions}
+                disabled={accountOptions.length === 0}
+              />
+            )}
             <TextField
-              label="Received / deposit date"
-              type="date"
-              value={receivedDate}
-              onChange={(e) => setReceivedDate(e.target.value)}
+              label={`Amount (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               required
             />
-          ) : null}
-        </>
-      ) : null}
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField label="Earned date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              {!receivable ? (
+                <TextField
+                  label="Received / deposit date"
+                  type="date"
+                  value={receivedDate}
+                  onChange={(e) => setReceivedDate(e.target.value)}
+                  required
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
 
-      {step === 1 ? (
-        <>
-          <TextField
-            label="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <Dropdown
-            label="Category (optional)"
-            value={categoryId}
-            onChange={setCategoryId}
-            options={categoryOptions}
-            required={false}
-            placeholder="None"
-            onAddNotFound={createIncomeCategory}
-          />
-          <Dropdown
-            label="Customer / contact (optional)"
-            value={contactId}
-            onChange={setContactId}
-            options={contactOptions}
-            required={false}
-            placeholder="None — search or add customer"
-            onAddNotFound={createCustomerContact}
-            addNotFoundLabel="Add customer"
-          />
-        </>
-      ) : null}
+        {step === 1 ? (
+          <>
+            <TextField
+              label="Description (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <Dropdown
+              label="Category (optional)"
+              value={categoryId}
+              onChange={setCategoryId}
+              options={categoryOptions}
+              required={false}
+              placeholder="None"
+              onAddNotFound={createIncomeCategory}
+            />
+            <Dropdown
+              label="Customer / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add customer"
+              onAddNotFound={createCustomerContact}
+              addNotFoundLabel="Add customer"
+            />
+          </>
+        ) : null}
 
-      {step === 2 ? (
-        <ReceiptAttachmentField
-          attachmentUrl={attachmentUrl}
-          onAttachmentUrlChange={setAttachmentUrl}
-          userId={userId}
-        />
-      ) : null}
+        {step === 2 ? (
+          <ReceiptAttachmentField
+            attachmentUrl={attachmentUrl}
+            onAttachmentUrlChange={setAttachmentUrl}
+            userId={userId}
+          />
+        ) : null}
+      </div>
 
-      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-row-reverse">
+      <FormActions>
         {step < 2 ? (
           <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
             Next
@@ -781,7 +799,7 @@ function IncomeForm({
             Back
           </Button>
         ) : null}
-      </div>
+      </FormActions>
     </form>
   );
 }
@@ -826,22 +844,47 @@ function IncomeDetailPanel({
   const [attachmentUrl, setAttachmentUrl] = useState(row.attachment_url ?? "");
   const [voidReason, setVoidReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState(0);
   const voided = Boolean(row.voided_at);
+  const stepTitles = ["Account & amount", "Details", "Receipt & manage"] as const;
   const selectedAcc = accounts.find((a) => a.id === accountId);
   const amountCcy = pending ? row.currency : selectedAcc?.currency ?? row.currency ?? "USD";
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (voided) return;
+  function validateStep0(): string | null {
+    if (voided) return null;
     const amt = Number(amount);
-    if (!amt || amt <= 0) {
-      onError("Enter a valid amount.");
+    if (!amt || amt <= 0) return "Enter a valid amount.";
+    if (!pending && !accountId) return "Select an account.";
+    if (!earnedDate) return "Pick an earned date.";
+    return null;
+  }
+
+  function goNext() {
+    onError(null);
+    if (step === 0) {
+      const err = validateStep0();
+      if (err) {
+        onError(err);
+        return;
+      }
+    }
+    setStep((s) => Math.min(s + 1, 2));
+  }
+
+  function goBack() {
+    onError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function save() {
+    if (voided) return;
+    const err = validateStep0();
+    if (err) {
+      onError(err);
+      setStep(0);
       return;
     }
-    if (!pending && !accountId) {
-      onError("Select an account.");
-      return;
-    }
+    const amt = Number(amount);
     setBusy(true);
     onError(null);
     try {
@@ -947,141 +990,209 @@ function IncomeDetailPanel({
   }
 
   return (
-    <div className="space-y-4">
-      {voided ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <p className="font-semibold">Voided</p>
-          {row.void_reason ? <p className="mt-1 text-xs">Reason: {row.void_reason}</p> : null}
-        </div>
-      ) : null}
+    <form
+      className="flex min-h-0 flex-1 flex-col gap-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (step === 2 && !voided) void save();
+      }}
+    >
+      <FormStepHeader step={step} total={3} titles={stepTitles} />
 
-      <div className="grid gap-2 text-sm text-slate-600">
-        <p>
-          <span className="font-medium text-slate-800">Account:</span> {row.account_name}
-        </p>
-        <p>
-          <span className="font-medium text-slate-800">Currency:</span> {row.currency}
-        </p>
-        {row.attachment_url ? (
-          <div className="flex items-center gap-2">
-            <ReceiptPreviewIcon url={row.attachment_url} />
-            <span>Receipt attached</span>
+      <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
+        {voided ? (
+          <div className="rounded-sm border border-border bg-neutral-bg px-3 py-2 text-sm text-ink">
+            <p className="font-semibold">Voided</p>
+            {row.void_reason ? <p className="mt-1 text-caption">Reason: {row.void_reason}</p> : null}
           </div>
-        ) : (
-          <p className="text-slate-500">No receipt attached.</p>
-        )}
+        ) : null}
+
+        {step === 0 ? (
+          <>
+            <p className="text-caption">
+              {pending ? "Receivable" : "Account"} · {row.account_name || "—"} · {row.currency}
+            </p>
+
+            {!voided && pending ? (
+              <div className="space-y-3 rounded-sm border border-border bg-neutral-bg/50 p-3">
+                <p className="text-sm font-semibold text-ink">Mark as received</p>
+                <Dropdown
+                  label="Deposit to"
+                  value={receiveAccountId}
+                  onChange={setReceiveAccountId}
+                  options={accountOptions}
+                  disabled={accountOptions.length === 0}
+                />
+                <TextField
+                  label="Received date"
+                  type="date"
+                  value={receiveDate}
+                  onChange={(e) => setReceiveDate(e.target.value)}
+                />
+                <Button type="button" className="w-full" disabled={busy} onClick={() => void markReceived()}>
+                  {busy ? "Saving…" : "Deposit to account"}
+                </Button>
+              </div>
+            ) : null}
+
+            {!pending ? (
+              <Dropdown
+                label="Account"
+                value={accountId}
+                onChange={setAccountId}
+                options={accountOptions}
+                disabled={voided}
+              />
+            ) : null}
+            <TextField
+              label={`Amount (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={voided}
+            />
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField
+                label="Earned date"
+                type="date"
+                value={earnedDate}
+                onChange={(e) => setEarnedDate(e.target.value)}
+                disabled={voided}
+              />
+              {!pending ? (
+                <TextField
+                  label="Received / deposit date"
+                  type="date"
+                  value={receivedDate}
+                  onChange={(e) => setReceivedDate(e.target.value)}
+                  disabled={voided}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === 1 ? (
+          <>
+            <TextField
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={voided}
+            />
+            <Dropdown
+              label="Category (optional)"
+              value={categoryId}
+              onChange={setCategoryId}
+              options={categoryOptions}
+              required={false}
+              placeholder="None"
+              disabled={voided}
+              onAddNotFound={voided ? undefined : createIncomeCategory}
+            />
+            <Dropdown
+              label="Customer / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add customer"
+              disabled={voided}
+              onAddNotFound={voided ? undefined : createCustomerContact}
+              addNotFoundLabel="Add customer"
+            />
+            <TextField
+              label="Source (optional)"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              disabled={voided}
+            />
+            <TextField
+              label="Notes (optional)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={voided}
+            />
+          </>
+        ) : null}
+
+        {step === 2 ? (
+          <>
+            {row.attachment_url || attachmentUrl ? (
+              <div className="flex items-center gap-2 rounded-sm border border-border px-3 py-2">
+                <ReceiptPreviewIcon url={attachmentUrl || row.attachment_url || ""} />
+                <span className="text-sm text-ink">Receipt</span>
+              </div>
+            ) : (
+              <p className="text-caption">No receipt attached yet.</p>
+            )}
+            {!voided && userId ? (
+              <ReceiptAttachmentField
+                attachmentUrl={attachmentUrl}
+                onAttachmentUrlChange={setAttachmentUrl}
+                userId={userId}
+              />
+            ) : null}
+
+            {!voided ? (
+              <div className="space-y-3 border-t border-border pt-3">
+                <TextField
+                  label="Void reason (optional)"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-warning"
+                  disabled={busy}
+                  onClick={() => void doVoid()}
+                >
+                  Void transaction
+                </Button>
+              </div>
+            ) : (
+              <Button type="button" className="w-full" variant="ghost" disabled={busy} onClick={() => void doUnvoid()}>
+                Restore (unvoid)
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-debit"
+              disabled={busy}
+              onClick={() => void doDelete()}
+            >
+              Delete (soft)
+            </Button>
+          </>
+        ) : null}
       </div>
 
-      {!voided && pending ? (
-        <div className="rounded-[var(--radius-md)] border border-border bg-muted/40 p-3 space-y-3">
-          <p className="text-sm font-semibold text-slate-900">Mark as received</p>
-          <Dropdown
-            label="Deposit to"
-            value={receiveAccountId}
-            onChange={setReceiveAccountId}
-            options={accountOptions}
-            disabled={accountOptions.length === 0}
-          />
-          <TextField label="Received date" type="date" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
-          <Button type="button" className="w-full" disabled={busy} onClick={() => void markReceived()}>
-            {busy ? "Saving…" : "Deposit to account"}
+      <FormActions>
+        {step < 2 ? (
+          <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
+            Next
           </Button>
-        </div>
-      ) : null}
-
-      <form className="space-y-3 border-t border-slate-100 pt-3" onSubmit={(e) => void save(e)}>
-        {!pending ? (
-          <Dropdown
-            label="Account"
-            value={accountId}
-            onChange={setAccountId}
-            options={accountOptions}
-            disabled={voided}
-          />
-        ) : null}
-        <TextField
-          label={`Amount (${amountCcy})`}
-          type="number"
-          step="0.01"
-          min="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={voided}
-        />
-        <TextField
-          label="Earned date"
-          type="date"
-          value={earnedDate}
-          onChange={(e) => setEarnedDate(e.target.value)}
-          disabled={voided}
-        />
-        {!pending ? (
-          <TextField
-            label="Received / deposit date"
-            type="date"
-            value={receivedDate}
-            onChange={(e) => setReceivedDate(e.target.value)}
-            disabled={voided}
-          />
-        ) : null}
-        <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={voided} />
-        <Dropdown
-          label="Category (optional)"
-          value={categoryId}
-          onChange={setCategoryId}
-          options={categoryOptions}
-          required={false}
-          placeholder="None"
-          disabled={voided}
-          onAddNotFound={voided ? undefined : createIncomeCategory}
-        />
-        <Dropdown
-          label="Customer / contact (optional)"
-          value={contactId}
-          onChange={setContactId}
-          options={contactOptions}
-          required={false}
-          placeholder="None — search or add customer"
-          disabled={voided}
-          onAddNotFound={voided ? undefined : createCustomerContact}
-          addNotFoundLabel="Add customer"
-        />
-        <TextField label="Source (optional)" value={source} onChange={(e) => setSource(e.target.value)} disabled={voided} />
-        <TextField label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={voided} />
-        {!voided && userId ? (
-          <ReceiptAttachmentField
-            attachmentUrl={attachmentUrl}
-            onAttachmentUrlChange={setAttachmentUrl}
-            userId={userId}
-          />
-        ) : null}
-        {!voided ? (
-          <Button type="submit" className="w-full" disabled={busy}>
+        ) : !voided ? (
+          <Button type="submit" className="w-full sm:flex-1" disabled={busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
-        ) : null}
-      </form>
-
-      {!voided ? (
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <TextField
-            label="Void reason (optional)"
-            value={voidReason}
-            onChange={(e) => setVoidReason(e.target.value)}
-          />
-          <Button type="button" variant="ghost" className="w-full text-amber-900" disabled={busy} onClick={() => void doVoid()}>
-            Void transaction
+        ) : (
+          <Button type="button" className="w-full sm:flex-1" onClick={onClose}>
+            Done
           </Button>
-        </div>
-      ) : (
-        <Button type="button" className="w-full" variant="ghost" disabled={busy} onClick={() => void doUnvoid()}>
-          Restore (unvoid)
-        </Button>
-      )}
-
-      <Button type="button" variant="ghost" className="w-full text-red-700" disabled={busy} onClick={() => void doDelete()}>
-        Delete (soft)
-      </Button>
-    </div>
+        )}
+        {step > 0 ? (
+          <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={goBack}>
+            Back
+          </Button>
+        ) : null}
+      </FormActions>
+    </form>
   );
 }

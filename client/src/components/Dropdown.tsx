@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -26,6 +26,20 @@ type DropdownProps = {
   addNotFoundLabel?: string;
 };
 
+function useIsMobileSheet() {
+  const [mobile, setMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : true,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = () => setMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return mobile;
+}
+
 export function Dropdown({
   label,
   value,
@@ -44,6 +58,7 @@ export function Dropdown({
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
+  const mobileSheet = useIsMobileSheet();
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -62,26 +77,27 @@ export function Dropdown({
   const showSearch = searchable && (options.length > 0 || !!onAddNotFound);
 
   const updatePanelPos = useCallback(() => {
+    if (mobileSheet) return;
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const gap = 4;
     const below = window.innerHeight - r.bottom - gap;
     const above = r.top - gap;
-    const preferBelow = below >= 160 || below >= above;
+    const preferBelow = below >= 200 || below >= above;
     const space = preferBelow ? below : above;
-    const maxH = Math.max(120, Math.min(280, space - 8));
+    const maxH = Math.max(160, Math.min(360, space - 8));
     const top = preferBelow ? r.bottom + gap : Math.max(gap, r.top - maxH - gap);
     setPanelPos({
       top,
       left: Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8)),
-      width: Math.max(r.width, 200),
+      width: Math.max(r.width, 240),
       maxH,
     });
-  }, []);
+  }, [mobileSheet]);
 
   useLayoutEffect(() => {
-    if (!open) {
+    if (!open || mobileSheet) {
       setPanelPos(null);
       return;
     }
@@ -92,7 +108,7 @@ export function Dropdown({
       window.removeEventListener("scroll", updatePanelPos, true);
       window.removeEventListener("resize", updatePanelPos);
     };
-  }, [open, updatePanelPos, options.length, value]);
+  }, [open, updatePanelPos, options.length, value, mobileSheet]);
 
   useEffect(() => {
     if (!open) setQuery("");
@@ -157,107 +173,151 @@ export function Dropdown({
     }
   }
 
+  function selectValue(next: string) {
+    onChange(next);
+    setOpen(false);
+  }
+
+  const listBody = (
+    <>
+      {showSearch ? (
+        <div className="shrink-0 border-b border-border p-3" data-dropdown-search="1">
+          <label htmlFor={searchId} className="sr-only">
+            Search {label}
+          </label>
+          <input
+            id={searchId}
+            ref={searchRef}
+            type="search"
+            autoComplete="off"
+            placeholder="Search…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-input w-full rounded-sm border border-border bg-surface px-3 text-base text-ink placeholder:text-muted-label focus-visible:border-action sm:text-sm"
+          />
+        </div>
+      ) : null}
+      {options.length === 0 && !qTrim && onAddNotFound ? (
+        <p className="border-b border-border px-4 py-3 text-sm text-muted-label">
+          Type in the search box above. If nothing matches, use the add button with your search text.
+        </p>
+      ) : null}
+      {options.length === 0 && !onAddNotFound ? (
+        <p className="border-b border-border px-4 py-3 text-sm text-muted-label">No options</p>
+      ) : null}
+      {options.length > 0 && filteredOptions.length === 0 && !canShowAddNotFound ? (
+        <p className="border-b border-border px-4 py-3 text-sm text-muted-label">No matches</p>
+      ) : null}
+      <div id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+        {!required ? (
+          <button
+            type="button"
+            role="option"
+            aria-selected={value === ""}
+            className="flex min-h-11 w-full touch-manipulation items-center px-4 text-left text-sm text-muted-label hover:bg-neutral-bg"
+            onClick={() => selectValue("")}
+          >
+            —
+          </button>
+        ) : null}
+        {filteredOptions.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="option"
+            aria-selected={value === o.value}
+            className={clsx(
+              "flex min-h-11 w-full touch-manipulation items-center px-4 text-left text-sm hover:bg-neutral-bg",
+              value === o.value ? "bg-neutral-bg font-semibold text-ink" : "text-ink",
+            )}
+            onClick={() => selectValue(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {canShowAddNotFound ? (
+        <div className="border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+          <button
+            type="button"
+            className="flex min-h-11 w-full touch-manipulation items-center rounded-sm bg-neutral-bg px-3 text-left text-sm font-semibold text-ink hover:bg-neutral-bg/80 disabled:opacity-50"
+            disabled={adding}
+            onClick={() => void handleAddNotFound()}
+          >
+            {adding ? "Adding…" : `${addNotFoundLabel} “${qTrim}”`}
+          </button>
+          {addErr ? <p className="mt-1 text-caption text-debit">{addErr}</p> : null}
+        </div>
+      ) : null}
+    </>
+  );
+
   const panel =
-    open && panelPos
+    open && mobileSheet
       ? createPortal(
           <div
-            ref={panelRef}
-            className="fixed z-[500] flex flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-card"
-            style={{
-              top: panelPos.top,
-              left: panelPos.left,
-              width: panelPos.width,
-              maxHeight: panelPos.maxH,
-            }}
-            onMouseDown={(e) => {
-              if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
-                e.preventDefault();
-              }
+            className="fixed inset-0 z-[500] flex items-end justify-center touch-manipulation"
+            style={{ backgroundColor: "var(--overlay)" }}
+            role="presentation"
+            onPointerDown={(e) => {
+              if (e.target === e.currentTarget) setOpen(false);
             }}
           >
-            {showSearch ? (
-              <div className="shrink-0 border-b border-slate-100 p-2" data-dropdown-search="1">
-                <label htmlFor={searchId} className="sr-only">
-                  Search {label}
-                </label>
-                <input
-                  id={searchId}
-                  ref={searchRef}
-                  type="search"
-                  autoComplete="off"
-                  placeholder="Search…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                />
+            <div
+              ref={panelRef}
+              className="flex max-h-[min(85dvh,640px)] w-full flex-col overflow-hidden rounded-t-[var(--sheet-radius)] border border-border bg-surface"
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              <div className="flex shrink-0 justify-center pt-2" aria-hidden>
+                <span className="h-1 w-10 rounded-full bg-[var(--control-border)]" />
               </div>
-            ) : null}
-            {options.length === 0 && !qTrim && onAddNotFound ? (
-              <p className="border-b border-slate-100 px-3 py-2 text-sm text-slate-500">
-                Type in the search box above. If nothing matches, use the add button with your search text.
-              </p>
-            ) : null}
-            {options.length === 0 && !onAddNotFound ? (
-              <p className="border-b border-slate-100 px-3 py-2 text-sm text-slate-500">No options</p>
-            ) : null}
-            {options.length > 0 && filteredOptions.length === 0 && !canShowAddNotFound ? (
-              <p className="border-b border-slate-100 px-3 py-2 text-sm text-slate-500">No matches</p>
-            ) : null}
-            <div id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
-              {!required ? (
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-1">
+                <p className="text-section text-ink">{label}</p>
                 <button
                   type="button"
-                  role="option"
-                  aria-selected={value === ""}
-                  className="h-8 w-full touch-manipulation px-2.5 text-left text-sm text-muted-foreground hover:bg-muted"
-                  onClick={() => {
-                    onChange("");
-                    setOpen(false);
-                  }}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-muted-label hover:bg-neutral-bg"
+                  aria-label="Close"
+                  onClick={() => setOpen(false)}
                 >
-                  —
+                  <X className="h-5 w-5" strokeWidth={1.8} aria-hidden />
                 </button>
-              ) : null}
-              {filteredOptions.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="option"
-                  aria-selected={value === o.value}
-                  className={clsx(
-                    "flex h-8 w-full touch-manipulation items-center px-2.5 text-left text-sm hover:bg-muted",
-                    value === o.value ? "bg-muted font-medium text-foreground" : "text-foreground",
-                  )}
-                  onClick={() => {
-                    onChange(o.value);
-                    setOpen(false);
-                  }}
-                >
-                  {o.label}
-                </button>
-              ))}
+              </div>
+              {listBody}
             </div>
-            {canShowAddNotFound ? (
-              <div className="border-t border-slate-100 p-2">
-                <button
-                  type="button"
-                  className="w-full touch-manipulation rounded-[var(--radius-md)] bg-muted px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted/80 disabled:opacity-50"
-                  disabled={adding}
-                  onClick={() => void handleAddNotFound()}
-                >
-                  {adding ? "Adding…" : `${addNotFoundLabel} “${qTrim}”`}
-                </button>
-                {addErr ? <p className="mt-1 text-xs text-red-600">{addErr}</p> : null}
-              </div>
-            ) : null}
           </div>,
           document.body,
         )
-      : null;
+      : open && panelPos
+        ? createPortal(
+            <div
+              ref={panelRef}
+              className="fixed z-[500] flex flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-surface"
+              style={{
+                top: panelPos.top,
+                left: panelPos.left,
+                width: panelPos.width,
+                maxHeight: panelPos.maxH,
+              }}
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              {listBody}
+            </div>,
+            document.body,
+          )
+        : null;
 
   return (
     <div className="relative w-full">
-      <span className="mb-1 block text-xs font-medium text-foreground">{label}</span>
+      <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>
       <button
         ref={triggerRef}
         type="button"
@@ -266,19 +326,21 @@ export function Dropdown({
         aria-expanded={open}
         aria-controls={listId}
         className={clsx(
-          "flex h-8 w-full touch-manipulation items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border bg-card px-2.5 text-left text-sm text-foreground",
-          disabled ? "cursor-not-allowed opacity-50" : "hover:bg-muted/40",
+          "flex h-input w-full touch-manipulation items-center justify-between gap-2 rounded-sm border border-border bg-surface px-3 text-left text-base text-ink sm:text-sm",
+          disabled ? "cursor-not-allowed opacity-50" : "hover:bg-neutral-bg/60",
         )}
         onClick={() => !disabled && setOpen((o) => !o)}
       >
-        <span className={clsx("min-w-0 flex-1 truncate", !selected && "text-muted-foreground")}>
+        <span className={clsx("min-w-0 flex-1 truncate", !selected && "text-muted-label")}>
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown
-          className={clsx("h-3.5 w-3.5 shrink-0 text-muted-foreground transition", open && "rotate-180")}
+          className={clsx("h-4 w-4 shrink-0 text-muted-label transition", open && "rotate-180")}
+          strokeWidth={1.8}
+          aria-hidden
         />
       </button>
-      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-caption">{hint}</p> : null}
       {panel}
     </div>
   );

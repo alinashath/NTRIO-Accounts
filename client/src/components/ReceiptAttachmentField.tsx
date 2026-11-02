@@ -33,24 +33,28 @@ export function ReceiptAttachmentField({
   }
 
   return (
-    <div className="space-y-2">
-      <span className="block text-sm font-medium text-slate-700">Receipt (optional)</span>
-      <input
-        type="file"
-        aria-label="Upload receipt file"
-        accept="image/*,.pdf,application/pdf"
-        className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-800"
-        onChange={(e) => void onFile(e)}
-        disabled={disabled || busy}
-      />
+    <div className="space-y-3">
+      <span className="block text-sm font-medium text-ink">Receipt (optional)</span>
+      <label className="flex min-h-11 w-full cursor-pointer touch-manipulation flex-col justify-center rounded-sm border border-dashed border-[var(--control-border)] bg-neutral-bg/50 px-3 py-3">
+        <span className="text-sm font-medium text-ink">{busy ? "Uploading…" : "Choose photo or PDF"}</span>
+        <span className="mt-0.5 text-caption">Tap to upload from camera or files</span>
+        <input
+          type="file"
+          aria-label="Upload receipt file"
+          accept="image/*,.pdf,application/pdf"
+          className="sr-only"
+          onChange={(e) => void onFile(e)}
+          disabled={disabled || busy}
+        />
+      </label>
       <TextField
         label="Receipt URL (optional — paste if not uploading)"
         value={attachmentUrl}
         onChange={(e) => onAttachmentUrlChange(e.target.value)}
         disabled={disabled}
       />
-      {err ? <p className="text-xs text-red-600">{err}</p> : null}
-      {busy ? <p className="text-xs text-slate-500">Uploading…</p> : null}
+      {err ? <p className="text-caption text-debit">{err}</p> : null}
+      {busy ? <p className="text-caption">Uploading…</p> : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   eachMonthOfInterval,
@@ -19,6 +19,7 @@ import {
 import { apiFetch } from "@/api/http";
 import { DateBasisToggle, dateBasisSubtitle, type DateBasis } from "@/components/DateBasisToggle";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Button, Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
@@ -90,6 +91,7 @@ export function ReportsPnlTab() {
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
   const [trend, setTrend] = useState<Array<{ month: string; income: number; expense: number; net: number }>>([]);
   const [error, setError] = useState<string | null>(null);
+  const statementRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const qf = searchParams.get("from");
@@ -258,6 +260,7 @@ export function ReportsPnlTab() {
           actions={
             <>
               <DateBasisToggle value={dateBasis} onChange={applyDateBasis} />
+              <ReportPdfButton title="Income Statement" targetRef={statementRef} disabled={!pnl} />
               <Button type="button" variant="ghost" onClick={() => void downloadCsv()}>
                 CSV
               </Button>
@@ -308,7 +311,7 @@ export function ReportsPnlTab() {
             </Card>
           </div>
 
-          <Card className="mx-auto max-w-2xl">
+          <Card ref={statementRef} className="mx-auto max-w-2xl">
             <StatementHeader
               title="Income Statement"
               subtitle={`${format(parseISO(pnl.from), "MMM d, yyyy")} – ${format(parseISO(pnl.to), "MMM d, yyyy")} · ${dateBasisSubtitle(dateBasis)} · ${ccy}`}

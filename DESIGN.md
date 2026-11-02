@@ -19,11 +19,12 @@ Work in this order:
 
 ## Principles
 
-- Mobile first: design for 390px width, then scale up. Single column below 768px. At 768px+ use a max-width 960px container; KPI rows and cards may go to 2 columns.
+- Mobile first: design for 390px width, then scale up. Single column below 768px. At 768px+ use a max-width 960px (`--content-max`) container; KPI rows and cards may go to 2 columns.
+- **Phone = app shell**: fixed BottomNav, full-height form sheets, 44px controls, safe-area padding, bottom-sheet pickers. **Desktop browser = web app**: top nav, centered dialogs, optional 2-column form grids.
 - One screen = a stack of cards. Each card: heading, content, optional link.
-- Every amount: tabular numerals, right aligned, sign shown (+ / −), currency code shown. Foreign value (USD) shown under the MVR value in caption style.
+- Every amount: `--font-num` (IBM Plex Sans), tabular lining numerals, right aligned, sign shown (+ / −), currency code shown. Foreign value (USD) shown under the MVR value in caption style.
 - Colour is never the only signal: pair with +/− sign, label or tag text.
-- Touch targets at least 44px. Real `<button>` and `<a>` elements, `aria-label` on icon-only controls.
+- Touch targets at least 44px (`--tap` / `--input-h`). Real `<button>` and `<a>` elements, `aria-label` on icon-only controls. Inputs use `text-base` on mobile to avoid iOS zoom.
 - Text contrast at least 4.5:1.
 
 ## Tokens
@@ -31,6 +32,7 @@ Work in this order:
 ```css
 :root {
   --font: 'Inter', system-ui, sans-serif;
+  --font-num: 'IBM Plex Sans', 'Inter', system-ui, sans-serif; /* amounts, rates, qty */
 
   --ink: #111827;        /* text, headings */
   --muted: #4B5563;      /* labels, captions */
@@ -48,15 +50,31 @@ Work in this order:
   --radius: 8px;         /* cards */
   --radius-sm: 6px;      /* buttons, inputs */
   --radius-xs: 4px;      /* tags */
+  --sheet-radius: 16px;  /* mobile sheet top corners; 8px from 768px */
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px;
   --tap: 44px;
+  --input-h: 44px;
   --nav-h: 64px;
+  --content-max: 960px;
+  --content-pad: 16px;   /* 24px from 768px */
+  --form-gap: 16px;
+  --sheet-max: 92dvh;    /* 85vh from 768px */
+  --overlay: rgb(17 24 39 / 0.48);
+  --control-border: #D1D5DB; /* segmented / dashed controls */
 }
 body { font-family: var(--font); font-size: 14px; line-height: 20px; color: var(--ink); background: var(--ground); font-variant-numeric: tabular-nums; }
 ```
 
 Tailwind mapping: add the colours above under `theme.extend.colors`, `borderRadius: { DEFAULT: '8px', sm: '6px', xs: '4px' }`, and `fontFamily.sans = ['Inter', 'system-ui', 'sans-serif']`. Use the `tabular-nums` utility on all amounts.
+
+## Forms and sheets
+
+- **Modal**: bottom sheet on &lt;768px (grabber, `--sheet-radius` top), centered dialog on desktop. Use `variant="form"` for add income/expense so the sheet is tall and actions stay pinned.
+- **Dropdown**: on phone, options open as a bottom sheet with search; on desktop, anchored panel. Triggers and option rows are `--input-h` / `--tap`.
+- **ChoiceList**: large radio rows for settlement / mode picks — never tiny stacked radios alone.
+- **TextField / Button**: height `--input-h`, full-width primary actions on mobile; row-reverse pair on `sm+`.
+- **FormStepHeader** + **FormActions**: multi-step add flows; sticky action bar inside form sheets.
 
 ## Type scale
 

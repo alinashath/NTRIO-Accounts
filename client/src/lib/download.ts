@@ -23,7 +23,8 @@ export async function copyText(text: string) {
 }
 
 export function printHtml(title: string, bodyHtml: string) {
-  const w = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
+  // Do not use noopener — it makes window.open return null and leaves a blank tab.
+  const w = window.open("", "_blank", "width=800,height=900");
   if (!w) return;
   w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
     <style>
@@ -38,6 +39,50 @@ export function printHtml(title: string, bodyHtml: string) {
   w.document.close();
   w.focus();
   w.print();
+}
+
+/**
+ * Print / Save as PDF for a single report node only (no hub, nav, KPI cards, charts).
+ * Uses the current page + @media print so styles stay intact (popup clone was blank).
+ */
+export function printDomElement(
+  title: string,
+  el: HTMLElement,
+  opts?: { orgTitle?: string | null },
+) {
+  const prevTitle = document.title;
+  document.title = title;
+
+  let brand: HTMLParagraphElement | null = null;
+  const org = opts?.orgTitle?.trim();
+  if (org) {
+    brand = document.createElement("p");
+    brand.setAttribute("data-print-brand", "");
+    brand.className = "mb-3 text-xs font-bold uppercase tracking-[0.08em] text-ink";
+    brand.textContent = org;
+    el.insertBefore(brand, el.firstChild);
+  }
+
+  el.setAttribute("data-print-root", "");
+  document.documentElement.classList.add("printing-report");
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.documentElement.classList.remove("printing-report");
+    el.removeAttribute("data-print-root");
+    brand?.remove();
+    document.title = prevTitle;
+    window.removeEventListener("afterprint", cleanup);
+  };
+
+  window.addEventListener("afterprint", cleanup);
+  requestAnimationFrame(() => {
+    window.print();
+    // Safari / some mobile browsers skip afterprint
+    setTimeout(cleanup, 1500);
+  });
 }
 
 export function escapeXml(s: string) {

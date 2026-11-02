@@ -20,15 +20,17 @@ import {
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Navigate, NavLink, useNavigate } from "react-router-dom";
 import { Modal } from "@/components/Modal";
 import { SegmentedControl } from "@/components/design";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { useOrganization } from "@/context/OrganizationContext";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
+import { pathForModule, WORKSPACE_META, type WorkspaceModuleId } from "@/lib/workspaces";
 
-export type WorkspaceId = "accounts" | "kitchen" | "stock" | "occupancy";
+export type WorkspaceId = WorkspaceModuleId;
 
 export function WorkspaceLayout({
   workspace,
@@ -39,17 +41,18 @@ export function WorkspaceLayout({
 }) {
   const navigate = useNavigate();
   const { displayCurrency, setDisplayCurrency, globalUsdMvrRate } = useDisplayCurrency();
+  const { organizationTitle, enabledModules, ready, isSystemAdmin } = useOrganization();
   const [moreOpen, setMoreOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  const title =
-    workspace === "accounts"
-      ? "Accounts"
-      : workspace === "kitchen"
-        ? "Kitchen"
-        : workspace === "occupancy"
-          ? "Occupancy"
-          : "Stock";
+  const multiModule = enabledModules.length > 1;
+  const title = WORKSPACE_META[workspace].title;
+
+  const homePath = useMemo(() => {
+    if (enabledModules.includes(workspace)) return null;
+    const first = enabledModules[0];
+    return first ? pathForModule(first) : "/";
+  }, [enabledModules, workspace]);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -57,39 +60,42 @@ export function WorkspaceLayout({
     navigate("/login", { replace: true });
   }
 
-  const moreItems =
-    workspace === "accounts"
-      ? [
-          { to: "/accounts/contacts", label: "Contacts", icon: Users },
-          { to: "/accounts/income", label: "Income", icon: TrendingUp },
-          { to: "/accounts/expenses", label: "Spend", icon: TrendingDown },
-          { to: "/accounts/debts", label: "Debts", icon: CreditCard },
-          { to: "/accounts/settings", label: "Settings", icon: Settings },
-          { to: "/", label: "Workspaces", icon: LayoutGrid },
-        ]
-      : workspace === "kitchen"
-        ? [
-            { to: "/occupancy", label: "Occupancy", icon: BedDouble },
-            { to: "/stock", label: "Stock", icon: Package },
-            { to: "/accounts", label: "Accounts", icon: Wallet },
-            { to: "/", label: "Workspaces", icon: LayoutGrid },
-          ]
-        : workspace === "occupancy"
-          ? [
-              { to: "/kitchen", label: "Kitchen", icon: UtensilsCrossed },
-              { to: "/stock", label: "Stock", icon: Package },
-              { to: "/accounts", label: "Accounts", icon: Wallet },
-              { to: "/", label: "Workspaces", icon: LayoutGrid },
-            ]
-          : [
-              { to: "/occupancy", label: "Occupancy", icon: BedDouble },
-              { to: "/kitchen", label: "Kitchen", icon: UtensilsCrossed },
-              { to: "/accounts", label: "Accounts", icon: Wallet },
-              { to: "/", label: "Workspaces", icon: LayoutGrid },
-            ];
+  const moreItems = useMemo(() => {
+    const hub = multiModule ? [{ to: "/", label: "Workspaces", icon: LayoutGrid }] : [];
+    const admin = isSystemAdmin ? [{ to: "/admin", label: "Admin", icon: Settings }] : [];
+    if (workspace === "accounts") {
+      return [
+        { to: "/accounts/contacts", label: "Contacts", icon: Users },
+        { to: "/accounts/income", label: "Income", icon: TrendingUp },
+        { to: "/accounts/expenses", label: "Spend", icon: TrendingDown },
+        { to: "/accounts/debts", label: "Debts", icon: CreditCard },
+        { to: "/accounts/settings", label: "Settings", icon: Settings },
+        ...admin,
+        ...hub,
+      ];
+    }
+    const cross: { to: string; label: string; icon: typeof Wallet }[] = [];
+    if (enabledModules.includes("occupancy") && workspace !== "occupancy") {
+      cross.push({ to: "/occupancy", label: "Occupancy", icon: BedDouble });
+    }
+    if (enabledModules.includes("kitchen") && workspace !== "kitchen") {
+      cross.push({ to: "/kitchen", label: "Kitchen", icon: UtensilsCrossed });
+    }
+    if (enabledModules.includes("stock") && workspace !== "stock") {
+      cross.push({ to: "/stock", label: "Stock", icon: Package });
+    }
+    if (enabledModules.includes("accounts")) {
+      cross.push({ to: "/accounts", label: "Accounts", icon: Wallet });
+    }
+    return [...cross, ...admin, ...hub];
+  }, [workspace, enabledModules, multiModule, isSystemAdmin]);
+
+  if (ready && homePath) {
+    return <Navigate to={homePath} replace />;
+  }
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-[960px] flex-col px-4 pb-[calc(var(--nav-h)+env(safe-area-inset-bottom,0px))] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pb-6">
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-[var(--content-max)] flex-col px-content pb-[calc(var(--nav-h)+env(safe-area-inset-bottom,0px))] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pb-6">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[200] focus:rounded-sm focus:bg-action focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-white"
@@ -97,14 +103,16 @@ export function WorkspaceLayout({
         Skip to main content
       </a>
 
-      <header className="-mx-4 mb-4 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-3">
+      <header className="-mx-[var(--content-pad)] mb-4 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-[var(--content-pad)] py-3 md:mx-0 md:px-0">
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => {
+            if (multiModule) navigate("/");
+          }}
           className="min-w-0 flex-1 touch-manipulation text-left"
-          aria-label="NTRIO workspaces"
+          aria-label={multiModule ? `${organizationTitle} workspaces` : organizationTitle}
         >
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">NTRIO</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">{organizationTitle}</p>
           <p className="mt-0.5 text-section text-ink">{title}</p>
         </button>
 
@@ -120,7 +128,7 @@ export function WorkspaceLayout({
               ]}
             />
           </div>
-        ) : (
+        ) : multiModule ? (
           <button
             type="button"
             onClick={() => navigate("/")}
@@ -130,7 +138,7 @@ export function WorkspaceLayout({
           >
             <LayoutGrid className="h-5 w-5" strokeWidth={1.8} aria-hidden />
           </button>
-        )}
+        ) : null}
       </header>
 
       <nav className="mb-4 hidden gap-1 border-b border-border pb-3 md:flex" aria-label="Primary">

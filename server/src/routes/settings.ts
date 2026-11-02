@@ -6,6 +6,15 @@ import {
   listFxDailyRates,
   upsertFxDailyRate,
 } from "../lib/fxRates.js";
+import {
+  attachUserToOrganization,
+  ensureUserOrganization,
+  ensureUserOrganizations,
+  listOrganizationMembers,
+  readPreferredOrgId,
+  setActiveOrganization,
+  setOrganizationTitle,
+} from "../lib/organization.js";
 import { createServiceRoleSupabase } from "../lib/supabaseService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/http.js";
@@ -39,67 +48,147 @@ settingsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
+    const preferred = readPreferredOrgId(req);
     const row = await prisma.userSettings.upsert({
       where: { userId },
       create: { userId },
       update: {},
     });
+    const org = await ensureUserOrganization(
+      userId,
+      preferred,
+      (req as AuthedRequest).userEmail,
+    );
     await ensureFxBaseline(userId);
     const fx_rates = await listFxDailyRates(userId);
     res.json({
       global_usd_mvr_rate: Number(row.globalUsdMvrRate),
+      organization_id: org.id,
+      organization_title: org.title?.trim() || "NTRIO",
       fx_rates,
     });
   }),
 );
 
-const patchSchema = z.object({
-  global_usd_mvr_rate: z.number().positive().max(1_000_000),
-  /** Optional ISO date (YYYY-MM-DD); defaults to today UTC. */
-  rate_date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+settingsRouter.get(
+  "/organizations",
+  asyncHandler(async (req, res) => {
+    const authed = req as AuthedRequest;
+    const preferred = readPreferredOrgId(req);
+    const { organizations, active, pendingRequest, isSystemAdmin } =
+      await ensureUserOrganizations(authed.userId, preferred, authed.userEmail);
+    res.json({
+      organizations: organizations.map((o) => ({
+        id: o.id,
+        title: o.title,
+        enabled_modules: o.enabledModules,
+      })),
+      active_organization_id: active?.id ?? null,
+      enabled_modules: active?.enabledModules ?? [],
+      pending_request: pendingRequest,
+      is_system_admin: isSystemAdmin,
+    });
+  }),
+);
+
+const activeOrgSchema = z.object({
+  organization_id: z.string().uuid(),
 });
+
+settingsRouter.post(
+  "/active-organization",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const body = activeOrgSchema.parse(req.body);
+    try {
+      const org = await setActiveOrganization(userId, body.organization_id);
+      res.json({
+        organization_id: org.id,
+        organization_title: org.title,
+        enabled_modules: org.enabledModules,
+      });
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status === 403) {
+        res.status(403).json({ error: (e as Error).message });
+        return;
+      }
+      throw e;
+    }
+  }),
+);
+
+const patchSchema = z
+  .object({
+    global_usd_mvr_rate: z.number().positive().max(1_000_000).optional(),
+    /** Optional ISO date (YYYY-MM-DD); defaults to today UTC. */
+    rate_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    organization_title: z.string().trim().min(1).max(64).optional(),
+  })
+  .refine(
+    (b) => b.global_usd_mvr_rate !== undefined || b.organization_title !== undefined,
+    { message: "Provide global_usd_mvr_rate and/or organization_title" },
+  );
 
 settingsRouter.patch(
   "/",
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
+    const preferred = readPreferredOrgId(req);
     const body = patchSchema.parse(req.body);
-    const todayYmd = new Date().toISOString().slice(0, 10);
-    const rateDate = body.rate_date ?? todayYmd;
 
-    await upsertFxDailyRate(userId, body.global_usd_mvr_rate, rateDate);
+    if (body.organization_title !== undefined) {
+      await setOrganizationTitle(
+        userId,
+        body.organization_title,
+        preferred,
+        (req as AuthedRequest).userEmail,
+      );
+    }
 
-    // Keep user_settings.global as the current rate when saving today/future,
-    // or when the saved date is the latest point in history.
-    const shouldUpdateCurrent = rateDate >= todayYmd;
-    await prisma.userSettings.upsert({
-      where: { userId },
-      create: { userId, globalUsdMvrRate: body.global_usd_mvr_rate },
-      update: shouldUpdateCurrent
-        ? { globalUsdMvrRate: body.global_usd_mvr_rate }
-        : {},
-    });
+    if (body.global_usd_mvr_rate !== undefined) {
+      const todayYmd = new Date().toISOString().slice(0, 10);
+      const rateDate = body.rate_date ?? todayYmd;
 
-    if (!shouldUpdateCurrent) {
-      const latest = await prisma.fxDailyRate.findFirst({
+      await upsertFxDailyRate(userId, body.global_usd_mvr_rate, rateDate);
+
+      const shouldUpdateCurrent = rateDate >= todayYmd;
+      await prisma.userSettings.upsert({
         where: { userId },
-        orderBy: { rateDate: "desc" },
+        create: { userId, globalUsdMvrRate: body.global_usd_mvr_rate },
+        update: shouldUpdateCurrent
+          ? { globalUsdMvrRate: body.global_usd_mvr_rate }
+          : {},
       });
-      if (latest && latest.rateDate.toISOString().slice(0, 10) === rateDate) {
-        await prisma.userSettings.update({
+
+      if (!shouldUpdateCurrent) {
+        const latest = await prisma.fxDailyRate.findFirst({
           where: { userId },
-          data: { globalUsdMvrRate: body.global_usd_mvr_rate },
+          orderBy: { rateDate: "desc" },
         });
+        if (latest && latest.rateDate.toISOString().slice(0, 10) === rateDate) {
+          await prisma.userSettings.update({
+            where: { userId },
+            data: { globalUsdMvrRate: body.global_usd_mvr_rate },
+          });
+        }
       }
     }
 
     const refreshed = await prisma.userSettings.findUniqueOrThrow({ where: { userId } });
+    const org = await ensureUserOrganization(
+      userId,
+      preferred,
+      (req as AuthedRequest).userEmail,
+    );
     const fx_rates = await listFxDailyRates(userId);
     res.json({
       global_usd_mvr_rate: Number(refreshed.globalUsdMvrRate),
+      organization_id: org.id,
+      organization_title: org.title?.trim() || "NTRIO",
       fx_rates,
     });
   }),
@@ -113,24 +202,44 @@ settingsRouter.get(
       res.status(403).json({ error: "Not allowed to manage users" });
       return;
     }
-    const rows = await prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
-      select: { id: true, email: true, createdAt: true },
-    });
-    res.json(
-      rows.map((u) => ({
-        id: u.id,
-        email: u.email,
-        created_at: u.createdAt.toISOString(),
-      })),
-    );
+
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const rows = await listOrganizationMembers(org.id);
+    res.json(rows);
   }),
 );
 
-const createUserSchema = z.object({
-  email: z.string().trim().email(),
-  password: z.string().min(8).max(128),
-});
+const upsertOrgUserSchema = z
+  .object({
+    email: z.string().trim().email(),
+    mode: z.enum(["create", "add_existing"]).default("create"),
+    password: z.string().min(8).max(128).optional(),
+  })
+  .superRefine((b, ctx) => {
+    if (b.mode === "create" && !b.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Password is required when creating a new user",
+        path: ["password"],
+      });
+    }
+  });
+
+async function findAuthUserIdByEmail(
+  supabase: ReturnType<typeof serviceSupabase>,
+  email: string,
+): Promise<{ id: string; email: string | null } | null> {
+  const target = email.trim().toLowerCase();
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(error.message);
+    const hit = data.users.find((u) => (u.email ?? "").trim().toLowerCase() === target);
+    if (hit) return { id: hit.id, email: hit.email ?? null };
+    if (data.users.length < 200) break;
+  }
+  return null;
+}
 
 settingsRouter.post(
   "/users",
@@ -140,12 +249,46 @@ settingsRouter.post(
       res.status(403).json({ error: "Not allowed to manage users" });
       return;
     }
-    const body = createUserSchema.parse(req.body);
+    const body = upsertOrgUserSchema.parse(req.body);
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const email = body.email.trim().toLowerCase();
     const supabase = serviceSupabase();
 
+    if (body.mode === "add_existing") {
+      const local = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true, email: true },
+      });
+
+      let userId = local?.id ?? null;
+      let userEmail = local?.email ?? email;
+
+      if (!userId) {
+        const authUser = await findAuthUserIdByEmail(supabase, email);
+        if (!authUser) {
+          res.status(404).json({
+            error: "No account with that email. Use Create new instead.",
+          });
+          return;
+        }
+        userId = authUser.id;
+        userEmail = authUser.email ?? email;
+      }
+
+      await attachUserToOrganization(userId, userEmail, org);
+
+      res.status(200).json({
+        id: userId,
+        email: userEmail,
+        attached: true,
+      });
+      return;
+    }
+
     const { data, error } = await supabase.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
+      email,
+      password: body.password!,
       email_confirm: true,
     });
 
@@ -153,7 +296,9 @@ settingsRouter.post(
       const msg = error.message ?? "Could not create user";
       const lower = msg.toLowerCase();
       if (lower.includes("already been registered") || lower.includes("already exists")) {
-        res.status(409).json({ error: msg });
+        res.status(409).json({
+          error: "That email already has an account. Switch to Add existing.",
+        });
         return;
       }
       res.status(400).json({ error: msg });
@@ -165,18 +310,12 @@ settingsRouter.post(
       return;
     }
 
-    await prisma.user.upsert({
-      where: { id: data.user.id },
-      create: {
-        id: data.user.id,
-        email: data.user.email ?? body.email,
-      },
-      update: { email: data.user.email ?? body.email },
-    });
+    await attachUserToOrganization(data.user.id, data.user.email ?? email, org);
 
     res.status(201).json({
       id: data.user.id,
-      email: data.user.email ?? body.email,
+      email: data.user.email ?? email,
+      created: true,
     });
   }),
 );

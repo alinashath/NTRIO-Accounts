@@ -47,15 +47,15 @@ export function Amount({
   return (
     <span
       className={cn(
-        "inline-flex flex-col items-end tabular-nums",
+        "amount inline-flex flex-col items-end tabular-nums",
         size === "lg" ? "text-amount-lg" : "text-sm font-semibold leading-5",
         toneClass,
         className,
       )}
     >
-      <span className="amount whitespace-nowrap">{primary}</span>
+      <span className="whitespace-nowrap">{primary}</span>
       {captionValue != null && captionCurrency ? (
-        <span className="text-caption font-normal">
+        <span className="text-caption font-normal tabular-nums">
           {formatCaptionAmount(captionValue, captionCurrency)}
         </span>
       ) : null}

@@ -14,6 +14,7 @@ import {
   USD_MVR_RATE_DEFAULT,
   type FxRatePoint,
 } from "@/lib/fxRates";
+import { getStoredOrganizationTitle, setStoredOrganizationTitle } from "@/lib/orgStorage";
 
 export type DisplayCurrency = "USD" | "MVR";
 
@@ -26,6 +27,9 @@ type Ctx = {
   fxRates: FxRatePoint[];
   getUsdMvrRateForDate: (ymd: string) => number;
   refreshFx: () => Promise<void>;
+  /** Wordmark in TopBar / Hub. */
+  organizationTitle: string;
+  setOrganizationTitleLocal: (title: string) => void;
 };
 
 const DisplayCurrencyContext = createContext<Ctx | null>(null);
@@ -39,19 +43,28 @@ export function DisplayCurrencyProvider({ children }: { children: ReactNode }) {
   });
   const [globalUsdMvrRate, setGlobalUsdMvrRate] = useState(USD_MVR_RATE_DEFAULT);
   const [fxRates, setFxRates] = useState<FxRatePoint[]>([]);
+  const [organizationTitle, setOrganizationTitle] = useState(getStoredOrganizationTitle);
 
   useEffect(() => {
     localStorage.setItem(LS_KEY, displayCurrency);
   }, [displayCurrency]);
 
+  const setOrganizationTitleLocal = useCallback((title: string) => {
+    setOrganizationTitle(setStoredOrganizationTitle(title));
+  }, []);
+
   const refreshFx = useCallback(async () => {
     const s = await apiFetch<{
       global_usd_mvr_rate: number;
+      organization_title?: string;
       fx_rates?: FxRatePoint[];
     }>("/api/settings");
     setGlobalUsdMvrRate(s.global_usd_mvr_rate);
     setFxRates(s.fx_rates ?? []);
-  }, []);
+    if (s.organization_title?.trim()) {
+      setOrganizationTitleLocal(s.organization_title);
+    }
+  }, [setOrganizationTitleLocal]);
 
   useEffect(() => {
     void refreshFx().catch(() => {});
@@ -76,8 +89,18 @@ export function DisplayCurrencyProvider({ children }: { children: ReactNode }) {
       fxRates,
       getUsdMvrRateForDate,
       refreshFx,
+      organizationTitle,
+      setOrganizationTitleLocal,
     }),
-    [displayCurrency, fxRates, getUsdMvrRateForDate, globalUsdMvrRate, refreshFx],
+    [
+      displayCurrency,
+      fxRates,
+      getUsdMvrRateForDate,
+      globalUsdMvrRate,
+      organizationTitle,
+      refreshFx,
+      setOrganizationTitleLocal,
+    ],
   );
 
   return <DisplayCurrencyContext.Provider value={value}>{children}</DisplayCurrencyContext.Provider>;

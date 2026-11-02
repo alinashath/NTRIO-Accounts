@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
   Bar,
@@ -14,6 +14,7 @@ import { apiFetch } from "@/api/http";
 import { DateBasisToggle, dateBasisSubtitle, type DateBasis } from "@/components/DateBasisToggle";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
@@ -76,6 +77,7 @@ export function ReportsCashflowTab() {
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const statementRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -181,7 +183,16 @@ export function ReportsCashflowTab() {
             setRangePreset(preset);
             setApplied({ from, to });
           }}
-          actions={<DateBasisToggle value={dateBasis} onChange={setDateBasis} />}
+          actions={
+            <>
+              <DateBasisToggle value={dateBasis} onChange={setDateBasis} />
+              <ReportPdfButton
+                title="Statement of Cash Flows"
+                targetRef={statementRef}
+                disabled={!stmt}
+              />
+            </>
+          }
         />
       </div>
       <p className="text-[11px] text-muted-foreground">
@@ -278,7 +289,7 @@ export function ReportsCashflowTab() {
             </Card>
           </div>
 
-          <Card className="mx-auto max-w-2xl">
+          <Card ref={statementRef} className="mx-auto max-w-2xl">
             <StatementHeader
               title="Statement of Cash Flows"
               subtitle={`${format(parseISO(stmt.from), "MMM d, yyyy")} – ${format(parseISO(stmt.to), "MMM d, yyyy")} · ${dateBasisSubtitle(dateBasis)} · ${ccy}`}

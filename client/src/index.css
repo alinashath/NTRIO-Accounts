@@ -1,9 +1,11 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
-/* Ntrio UI — DESIGN.md tokens */
+/* Ntrio UI — DESIGN.md tokens (mobile app + desktop web) */
 :root {
   --font: "Inter", system-ui, sans-serif;
+  /* Clearer lining/tabular figures for amounts and numeric fields */
+  --font-num: "IBM Plex Sans", "Inter", system-ui, sans-serif;
 
   --ink: #111827;
   --muted: #4b5563;
@@ -24,6 +26,8 @@
   --radius: 8px;
   --radius-sm: 6px;
   --radius-xs: 4px;
+  /* Mobile sheets: larger top radius; dialogs keep --radius on md+ */
+  --sheet-radius: 16px;
 
   --s1: 4px;
   --s2: 8px;
@@ -31,12 +35,29 @@
   --s4: 16px;
   --s6: 24px;
   --s8: 32px;
+
   --tap: 44px;
+  --input-h: 44px;
   --nav-h: 64px;
+  --content-max: 960px;
+  --content-pad: 16px;
+  --form-gap: 16px;
+  --sheet-max: 92dvh;
+  --overlay: rgb(17 24 39 / 0.48);
+  --control-border: #d1d5db;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --sheet-radius: 8px;
+    --content-pad: 24px;
+    --sheet-max: 85vh;
+  }
 }
 
 @theme {
   --font-sans: "Inter", system-ui, sans-serif;
+  --font-num: "IBM Plex Sans", "Inter", system-ui, sans-serif;
 
   --color-ink: #111827;
   --color-muted-label: #4b5563;
@@ -91,16 +112,60 @@ body {
   font-family: var(--font);
   font-size: 14px;
   line-height: 20px;
-  font-variant-numeric: tabular-nums;
   background-color: var(--ground);
   color: var(--ink);
   -webkit-tap-highlight-color: rgb(0 0 0 / 0.08);
   overscroll-behavior-y: contain;
 }
 
+/* Amount inputs: same numeric face as displayed figures */
+input[type="number"],
+input[inputmode="decimal"],
+input[inputmode="numeric"] {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
 :focus-visible {
   outline: 2px solid var(--action);
   outline-offset: 2px;
+}
+
+/* Report PDF: hide chrome; show only the statement marked data-print-root */
+@media print {
+  html.printing-report body {
+    background: #ffffff !important;
+  }
+
+  html.printing-report body * {
+    visibility: hidden !important;
+  }
+
+  html.printing-report [data-print-root],
+  html.printing-report [data-print-root] * {
+    visibility: visible !important;
+  }
+
+  html.printing-report [data-print-root] {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  html.printing-report nav,
+  html.printing-report header,
+  html.printing-report [data-print-hide] {
+    display: none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -141,11 +206,30 @@ body {
     color: var(--muted);
   }
   .text-amount-lg {
+    font-family: var(--font-num);
     font-size: 24px;
     line-height: 32px;
     font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.01em;
     white-space: nowrap;
+  }
+  .tabular-nums {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+  .amount {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.01em;
+  }
+  .font-num {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
   }
   .text-page-title {
     font-size: 20px;
@@ -160,5 +244,16 @@ body {
   .min-tap {
     min-height: var(--tap);
     min-width: var(--tap);
+  }
+  .h-input {
+    height: var(--input-h);
+    min-height: var(--input-h);
+  }
+  .gap-form {
+    gap: var(--form-gap);
+  }
+  .px-content {
+    padding-left: var(--content-pad);
+    padding-right: var(--content-pad);
   }
 }

@@ -7,7 +7,7 @@ import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
-import { Button, Card, TextField } from "@/components/ui";
+import { Button, Card, ChoiceList, FormActions, FormStepHeader, TextField } from "@/components/ui";
 import { ACCOUNT_CURRENCIES } from "@/lib/fx";
 import { useAuthStore } from "@/store/auth";
 import type {
@@ -309,39 +309,39 @@ export function ExpensesPage() {
   }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">Expenses</h2>
+          <h2 className="text-page-title text-ink">Spend</h2>
           {!loading ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="mt-0.5 text-caption">
               {total} entr{total === 1 ? "y" : "ies"}
               {filtersActive ? " · filtered" : ""}
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-caption">
             <input
               type="checkbox"
               checked={showVoided}
               onChange={(e) => setShowVoided(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-border"
+              className="h-4 w-4 rounded border-border"
             />
             Voided
           </label>
           <Button
             type="button"
             variant="ghost"
-            className="relative gap-1 px-2"
+            className="relative gap-1.5"
             aria-label="Search and filters"
             title="Search and filters"
             onClick={() => setFilterModalOpen(true)}
           >
-            <Filter className="h-3.5 w-3.5" aria-hidden />
+            <Filter className="h-4 w-4" aria-hidden />
             Filters
             {filtersActive ? (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-action" aria-hidden />
             ) : null}
           </Button>
           <Button type="button" disabled={loading} onClick={() => setModalOpen(true)}>
@@ -350,7 +350,7 @@ export function ExpensesPage() {
         </div>
       </div>
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Modal
         open={filterModalOpen}
@@ -408,7 +408,7 @@ export function ExpensesPage() {
         </div>
       </Modal>
 
-      <Modal open={modalOpen} title="New expense" size="lg" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="New expense" size="lg" variant="form" onClose={() => setModalOpen(false)}>
         <ExpenseForm
           userId={userId}
           accounts={accounts}
@@ -427,9 +427,16 @@ export function ExpensesPage() {
         />
       </Modal>
 
-      <Modal open={detail !== null} title="Expense details" onClose={() => setDetail(null)}>
+      <Modal
+        open={detail !== null}
+        title="Edit expense"
+        size="lg"
+        variant="form"
+        onClose={() => setDetail(null)}
+      >
         {detail ? (
           <ExpenseDetailPanel
+            key={detail.id}
             row={detail}
             userId={userId}
             accounts={accounts}
@@ -468,7 +475,7 @@ export function ExpensesPage() {
             {rows.map((r) => (
               <li
                 key={r.id}
-                className={`flex items-start gap-1 px-2.5 py-1.5 transition hover:bg-muted/50 ${
+                className={`flex min-h-11 items-start gap-2 px-3 py-2.5 transition hover:bg-neutral-bg/60 ${
                   r.voided_at ? "opacity-60" : ""
                 }`}
               >
@@ -697,145 +704,132 @@ function ExpenseForm({
 
   return (
     <form
-      className="space-y-4"
+      className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (step === 2) void submitSave();
       }}
     >
-      <p className="text-xs font-medium text-slate-500">
-        Step {step + 1} of 3 — {stepTitles[step]}
-      </p>
+      <FormStepHeader step={step} total={3} titles={stepTitles} />
 
-      {step === 0 ? (
-        <>
-          <fieldset className="space-y-2 rounded-[var(--radius-md)] border border-border p-3">
-            <legend className="px-1 text-sm font-medium text-slate-800">Settlement</legend>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <input
-                type="radio"
-                name="settle"
-                checked={settlement === "account"}
-                onChange={() => {
-                  setSettlement("account");
-                  setDebtId("");
-                }}
-              />
-              Pay from account
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <input
-                type="radio"
-                name="settle"
-                checked={settlement === "debt"}
-                onChange={() => {
-                  setSettlement("debt");
-                  setAccountId("");
-                }}
-              />
-              Charge to debt
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <input
-                type="radio"
-                name="settle"
-                checked={settlement === "pay_later"}
-                onChange={() => {
-                  setSettlement("pay_later");
+      <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
+        {step === 0 ? (
+          <>
+            <ChoiceList
+              name="settle"
+              label="Settlement"
+              value={settlement}
+              onChange={(next) => {
+                setSettlement(next);
+                if (next === "account") setDebtId("");
+                if (next === "debt") setAccountId("");
+                if (next === "pay_later") {
                   setAccountId("");
                   setDebtId("");
-                }}
+                }
+              }}
+              options={[
+                { value: "account", label: "Pay from account", hint: "Deduct from cash, bank, or wallet" },
+                { value: "debt", label: "Charge to debt", hint: "Add to an open debt balance" },
+                { value: "pay_later", label: "Pay later", hint: "Track unpaid — settle later" },
+              ]}
+            />
+
+            {settlement === "account" ? (
+              <Dropdown
+                label="Paid from (choose first)"
+                value={accountId}
+                onChange={setAccountId}
+                options={accountOptions}
+                disabled={accountOptions.length === 0}
               />
-              Pay later
-            </label>
-          </fieldset>
+            ) : settlement === "debt" ? (
+              <Dropdown
+                label="Debt to charge"
+                value={debtId}
+                onChange={setDebtId}
+                options={debtOptions}
+                disabled={debtOptions.length === 0}
+              />
+            ) : (
+              <Dropdown label="Bill currency" value={billCcy} onChange={setBillCcy} options={billCcyOpts} />
+            )}
 
-          {settlement === "account" ? (
-            <Dropdown
-              label="Paid from (choose first)"
-              value={accountId}
-              onChange={setAccountId}
-              options={accountOptions}
-              disabled={accountOptions.length === 0}
+            <TextField
+              label={`Amount (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
             />
-          ) : settlement === "debt" ? (
-            <Dropdown
-              label="Debt to charge"
-              value={debtId}
-              onChange={setDebtId}
-              options={debtOptions}
-              disabled={debtOptions.length === 0}
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField
+                label="Bill date"
+                type="date"
+                value={billDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setBillDate(v);
+                  setPaidDate(v);
+                }}
+                required
+              />
+              {settlement !== "pay_later" ? (
+                <TextField
+                  label="Paid date"
+                  type="date"
+                  value={paidDate}
+                  onChange={(e) => setPaidDate(e.target.value)}
+                  required
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === 1 ? (
+          <>
+            <TextField
+              label="Description (optional)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
-          ) : (
-            <Dropdown label="Bill currency" value={billCcy} onChange={setBillCcy} options={billCcyOpts} />
-          )}
+            <TextField label="Merchant text (optional)" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+            <Dropdown
+              label="Vendor / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add vendor"
+              onAddNotFound={createVendorContact}
+              addNotFoundLabel="Add vendor"
+            />
+            <Dropdown
+              label="Category (optional)"
+              value={categoryId}
+              onChange={setCategoryId}
+              options={categoryOptions}
+              required={false}
+              placeholder="None"
+              onAddNotFound={createExpenseCategory}
+            />
+          </>
+        ) : null}
 
-          <TextField
-            label={`Amount (${amountCcy})`}
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
+        {step === 2 ? (
+          <ReceiptAttachmentField
+            attachmentUrl={attachmentUrl}
+            onAttachmentUrlChange={setAttachmentUrl}
+            userId={userId}
           />
-          <TextField
-            label="Bill date"
-            type="date"
-            value={billDate}
-            onChange={(e) => {
-              const v = e.target.value;
-              setBillDate(v);
-              setPaidDate(v);
-            }}
-            required
-          />
-          {settlement !== "pay_later" ? (
-            <TextField label="Paid date" type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} required />
-          ) : null}
-        </>
-      ) : null}
+        ) : null}
+      </div>
 
-      {step === 1 ? (
-        <>
-          <TextField
-            label="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <TextField label="Merchant text (optional)" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
-          <Dropdown
-            label="Vendor / contact (optional)"
-            value={contactId}
-            onChange={setContactId}
-            options={contactOptions}
-            required={false}
-            placeholder="None — search or add vendor"
-            onAddNotFound={createVendorContact}
-            addNotFoundLabel="Add vendor"
-          />
-          <Dropdown
-            label="Category (optional)"
-            value={categoryId}
-            onChange={setCategoryId}
-            options={categoryOptions}
-            required={false}
-            placeholder="None"
-            onAddNotFound={createExpenseCategory}
-          />
-        </>
-      ) : null}
-
-      {step === 2 ? (
-        <ReceiptAttachmentField
-          attachmentUrl={attachmentUrl}
-          onAttachmentUrlChange={setAttachmentUrl}
-          userId={userId}
-        />
-      ) : null}
-
-      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-row-reverse">
+      <FormActions>
         {step < 2 ? (
           <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
             Next
@@ -850,7 +844,7 @@ function ExpenseForm({
             Back
           </Button>
         ) : null}
-      </div>
+      </FormActions>
     </form>
   );
 }
@@ -903,7 +897,9 @@ function ExpenseDetailPanel({
   const [attachmentUrl, setAttachmentUrl] = useState(row.attachment_url ?? "");
   const [voidReason, setVoidReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState(0);
   const voided = Boolean(row.voided_at);
+  const stepTitles = ["Settlement & amount", "Details", "Receipt & manage"] as const;
 
   const selectedAcc = accounts.find((a) => a.id === accountId);
   const selectedDebt = debts.find((d) => d.id === debtId);
@@ -918,22 +914,42 @@ function ExpenseDetailPanel({
         ? selectedDebt?.currency ?? row.account_currency ?? "USD"
         : billCcy;
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (voided) return;
+  function validateStep0(): string | null {
+    if (voided) return null;
     const amt = Number(amount);
-    if (!amt || amt <= 0) {
-      onError("Enter a valid amount.");
+    if (!amt || amt <= 0) return "Enter a valid amount.";
+    if (settlement === "account" && !accountId) return "Select an account.";
+    if (settlement === "debt" && !debtId) return "Select a debt.";
+    if (!billDate) return "Pick a bill date.";
+    return null;
+  }
+
+  function goNext() {
+    onError(null);
+    if (step === 0) {
+      const err = validateStep0();
+      if (err) {
+        onError(err);
+        return;
+      }
+    }
+    setStep((s) => Math.min(s + 1, 2));
+  }
+
+  function goBack() {
+    onError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function save() {
+    if (voided) return;
+    const err = validateStep0();
+    if (err) {
+      onError(err);
+      setStep(0);
       return;
     }
-    if (settlement === "account" && !accountId) {
-      onError("Select an account.");
-      return;
-    }
-    if (settlement === "debt" && !debtId) {
-      onError("Select a debt.");
-      return;
-    }
+    const amt = Number(amount);
     setBusy(true);
     onError(null);
     try {
@@ -1016,188 +1032,238 @@ function ExpenseDetailPanel({
   }
 
   return (
-    <div className="space-y-4">
-      {voided ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <p className="font-semibold">Voided</p>
-          {row.void_reason ? <p className="mt-1 text-xs">Reason: {row.void_reason}</p> : null}
-        </div>
-      ) : null}
+    <form
+      className="flex min-h-0 flex-1 flex-col gap-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (step === 2 && !voided) void save();
+      }}
+    >
+      <FormStepHeader step={step} total={3} titles={stepTitles} />
 
-      <div className="text-sm text-slate-600">
-        {row.splits.length ? (
-          <div>
-            <p className="font-medium text-slate-800">Splits</p>
-            <ul className="mt-1 list-inside list-disc text-xs">
-              {row.splits.map((s) => (
-                <li key={s.id}>
-                  <DisplayAmountCell
-                    amount={s.amount}
-                    nativeCurrency={row.account_currency || "USD"}
-                    asOfDate={dateInputValue(row.bill_date ?? row.date)}
-                    className="text-xs text-slate-800"
-                  />{" "}
-                  ({s.category_id.slice(0, 8)}…)
-                </li>
-              ))}
-            </ul>
+      <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
+        {voided ? (
+          <div className="rounded-sm border border-border bg-neutral-bg px-3 py-2 text-sm text-ink">
+            <p className="font-semibold">Voided</p>
+            {row.void_reason ? <p className="mt-1 text-caption">Reason: {row.void_reason}</p> : null}
           </div>
-        ) : (
-          <p className="text-slate-500">No category splits on this expense.</p>
-        )}
-        {row.attachment_url ? (
-          <div className="mt-2 flex items-center gap-2">
-            <ReceiptPreviewIcon url={row.attachment_url} />
-            <span className="text-xs text-slate-600">Receipt</span>
-          </div>
-        ) : (
-          <p className="mt-2 text-slate-500">No receipt attached.</p>
-        )}
+        ) : null}
+
+        {step === 0 ? (
+          <>
+            <fieldset disabled={voided} className="disabled:opacity-60">
+              <ChoiceList
+                name="settle_e"
+                label="Settlement"
+                value={settlement}
+                onChange={(next) => {
+                  setSettlement(next);
+                  if (next === "account") setDebtId("");
+                  if (next === "debt") setAccountId("");
+                  if (next === "pay_later") {
+                    setAccountId("");
+                    setDebtId("");
+                  }
+                }}
+                options={[
+                  { value: "account", label: "Paid from account", hint: "Deduct from cash, bank, or wallet" },
+                  { value: "debt", label: "Charged to debt", hint: "Add to an open debt balance" },
+                  { value: "pay_later", label: "Pay later", hint: "Track unpaid — settle later" },
+                ]}
+              />
+            </fieldset>
+            {settlement === "account" ? (
+              <Dropdown
+                label="Account"
+                value={accountId}
+                onChange={setAccountId}
+                options={accountOptions}
+                disabled={voided}
+              />
+            ) : settlement === "debt" ? (
+              <Dropdown
+                label="Debt"
+                value={debtId}
+                onChange={setDebtId}
+                options={debtOptions}
+                disabled={voided || debtOptions.length === 0}
+              />
+            ) : (
+              <Dropdown
+                label="Bill currency"
+                value={billCcy}
+                onChange={setBillCcy}
+                options={billCcyOpts}
+                disabled={voided}
+              />
+            )}
+            <TextField
+              label={`Amount (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={voided}
+            />
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField
+                label="Bill date"
+                type="date"
+                value={billDate}
+                onChange={(e) => setBillDate(e.target.value)}
+                disabled={voided}
+              />
+              {settlement !== "pay_later" ? (
+                <TextField
+                  label="Paid date"
+                  type="date"
+                  value={paidDate}
+                  onChange={(e) => setPaidDate(e.target.value)}
+                  disabled={voided}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === 1 ? (
+          <>
+            <TextField
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={voided}
+            />
+            <TextField
+              label="Merchant text"
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+              disabled={voided}
+            />
+            <Dropdown
+              label="Vendor / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add vendor"
+              disabled={voided}
+              onAddNotFound={voided ? undefined : createVendorContact}
+              addNotFoundLabel="Add vendor"
+            />
+            <Dropdown
+              label="Category (optional)"
+              value={categoryId}
+              onChange={setCategoryId}
+              options={categoryOptions}
+              required={false}
+              placeholder="None"
+              disabled={voided}
+              onAddNotFound={voided ? undefined : createExpenseCategory}
+            />
+            <TextField
+              label="Notes (optional)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={voided}
+            />
+            {row.splits.length ? (
+              <div className="rounded-sm border border-border px-3 py-2">
+                <p className="text-sm font-medium text-ink">Splits</p>
+                <ul className="mt-1 space-y-1 text-caption">
+                  {row.splits.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{s.category_id.slice(0, 8)}…</span>
+                      <DisplayAmountCell
+                        amount={s.amount}
+                        nativeCurrency={row.account_currency || "USD"}
+                        asOfDate={dateInputValue(row.bill_date ?? row.date)}
+                        className="text-caption text-ink"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {step === 2 ? (
+          <>
+            {row.attachment_url || attachmentUrl ? (
+              <div className="flex items-center gap-2 rounded-sm border border-border px-3 py-2">
+                <ReceiptPreviewIcon url={attachmentUrl || row.attachment_url || ""} />
+                <span className="text-sm text-ink">Receipt</span>
+              </div>
+            ) : (
+              <p className="text-caption">No receipt attached yet.</p>
+            )}
+            {!voided && userId ? (
+              <ReceiptAttachmentField
+                attachmentUrl={attachmentUrl}
+                onAttachmentUrlChange={setAttachmentUrl}
+                userId={userId}
+              />
+            ) : null}
+
+            {!voided ? (
+              <div className="space-y-3 border-t border-border pt-3">
+                <TextField
+                  label="Void reason (optional)"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-warning"
+                  disabled={busy}
+                  onClick={() => void doVoid()}
+                >
+                  Void transaction
+                </Button>
+              </div>
+            ) : (
+              <Button type="button" className="w-full" variant="ghost" disabled={busy} onClick={() => void doUnvoid()}>
+                Restore (unvoid)
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-debit"
+              disabled={busy}
+              onClick={() => void doDelete()}
+            >
+              Delete (soft)
+            </Button>
+          </>
+        ) : null}
       </div>
 
-      <form className="space-y-3 border-t border-slate-100 pt-3" onSubmit={(e) => void save(e)}>
-        <fieldset className="space-y-2 rounded-lg border border-slate-200 p-2" disabled={voided}>
-          <legend className="text-xs font-medium text-slate-700">Settlement</legend>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input
-              type="radio"
-              name="settle_e"
-              checked={settlement === "account"}
-              onChange={() => {
-                setSettlement("account");
-                setDebtId("");
-              }}
-            />
-            Paid from account
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input
-              type="radio"
-              name="settle_e"
-              checked={settlement === "debt"}
-              onChange={() => {
-                setSettlement("debt");
-                setAccountId("");
-              }}
-            />
-            Charged to debt
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input
-              type="radio"
-              name="settle_e"
-              checked={settlement === "pay_later"}
-              onChange={() => {
-                setSettlement("pay_later");
-                setAccountId("");
-                setDebtId("");
-              }}
-            />
-            Pay later
-          </label>
-        </fieldset>
-        {settlement === "account" ? (
-          <Dropdown
-            label="Account"
-            value={accountId}
-            onChange={setAccountId}
-            options={accountOptions}
-            disabled={voided}
-          />
-        ) : settlement === "debt" ? (
-          <Dropdown
-            label="Debt"
-            value={debtId}
-            onChange={setDebtId}
-            options={debtOptions}
-            disabled={voided || debtOptions.length === 0}
-          />
-        ) : (
-          <Dropdown label="Bill currency" value={billCcy} onChange={setBillCcy} options={billCcyOpts} disabled={voided} />
-        )}
-        <TextField
-          label={`Amount (${amountCcy})`}
-          type="number"
-          step="0.01"
-          min="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={voided}
-        />
-        <TextField
-          label="Bill date"
-          type="date"
-          value={billDate}
-          onChange={(e) => setBillDate(e.target.value)}
-          disabled={voided}
-        />
-        {settlement !== "pay_later" ? (
-          <TextField
-            label="Paid date"
-            type="date"
-            value={paidDate}
-            onChange={(e) => setPaidDate(e.target.value)}
-            disabled={voided}
-          />
-        ) : null}
-        <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={voided} />
-        <TextField label="Merchant text" value={merchant} onChange={(e) => setMerchant(e.target.value)} disabled={voided} />
-        <Dropdown
-          label="Vendor / contact (optional)"
-          value={contactId}
-          onChange={setContactId}
-          options={contactOptions}
-          required={false}
-          placeholder="None — search or add vendor"
-          disabled={voided}
-          onAddNotFound={voided ? undefined : createVendorContact}
-          addNotFoundLabel="Add vendor"
-        />
-        <Dropdown
-          label="Category (optional)"
-          value={categoryId}
-          onChange={setCategoryId}
-          options={categoryOptions}
-          required={false}
-          placeholder="None"
-          disabled={voided}
-          onAddNotFound={voided ? undefined : createExpenseCategory}
-        />
-        <TextField label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={voided} />
-        {!voided && userId ? (
-          <ReceiptAttachmentField
-            attachmentUrl={attachmentUrl}
-            onAttachmentUrlChange={setAttachmentUrl}
-            userId={userId}
-          />
-        ) : null}
-        {!voided ? (
-          <Button type="submit" className="w-full" disabled={busy}>
+      <FormActions>
+        {step < 2 ? (
+          <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
+            Next
+          </Button>
+        ) : !voided ? (
+          <Button type="submit" className="w-full sm:flex-1" disabled={busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
-        ) : null}
-      </form>
-
-      {!voided ? (
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <TextField
-            label="Void reason (optional)"
-            value={voidReason}
-            onChange={(e) => setVoidReason(e.target.value)}
-          />
-          <Button type="button" variant="ghost" className="w-full text-amber-900" disabled={busy} onClick={() => void doVoid()}>
-            Void transaction
+        ) : (
+          <Button type="button" className="w-full sm:flex-1" onClick={onClose}>
+            Done
           </Button>
-        </div>
-      ) : (
-        <Button type="button" className="w-full" variant="ghost" disabled={busy} onClick={() => void doUnvoid()}>
-          Restore (unvoid)
-        </Button>
-      )}
-
-      <Button type="button" variant="ghost" className="w-full text-red-700" disabled={busy} onClick={() => void doDelete()}>
-        Delete (soft)
-      </Button>
-    </div>
+        )}
+        {step > 0 ? (
+          <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={goBack}>
+            Back
+          </Button>
+        ) : null}
+      </FormActions>
+    </form>
   );
 }

@@ -1,3 +1,4 @@
+import { getStoredActiveOrganizationId } from "@/lib/orgStorage";
 import { useAuthStore } from "@/store/auth";
 
 /** Origin of the Express API (no trailing slash). Empty = same origin + Vite `/api` proxy in dev. */
@@ -21,6 +22,10 @@ export async function apiFetch<T>(
   }
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+  const orgId = getStoredActiveOrganizationId();
+  if (orgId && !headers.has("X-Organization-Id")) {
+    headers.set("X-Organization-Id", orgId);
   }
 
   const res = await fetch(resolveApiUrl(path), { ...init, headers });

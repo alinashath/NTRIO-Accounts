@@ -16,7 +16,7 @@ export function SegmentedControl<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex rounded-sm border border-[#D1D5DB] bg-surface p-0.5",
+        "inline-flex rounded-sm border border-[var(--control-border)] bg-surface p-0.5",
         className,
       )}
       role="group"

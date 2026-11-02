@@ -14,9 +14,12 @@ import { expensesRouter } from "./routes/expenses.js";
 import { incomeRouter } from "./routes/income.js";
 import { reportsRouter } from "./routes/reports.js";
 import { settingsRouter } from "./routes/settings.js";
+import { signupRouter } from "./routes/signup.js";
+import { adminRouter } from "./routes/admin.js";
 import { kitchenRouter } from "./routes/kitchen.js";
 import { stockRouter } from "./routes/stock.js";
 import { recipesRouter } from "./routes/recipes.js";
+import { OrgAccessError } from "./lib/organization.js";
 import { notFound } from "./utils/http.js";
 
 const app = express();
@@ -53,6 +56,8 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.use("/api/signup", signupRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/accounts", accountsRouter);
 app.use("/api/income", incomeRouter);
 app.use("/api/expenses", expensesRouter);
@@ -101,6 +106,11 @@ const SCHEMA_DRIFT_HINT =
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ZodError) {
     res.status(400).json({ error: "Validation failed", details: err.flatten() });
+    return;
+  }
+
+  if (err instanceof OrgAccessError) {
+    res.status(err.status).json({ error: err.message, code: err.code });
     return;
   }
 

@@ -15,7 +15,42 @@ export interface FxDailyRateDto {
 
 export interface SettingsDto {
   global_usd_mvr_rate: number;
+  organization_id: string;
+  /** Wordmark in TopBar / Hub. Default NTRIO. */
+  organization_title: string;
   fx_rates: FxDailyRateDto[];
+}
+
+/** Workspace modules (tenant feature flags). */
+export type WorkspaceModuleId = "accounts" | "occupancy" | "kitchen" | "stock";
+
+export const ALL_WORKSPACE_MODULES: readonly WorkspaceModuleId[] = [
+  "accounts",
+  "occupancy",
+  "kitchen",
+  "stock",
+] as const;
+
+export const WORKSPACE_MODULE_PATH: Record<WorkspaceModuleId, string> = {
+  accounts: "/accounts",
+  occupancy: "/occupancy",
+  kitchen: "/kitchen",
+  stock: "/stock",
+};
+
+/** GET /api/settings/organizations */
+export interface OrganizationDto {
+  id: string;
+  title: string;
+  enabled_modules: WorkspaceModuleId[];
+}
+
+export interface OrganizationsListDto {
+  organizations: OrganizationDto[];
+  active_organization_id: string;
+  /** Modules enabled for the active organization. */
+  enabled_modules: WorkspaceModuleId[];
+  is_system_admin?: boolean;
 }
 
 export type AccountType = "bank" | "cash" | "wallet";
