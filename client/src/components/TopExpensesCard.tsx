@@ -110,5 +110,5 @@ export function TopExpensesCard({
 }
 
 export function colorForCategory(_index: number): string {
-  return "#111827";
+  return "#181A20";
 }

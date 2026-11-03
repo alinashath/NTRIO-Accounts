@@ -224,6 +224,13 @@ export const PDF_STOCK_CATALOG: Array<{
     sortOrder: 280,
   },
   {
+    code: "pancake_batch",
+    name: "Pancakes (20-piece batch)",
+    unit: "Batch",
+    useNotes: "When selected as a room extra: flour 0.25 kg, 4 eggs, baking powder, sugar, banana essence.",
+    sortOrder: 285,
+  },
+  {
     code: "roshi",
     name: "Roshi (prepared)",
     unit: "Number",
@@ -273,14 +280,8 @@ export async function ensureKitchenStockSeed(userId: string) {
         packInfo: item.packInfo ?? null,
         sortOrder: item.sortOrder,
       },
-      update: {
-        name: item.name,
-        unit: item.unit,
-        useNotes: item.useNotes,
-        packInfo: item.packInfo ?? null,
-        sortOrder: item.sortOrder,
-        isActive: true,
-      },
+      // Never overwrite user edits (name, unit, notes, soft-delete).
+      update: {},
     });
   }
 
@@ -310,7 +311,7 @@ export async function ensureKitchenStockSeed(userId: string) {
   return rooms;
 }
 
-type SeedLine = { stockCode: string; qty: number; notes?: string };
+type SeedLine = { stockCode: string; qty: number; notes?: string; showOnKot?: boolean };
 
 async function upsertRecipe(
   userId: string,
@@ -329,11 +330,11 @@ async function upsertRecipe(
 
   const existing = await prisma.recipe.findUnique({
     where: { userId_code: { userId, code: def.code } },
-    include: { lines: true },
+    include: { lines: { include: { stockItem: true } } },
   });
 
   if (existing) {
-    // Do not overwrite user-edited recipes; only ensure they exist.
+    // Never mutate existing recipes or lines — user edits are authoritative.
     return existing;
   }
 
@@ -351,6 +352,7 @@ async function upsertRecipe(
             stockItemId: byCode.get(l.stockCode)!,
             qtyPerServing: l.qty,
             notes: l.notes ?? null,
+            showOnKot: l.showOnKot ?? true,
           })),
       },
     },
@@ -394,14 +396,21 @@ async function ensureDefaultRecipes(userId: string) {
 
   await upsertRecipe(userId, {
     code: "room_extras",
-    name: "Room extras & fruit (base)",
+    name: "Room extras (optional items)",
     applyTo: "room_extras",
-    notes: "Edit lines for pancake/honey/etc. Order extras still drive shopping; this recipe documents Use rules.",
+    notes:
+      "These lines are the choosable extras on Breakfast orders. Toggle Show on KOT per item. Add/remove items here to configure what staff can select.",
     lines: [
-      { stockCode: "honey", qty: 1, notes: "When honey selected" },
-      { stockCode: "nutella", qty: 1, notes: "When Nutella selected" },
-      { stockCode: "cornflakes", qty: 1, notes: "When cereal selected" },
-      { stockCode: "water_bottle", qty: 1, notes: "When water bottle selected" },
+      {
+        stockCode: "pancake_batch",
+        qty: 1,
+        notes: "Triggers 20-piece pancake prep on KOT",
+        showOnKot: true,
+      },
+      { stockCode: "honey", qty: 1, notes: "When honey selected", showOnKot: true },
+      { stockCode: "nutella", qty: 1, notes: "When Nutella selected", showOnKot: true },
+      { stockCode: "cornflakes", qty: 1, notes: "When cereal selected", showOnKot: true },
+      { stockCode: "water_bottle", qty: 1, notes: "When water bottle selected", showOnKot: true },
     ],
   });
 }

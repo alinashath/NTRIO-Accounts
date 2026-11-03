@@ -63,8 +63,8 @@ export function Modal({
         aria-modal="true"
         aria-labelledby="modal-title"
         className={clsx(
-          "flex w-full flex-col overflow-hidden border border-border bg-surface",
-          "rounded-t-[var(--sheet-radius)] sm:rounded-[var(--radius)]",
+          "theme-light flex w-full flex-col overflow-hidden border border-border bg-surface",
+          "rounded-t-[var(--sheet-radius)] sm:rounded-[var(--radius-xl)]",
           isForm
             ? "h-[var(--sheet-max)] max-h-[var(--sheet-max)] sm:h-auto sm:max-h-[var(--sheet-max)]"
             : "max-h-[var(--sheet-max)]",

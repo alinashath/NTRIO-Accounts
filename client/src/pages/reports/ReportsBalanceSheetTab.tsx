@@ -2,16 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { apiFetch } from "@/api/http";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { appendProjectFilter } from "@/context/ProjectsContext";
 import { formatMoney } from "@/lib/money";
 import { type RangePreset, thisMonthRange } from "@/lib/reportPeriod";
 
 type BalanceSheetRes = {
   as_of: string;
   display_currency: string;
+  project_scoped?: boolean;
   assets: {
     total_cash: number;
     total_receivables: number;
@@ -33,6 +36,7 @@ export function ReportsBalanceSheetTab() {
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initialRange);
+  const [filterProject, setFilterProject] = useState("");
   const [stmt, setStmt] = useState<BalanceSheetRes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,17 +46,20 @@ export function ReportsBalanceSheetTab() {
     setError(null);
     setLoading(true);
     const dc = encodeURIComponent(displayCurrency);
+    const q = new URLSearchParams({
+      as_of: applied.to,
+      display_currency: displayCurrency,
+    });
+    appendProjectFilter(q, filterProject);
     try {
-      const data = await apiFetch<BalanceSheetRes>(
-        `/api/reports/balance-sheet?as_of=${encodeURIComponent(applied.to)}&display_currency=${dc}`,
-      );
+      const data = await apiFetch<BalanceSheetRes>(`/api/reports/balance-sheet?${q.toString()}`);
       setStmt(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setLoading(false);
     }
-  }, [applied.to, displayCurrency]);
+  }, [applied.to, displayCurrency, filterProject]);
 
   useEffect(() => {
     void load();
@@ -63,24 +70,35 @@ export function ReportsBalanceSheetTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">Balance sheet</h3>
-        <PeriodFilterBar
-          from={applied.from}
-          to={applied.to}
-          preset={rangePreset}
-          asOfHint
-          onApply={({ from, to, preset }) => {
-            setRangePreset(preset);
-            setApplied({ from, to });
-          }}
-          actions={
-            <ReportPdfButton
-              title="Statement of Financial Position"
-              targetRef={statementRef}
-              disabled={!stmt}
-            />
-          }
-        />
+        <h3 className="text-sm font-semibold text-foreground">
+          {stmt?.project_scoped ? "Project position" : "Balance sheet"}
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[10rem]">
+            <ProjectFilter value={filterProject} onChange={setFilterProject} />
+          </div>
+          <PeriodFilterBar
+            from={applied.from}
+            to={applied.to}
+            preset={rangePreset}
+            asOfHint
+            onApply={({ from, to, preset }) => {
+              setRangePreset(preset);
+              setApplied({ from, to });
+            }}
+            actions={
+              <ReportPdfButton
+                title={
+                  stmt?.project_scoped
+                    ? "Project Position"
+                    : "Statement of Financial Position"
+                }
+                targetRef={statementRef}
+                disabled={!stmt}
+              />
+            }
+          />
+        </div>
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}

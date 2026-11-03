@@ -107,22 +107,22 @@ export function AccountStatementPage() {
   const hasMore = data != null && items.length < data.total;
 
   if (!id) {
-    return <p className="text-sm text-slate-600">Missing account.</p>;
+    return <p className="text-sm text-muted-label">Missing account.</p>;
   }
 
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link to="/accounts/ledger" className="text-sm font-medium text-sky-700 hover:underline">
+          <Link to="/accounts/ledger" className="text-sm font-medium text-action hover:underline">
             ← Accounts
           </Link>
           {loading && !data ? (
-            <p className="mt-2 text-slate-500">Loading…</p>
+            <p className="mt-2 text-muted-label">Loading…</p>
           ) : data ? (
             <>
-              <h2 className="mt-1 text-lg font-bold text-slate-900 md:text-xl">Statement — {data.account.name}</h2>
-              <p className="text-sm text-slate-600">
+              <h2 className="mt-1 text-lg font-bold text-ink md:text-xl">Statement — {data.account.name}</h2>
+              <p className="text-sm text-muted-label">
                 {data.account.type.toUpperCase()} · {ccy} · Opening{" "}
                 <span className="tabular-nums">{formatMoney(data.opening_balance, ccy)}</span> · Current{" "}
                 <span className="tabular-nums">{formatMoney(data.account.balance, ccy)}</span>
@@ -135,14 +135,14 @@ export function AccountStatementPage() {
         </Button>
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Card>
-        <h3 className="text-sm font-semibold text-slate-900">Activity</h3>
+        <h3 className="text-sm font-semibold text-ink">Activity</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted-label">
                 <th className="py-2 pr-2">Date</th>
                 <th className="py-2 pr-2">Type</th>
                 <th className="py-2 pr-2">Description</th>
@@ -154,33 +154,33 @@ export function AccountStatementPage() {
             <tbody>
               {!loading && items.length === 0 ? (
                 <tr>
-                  <td className="py-6 text-slate-500" colSpan={6}>
+                  <td className="py-6 text-muted-label" colSpan={6}>
                     No ledger lines yet (only opening balance).
                   </td>
                 </tr>
               ) : (
                 items.map((r) => (
-                  <tr key={`${r.kind}-${r.id}`} className="border-b border-slate-100">
-                    <td className="whitespace-nowrap py-2 pr-2 text-slate-700">{r.date}</td>
+                  <tr key={`${r.kind}-${r.id}`} className="border-b border-border">
+                    <td className="whitespace-nowrap py-2 pr-2 text-body">{r.date}</td>
                     <td className="py-2 pr-2">
                       <span
                         className={
                           r.kind === "adjustment"
-                            ? "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900"
-                            : "text-slate-600"
+                            ? "rounded bg-neutral-bg px-1.5 py-0.5 text-xs font-semibold text-action"
+                            : "text-muted-label"
                         }
                       >
                         {kindLabel(r.kind)}
                       </span>
                     </td>
-                    <td className="max-w-[12rem] truncate py-2 pr-2 text-slate-800">{r.description ?? "—"}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums text-emerald-700">
+                    <td className="max-w-[12rem] truncate py-2 pr-2 text-ink">{r.description ?? "—"}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums text-credit">
                       {r.money_in != null ? formatMoney(r.money_in, ccy) : "—"}
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums text-orange-700">
+                    <td className="py-2 pr-2 text-right tabular-nums text-debit">
                       {r.money_out != null ? formatMoney(r.money_out, ccy) : "—"}
                     </td>
-                    <td className="py-2 text-right font-medium tabular-nums text-slate-900">
+                    <td className="py-2 text-right font-medium tabular-nums text-ink">
                       {formatMoney(r.running_balance, ccy)}
                     </td>
                   </tr>
@@ -247,10 +247,10 @@ function ModalAdj({
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40 p-3 sm:items-center">
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[var(--radius-md)] border border-border bg-card p-3">
-        <h3 className="text-base font-semibold text-slate-900">Balance adjustment</h3>
+        <h3 className="text-base font-semibold text-ink">Balance adjustment</h3>
         <form className="mt-4 space-y-3" onSubmit={onSubmit}>
           <label className="block text-sm">
-            <span className="text-slate-600">Date</span>
+            <span className="text-muted-label">Date</span>
             <input
               type="date"
               className="mt-1 block h-8 w-full rounded-[var(--radius-md)] border border-border px-2.5 text-sm"

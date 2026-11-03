@@ -8,11 +8,13 @@ import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
 import {
   computeIngredientNeeds,
   computeKitchenPrep,
+  computeKotExtras,
   computeServerSummary,
   isOutsideNormalWindow,
   normalServingTimes,
   type ExtrasLike,
   type OrderLike,
+  type RecipeNeedSource,
 } from "../services/breakfastRequirements.js";
 import {
   applyKitchenUsageForDate,
@@ -104,18 +106,196 @@ function toOrderLikes(
   }));
 }
 
+function parseSelectedLines(raw: unknown): Array<{ stockItemId: string; quantity: number }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ stockItemId: string; quantity: number }> = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as Record<string, unknown>;
+    const id =
+      typeof rec.stock_item_id === "string"
+        ? rec.stock_item_id
+        : typeof rec.stockItemId === "string"
+          ? rec.stockItemId
+          : null;
+    const qty = Number(rec.quantity);
+    if (!id || !(qty > 0)) continue;
+    out.push({ stockItemId: id, quantity: qty });
+  }
+  return out;
+}
+
 function toExtrasLikes(
   extras: Awaited<ReturnType<typeof loadExtrasForDate>>,
 ): ExtrasLike[] {
-  return extras.map((e) => ({
-    roomNumber: e.room.number,
-    fruits: e.fruits,
-    pancake: e.pancake,
-    honey: e.honey,
-    nutella: e.nutella,
-    cereal: e.cereal,
-    waterBottle: e.waterBottle,
+  return extras.map((e) => {
+    const selectedLines = parseSelectedLines(e.selectedLines);
+    return {
+      roomNumber: e.room.number,
+      fruits: e.fruits,
+      selectedLines,
+      selectedItemIds: e.selectedItemIds?.length
+        ? e.selectedItemIds
+        : selectedLines.map((l) => l.stockItemId),
+      pancake: e.pancake,
+      honey: e.honey,
+      nutella: e.nutella,
+      cereal: e.cereal,
+      waterBottle: e.waterBottle,
+    };
+  });
+}
+
+async function loadRoomExtraOptions(userId: string): Promise<{
+  options: Array<{
+    stock_item_id: string;
+    name: string;
+    unit: string;
+    code: string | null;
+    qty_per_serving: number;
+    notes: string | null;
+    show_on_kot: boolean;
+  }>;
+  recipes: RecipeNeedSource[];
+}> {
+  const recipes = await prisma.recipe.findMany({
+    where: { userId, isActive: true },
+    include: {
+      lines: { include: { stockItem: true } },
+    },
+  });
+  const sources: RecipeNeedSource[] = recipes.map((r) => ({
+    apply_to: r.applyTo as RecipeNeedSource["apply_to"],
+    lines: r.lines
+      .filter((l) => l.stockItem.isActive)
+      .map((l) => ({
+        stock_item_id: l.stockItemId,
+        code: l.stockItem.code,
+        name: l.stockItem.name,
+        unit: l.stockItem.unit,
+        qty_per_serving: dec(l.qtyPerServing),
+        show_on_kot: l.showOnKot,
+      })),
   }));
+  const seen = new Set<string>();
+  const options = [];
+  for (const r of recipes.filter((x) => x.applyTo === "room_extras")) {
+    for (const l of r.lines) {
+      if (!l.stockItem.isActive || seen.has(l.stockItemId)) continue;
+      seen.add(l.stockItemId);
+      options.push({
+        stock_item_id: l.stockItemId,
+        name: l.stockItem.name,
+        unit: l.stockItem.unit,
+        code: l.stockItem.code,
+        qty_per_serving: dec(l.qtyPerServing),
+        notes: l.notes,
+        show_on_kot: l.showOnKot,
+      });
+    }
+  }
+  options.sort((a, b) => a.name.localeCompare(b.name));
+  return { options, recipes: sources };
+}
+
+/** Map selected stock codes back onto legacy boolean columns for prep/compat. */
+function legacyFlagsFromSelected(
+  selectedIds: string[],
+  options: Array<{ stock_item_id: string; code: string | null; name?: string }>,
+) {
+  const selected = selectedIds
+    .map((id) => options.find((o) => o.stock_item_id === id))
+    .filter((o): o is NonNullable<typeof o> => !!o);
+  const codes = new Set(selected.map((o) => o.code).filter((c): c is string => !!c));
+  return {
+    pancake:
+      codes.has("pancake") ||
+      codes.has("pancake_batch") ||
+      codes.has("pancakes") ||
+      selected.some((o) => (o.name ?? "").toLowerCase().includes("pancake")),
+    honey: codes.has("honey"),
+    nutella: codes.has("nutella"),
+    cereal: codes.has("cornflakes") || codes.has("cereal"),
+    waterBottle: codes.has("water_bottle"),
+  };
+}
+
+function mapExtrasDto(
+  ex: {
+    id: string;
+    fruits: string[];
+    selectedItemIds?: string[];
+    selectedLines?: unknown;
+    pancake: boolean;
+    honey: boolean;
+    nutella: boolean;
+    cereal: boolean;
+    waterBottle: boolean;
+  } | null,
+  options: Array<{
+    stock_item_id: string;
+    name: string;
+    unit: string;
+    code: string | null;
+    show_on_kot: boolean;
+  }> = [],
+) {
+  if (!ex) {
+    return {
+      id: null as string | null,
+      fruits: [] as string[],
+      selected_item_ids: [] as string[],
+      selected_lines: [] as Array<{
+        stock_item_id: string;
+        quantity: number;
+        name?: string;
+        unit?: string;
+        code?: string | null;
+        show_on_kot?: boolean;
+      }>,
+      pancake: false,
+      honey: false,
+      nutella: false,
+      cereal: false,
+      water_bottle: false,
+    };
+  }
+  const byId = new Map(options.map((o) => [o.stock_item_id, o]));
+  let lines = parseSelectedLines(ex.selectedLines).map((l) => {
+    const opt = byId.get(l.stockItemId);
+    return {
+      stock_item_id: l.stockItemId,
+      quantity: l.quantity,
+      name: opt?.name,
+      unit: opt?.unit,
+      code: opt?.code ?? null,
+      show_on_kot: opt?.show_on_kot,
+    };
+  });
+  if (!lines.length && (ex.selectedItemIds?.length ?? 0) > 0) {
+    lines = (ex.selectedItemIds ?? []).map((id) => {
+      const opt = byId.get(id);
+      return {
+        stock_item_id: id,
+        quantity: 1,
+        name: opt?.name,
+        unit: opt?.unit,
+        code: opt?.code ?? null,
+        show_on_kot: opt?.show_on_kot,
+      };
+    });
+  }
+  return {
+    id: ex.id,
+    fruits: ex.fruits,
+    selected_item_ids: lines.map((l) => l.stock_item_id),
+    selected_lines: lines,
+    pancake: ex.pancake,
+    honey: ex.honey,
+    nutella: ex.nutella,
+    cereal: ex.cereal,
+    water_bottle: ex.waterBottle,
+  };
 }
 
 kitchenRouter.post(
@@ -202,10 +382,11 @@ kitchenRouter.get(
     const date = parseYmd(dateStr);
     const rooms = await ensureKitchenStockSeed(userId);
 
-    const [roomDays, orders, extras] = await Promise.all([
+    const [roomDays, orders, extras, extraCatalog] = await Promise.all([
       prisma.roomDay.findMany({ where: { userId, date } }),
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
+      loadRoomExtraOptions(userId),
     ]);
 
     const dayByRoom = new Map(roomDays.map((d) => [d.roomId, d]));
@@ -214,6 +395,7 @@ kitchenRouter.get(
     res.json({
       date: dateStr,
       serving_times: normalServingTimes(),
+      extra_options: extraCatalog.options,
       rooms: rooms.map((r) => {
         const day = dayByRoom.get(r.id);
         const ex = extrasByRoom.get(r.id);
@@ -225,25 +407,7 @@ kitchenRouter.get(
           notes: day?.notes ?? null,
           breakfast_participants: roomOrders.filter((o) => o.status !== "cancelled").length,
           orders: roomOrders.map(mapOrder),
-          extras: ex
-            ? {
-                id: ex.id,
-                fruits: ex.fruits,
-                pancake: ex.pancake,
-                honey: ex.honey,
-                nutella: ex.nutella,
-                cereal: ex.cereal,
-                water_bottle: ex.waterBottle,
-              }
-            : {
-                id: null,
-                fruits: [] as string[],
-                pancake: false,
-                honey: false,
-                nutella: false,
-                cereal: false,
-                water_bottle: false,
-              },
+          extras: mapExtrasDto(ex ?? null, extraCatalog.options),
         };
       }),
     });
@@ -485,15 +649,23 @@ kitchenRouter.delete(
   }),
 );
 
+const extrasLineSchema = z.object({
+  stock_item_id: z.string().uuid(),
+  quantity: z.number().positive(),
+});
+
 const extrasSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   room_id: z.string().uuid(),
   fruits: z.array(fruitEnum).min(0).max(3),
-  pancake: z.boolean(),
-  honey: z.boolean(),
-  nutella: z.boolean(),
-  cereal: z.boolean(),
-  water_bottle: z.boolean(),
+  selected_lines: z.array(extrasLineSchema).default([]),
+  /** Legacy — converted to qty 1 lines when selected_lines empty. */
+  selected_item_ids: z.array(z.string().uuid()).optional(),
+  pancake: z.boolean().optional(),
+  honey: z.boolean().optional(),
+  nutella: z.boolean().optional(),
+  cereal: z.boolean().optional(),
+  water_bottle: z.boolean().optional(),
 });
 
 kitchenRouter.put(
@@ -512,6 +684,31 @@ kitchenRouter.put(
       res.status(404).json({ error: "Room not found" });
       return;
     }
+    const { options } = await loadRoomExtraOptions(userId);
+    const optionIds = new Set(options.map((o) => o.stock_item_id));
+    const merged = new Map<string, number>();
+    const incoming =
+      body.selected_lines.length > 0
+        ? body.selected_lines
+        : (body.selected_item_ids ?? []).map((id) => ({ stock_item_id: id, quantity: 1 }));
+    for (const line of incoming) {
+      if (!optionIds.has(line.stock_item_id) || !(line.quantity > 0)) continue;
+      merged.set(line.stock_item_id, (merged.get(line.stock_item_id) ?? 0) + line.quantity);
+    }
+    const selectedLines = [...merged.entries()].map(([stock_item_id, quantity]) => ({
+      stock_item_id,
+      quantity,
+    }));
+    const selectedIds = selectedLines.map((l) => l.stock_item_id);
+    const fromSelection = legacyFlagsFromSelected(selectedIds, options);
+    const flags = {
+      pancake: fromSelection.pancake,
+      honey: fromSelection.honey,
+      nutella: fromSelection.nutella,
+      cereal: fromSelection.cereal,
+      waterBottle: fromSelection.waterBottle,
+    };
+
     const date = parseYmd(body.date);
     const row = await prisma.roomDayExtras.upsert({
       where: { userId_roomId_date: { userId, roomId: body.room_id, date } },
@@ -520,34 +717,32 @@ kitchenRouter.put(
         roomId: body.room_id,
         date,
         fruits: body.fruits,
-        pancake: body.pancake,
-        honey: body.honey,
-        nutella: body.nutella,
-        cereal: body.cereal,
-        waterBottle: body.water_bottle,
+        selectedItemIds: selectedIds,
+        selectedLines,
+        pancake: flags.pancake,
+        honey: flags.honey,
+        nutella: flags.nutella,
+        cereal: flags.cereal,
+        waterBottle: flags.waterBottle,
       },
       update: {
         fruits: body.fruits,
-        pancake: body.pancake,
-        honey: body.honey,
-        nutella: body.nutella,
-        cereal: body.cereal,
-        waterBottle: body.water_bottle,
+        selectedItemIds: selectedIds,
+        selectedLines,
+        pancake: flags.pancake,
+        honey: flags.honey,
+        nutella: flags.nutella,
+        cereal: flags.cereal,
+        waterBottle: flags.waterBottle,
       },
     });
     const dateStr = ymd(row.date);
     await applyKitchenUsageForDate(userId, dateStr);
     const shopping = await shoppingSummaryForDate(userId, dateStr);
     res.json({
-      id: row.id,
+      ...mapExtrasDto(row, options),
       room_id: row.roomId,
       date: dateStr,
-      fruits: row.fruits,
-      pancake: row.pancake,
-      honey: row.honey,
-      nutella: row.nutella,
-      cereal: row.cereal,
-      water_bottle: row.waterBottle,
       shopping,
     });
   }),
@@ -709,13 +904,26 @@ kitchenRouter.get(
     const date = parseYmd(dateStr);
     await ensureKitchenStockSeed(userId);
 
-    const [orders, extras] = await Promise.all([
+    const [orders, extras, extraCatalog] = await Promise.all([
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
+      loadRoomExtraOptions(userId),
     ]);
     const orderLikes = toOrderLikes(orders);
     const extrasLikes = toExtrasLikes(extras);
-    const kitchen = computeKitchenPrep(orderLikes, extrasLikes);
+    const pancakeIds = new Set(
+      extraCatalog.options
+        .filter(
+          (o) =>
+            o.code === "pancake" ||
+            o.code === "pancake_batch" ||
+            o.code === "pancakes" ||
+            o.name.toLowerCase().includes("pancake"),
+        )
+        .map((o) => o.stock_item_id),
+    );
+    const kitchen = computeKitchenPrep(orderLikes, extrasLikes, pancakeIds);
+    const kotExtras = computeKotExtras(extrasLikes, extraCatalog.recipes);
     const server = computeServerSummary(dateStr, orderLikes);
 
     const schedule = orderLikes
@@ -736,6 +944,13 @@ kitchenRouter.get(
       server_summary: server,
       kitchen_plan: {
         ...kitchen,
+        extras: kotExtras.map((e) => ({
+          name: e.name,
+          unit: e.unit,
+          code: e.code,
+          quantity: e.quantity,
+          rooms: e.rooms,
+        })),
         schedule,
       },
     });
@@ -750,24 +965,34 @@ kitchenRouter.get(
     const date = parseYmd(dateStr);
     await ensureKitchenStockSeed(userId);
 
-    const [orders, extras, items] = await Promise.all([
+    const [orders, extras, items, extraCatalog] = await Promise.all([
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
       prisma.stockItem.findMany({ where: { userId, isActive: true } }),
+      loadRoomExtraOptions(userId),
     ]);
 
-    const needs = computeIngredientNeeds(toOrderLikes(orders), toExtrasLikes(extras));
+    const byId = new Map(items.map((i) => [i.id, i]));
     const byCode = new Map(items.filter((i) => i.code).map((i) => [i.code!, i]));
 
-    const lines = [...needs.entries()]
-      .map(([code, quantity]) => {
-        const item = byCode.get(code);
+    const needs = computeIngredientNeeds(
+      toOrderLikes(orders),
+      toExtrasLikes(extras),
+      extraCatalog.recipes,
+    );
+
+    const lines = needs
+      .map((need) => {
+        const item =
+          (need.stock_item_id ? byId.get(need.stock_item_id) : undefined) ??
+          (need.code ? byCode.get(need.code) : undefined);
+        const code = item?.code ?? need.code ?? "custom";
         return {
           code,
-          stock_item_id: item?.id ?? null,
-          name: item?.name ?? code,
+          stock_item_id: item?.id ?? need.stock_item_id,
+          name: item?.name ?? code.replace(/_/g, " "),
           unit: item?.unit ?? "",
-          required: quantity,
+          required: need.quantity,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));

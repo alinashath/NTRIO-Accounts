@@ -89,6 +89,7 @@ model User {
   settings            UserSettings?
   fxDailyRates        FxDailyRate[]
   accountBalanceAdjustments AccountBalanceAdjustment[]
+  projects            Project[]
   rooms               Room[]
   roomDays            RoomDay[]
   roomStays           RoomStay[]
@@ -109,11 +110,28 @@ model UserSettings {
   globalUsdMvrRate Decimal  @default(20) @map("global_usd_mvr_rate") @db.Decimal(18, 8)
   /// Wordmark shown in TopBar / Hub (e.g. NTRIO).
   organizationTitle String  @default("NTRIO") @map("organization_title") @db.VarChar(64)
+  /// When true, project tagging and filters are available across accounts.
+  projectsEnabled  Boolean  @default(false) @map("projects_enabled")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
+}
+
+/// Optional named project for tagging income/expense (Settings → Projects).
+model Project {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomeEntries  IncomeEntry[]
+  expenseEntries ExpenseEntry[]
+
+  @@index([userId])
+  @@map("projects")
 }
 
 /// Sparse daily USD↔MVR rate history. A rate on date D applies until the next saved rate.
@@ -277,6 +295,7 @@ model IncomeEntry {
   currency       String    @default("USD")
   description    String?
   categoryId     String?   @map("category_id") @db.Uuid
+  projectId      String?   @map("project_id") @db.Uuid
   accountId      String?   @map("account_id") @db.Uuid
   source         String?
   notes          String?
@@ -292,6 +311,7 @@ model IncomeEntry {
 
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   category  Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  project   Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   account   Account?           @relation("IncomeAccount", fields: [accountId], references: [id], onDelete: Restrict)
   contact   Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
   recurring RecurringSchedule? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
@@ -300,6 +320,7 @@ model IncomeEntry {
   @@index([userId, receivedDate])
   @@index([accountId])
   @@index([contactId])
+  @@index([projectId])
   @@map("income_entries")
 }
 
@@ -315,6 +336,7 @@ model ExpenseEntry {
   paidDate       DateTime? @map("paid_date") @db.Date
   description    String?
   categoryId     String?   @map("category_id") @db.Uuid
+  projectId      String?   @map("project_id") @db.Uuid
   accountId      String?   @map("account_id") @db.Uuid
   debtId         String?   @map("debt_id") @db.Uuid
   merchant       String?
@@ -335,6 +357,7 @@ model ExpenseEntry {
 
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   category  Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  project   Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   account   Account?           @relation("ExpenseAccount", fields: [accountId], references: [id], onDelete: Restrict)
   debt      Debt?              @relation("ExpenseDebt", fields: [debtId], references: [id], onDelete: Restrict)
   contact   Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
@@ -346,6 +369,7 @@ model ExpenseEntry {
   @@index([debtId])
   @@index([contactId])
   @@index([userId, payLater])
+  @@index([projectId])
   @@map("expense_entries")
 }
 
@@ -562,6 +586,10 @@ model RoomDayExtras {
   date         DateTime @db.Date
   /// Subset of: watermelon, apple, papaya, orange (2–3 types)
   fruits       String[] @default([])
+  /// Stock item ids selected from room_extras recipe lines (legacy; prefer selectedLines).
+  selectedItemIds String[] @default([]) @map("selected_item_ids")
+  /// [{ stock_item_id, quantity }] — room extras with qty in stock units.
+  selectedLines Json @default("[]") @map("selected_lines")
   pancake      Boolean  @default(false)
   honey        Boolean  @default(false)
   nutella      Boolean  @default(false)
@@ -639,6 +667,8 @@ model RecipeLine {
   /// Quantity of stock item per one serving / one room-extras application
   qtyPerServing Decimal @map("qty_per_serving") @db.Decimal(15, 4)
   notes       String?
+  /// When true and this extra is selected for a room, include it on KOT / kitchen plan.
+  showOnKot   Boolean @default(true) @map("show_on_kot")
 
   recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)

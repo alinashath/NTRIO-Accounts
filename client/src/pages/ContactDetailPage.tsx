@@ -140,8 +140,8 @@ export function ContactDetailPage() {
 
   if (!id) {
     return (
-      <p className="text-sm text-red-600">
-        Missing contact id. <Link to="/accounts/contacts" className="font-medium text-sky-700 underline">Back to contacts</Link>
+      <p className="text-sm text-debit">
+        Missing contact id. <Link to="/accounts/contacts" className="font-medium text-action underline">Back to contacts</Link>
       </p>
     );
   }
@@ -149,53 +149,53 @@ export function ContactDetailPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       <div>
-        <Link to="/accounts/contacts" className="text-sm font-medium text-sky-700 hover:underline">
+        <Link to="/accounts/contacts" className="text-sm font-medium text-action hover:underline">
           ← Contacts
         </Link>
-        <h2 className="mt-1 text-lg font-bold text-slate-900 md:text-xl">
+        <h2 className="mt-1 text-lg font-bold text-ink md:text-xl">
           {loading ? "Loading…" : statementData ? statementData.contact.name : "Contact"}
         </h2>
         {statementData ? (
-          <p className="text-sm capitalize text-slate-600">{statementData.contact.kind} · Statement</p>
+          <p className="text-sm capitalize text-muted-label">{statementData.contact.kind} · Statement</p>
         ) : null}
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       {loading ? (
-        <p className="text-sm text-slate-600">Loading…</p>
+        <p className="text-sm text-muted-label">Loading…</p>
       ) : statementData ? (
         <div className="space-y-4">
           <Card className="p-4">
-            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <div className="rounded-lg border border-border bg-neutral-bg px-3 py-2 text-sm text-body">
               <p className="capitalize">
-                <span className="font-medium text-slate-900">Type:</span> {statementData.contact.kind}
+                <span className="font-medium text-ink">Type:</span> {statementData.contact.kind}
               </p>
               {statementData.contact.email ? (
                 <p>
-                  <span className="font-medium text-slate-900">Email:</span> {statementData.contact.email}
+                  <span className="font-medium text-ink">Email:</span> {statementData.contact.email}
                 </p>
               ) : null}
               {statementData.contact.phone ? (
                 <p>
-                  <span className="font-medium text-slate-900">Phone:</span> {statementData.contact.phone}
+                  <span className="font-medium text-ink">Phone:</span> {statementData.contact.phone}
                 </p>
               ) : null}
               {statementData.contact.tgst_number ? (
                 <p>
-                  <span className="font-medium text-slate-900">TGST:</span> {statementData.contact.tgst_number}
+                  <span className="font-medium text-ink">TGST:</span> {statementData.contact.tgst_number}
                 </p>
               ) : null}
               {statementData.contact.notes ? (
-                <p className="mt-1 text-xs text-slate-600">{statementData.contact.notes}</p>
+                <p className="mt-1 text-xs text-muted-label">{statementData.contact.notes}</p>
               ) : null}
             </div>
           </Card>
 
           {statementData.contact.kind === "vendor" && pendingVendorBillIds.length > 0 ? (
-            <Card className="border-amber-200 bg-amber-50/80 p-4 space-y-3">
+            <Card className="border-border bg-[var(--surface-elevated)] p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-amber-950">Pending payments (unpaid bills)</p>
+                <p className="text-sm font-semibold text-ink">Pending payments (unpaid bills)</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -210,9 +210,9 @@ export function ContactDetailPage() {
                   </Button>
                 </div>
               </div>
-              <div className="max-h-48 overflow-auto rounded border border-amber-200/80 bg-white">
+              <div className="max-h-48 overflow-auto rounded border border-border bg-surface">
                 <table className="min-w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-amber-100/90 text-amber-950">
+                  <thead className="sticky top-0 bg-neutral-bg text-ink">
                     <tr>
                       <th className="w-10 px-2 py-1.5" aria-label="Select" />
                       <th className="px-2 py-1.5">Bill date</th>
@@ -224,11 +224,11 @@ export function ContactDetailPage() {
                     {statementData.lines
                       .filter((l) => l.kind === "expense" && l.pay_later)
                       .map((ln) => (
-                        <tr key={ln.id} className="border-t border-amber-100">
+                        <tr key={ln.id} className="border-t border-border">
                           <td className="px-2 py-1.5 align-middle">
                             <input
                               type="checkbox"
-                              className="rounded border-slate-300"
+                              className="rounded border-border"
                               checked={selectedPendingIds.includes(ln.id)}
                               onChange={() => {
                                 setSelectedPendingIds((prev) =>
@@ -238,8 +238,8 @@ export function ContactDetailPage() {
                               aria-label={`Select bill ${ln.description ?? ln.id}`}
                             />
                           </td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-slate-700">{ln.bill_date ?? ln.date}</td>
-                          <td className="max-w-[12rem] truncate px-2 py-1.5 text-slate-800">{ln.description ?? "—"}</td>
+                          <td className="whitespace-nowrap px-2 py-1.5 text-body">{ln.bill_date ?? ln.date}</td>
+                          <td className="max-w-[12rem] truncate px-2 py-1.5 text-ink">{ln.description ?? "—"}</td>
                           <td className="px-2 py-1.5 text-right">
                             <DisplayAmountCell
                               amount={ln.amount}
@@ -271,10 +271,10 @@ export function ContactDetailPage() {
                 />
               </div>
               {selectedPendingIds.length > 0 && !selectionBillCurrency ? (
-                <p className="text-xs text-red-700">Unpaid bills in different currencies cannot be settled together.</p>
+                <p className="text-xs text-debit">Unpaid bills in different currencies cannot be settled together.</p>
               ) : null}
               {selectedPendingIds.length > 0 && selectionBillCurrency && settleAccountOptions.length === 0 ? (
-                <p className="text-xs text-amber-900">
+                <p className="text-xs text-action">
                   No {selectionBillCurrency} account found. Add a bank or cash account in that currency to record
                   payment.
                 </p>
@@ -299,7 +299,7 @@ export function ContactDetailPage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="border border-amber-300"
+                  className="border border-border"
                   disabled={
                     mergeBusy ||
                     settleBusy ||
@@ -311,7 +311,7 @@ export function ContactDetailPage() {
                   {mergeBusy ? "Merging…" : "Merge into one bill"}
                 </Button>
               </div>
-              <p className="text-[11px] text-amber-900/90">
+              <p className="text-[11px] text-muted-label">
                 Merge combines several pay-later lines into one unpaid bill (same currency). Use after you receive a
                 single invoice covering multiple entries.
               </p>
@@ -319,12 +319,12 @@ export function ContactDetailPage() {
           ) : statementData.contact.kind === "vendor" &&
             statementData.lines.length > 0 &&
             pendingVendorBillIds.length === 0 ? (
-            <p className="text-xs text-slate-500">No unpaid pay-later bills for this vendor.</p>
+            <p className="text-xs text-muted-label">No unpaid pay-later bills for this vendor.</p>
           ) : null}
 
           {!statementData.lines.length ? (
             <Card>
-              <p className="p-4 text-center text-sm text-slate-500">
+              <p className="p-4 text-center text-sm text-muted-label">
                 No income or spend entries linked to this contact yet.
               </p>
             </Card>
@@ -332,7 +332,7 @@ export function ContactDetailPage() {
             <Card className="overflow-hidden p-0">
               <div className="max-h-[min(70vh,560px)] overflow-auto">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="sticky top-0 border-b border-border bg-neutral-bg text-xs uppercase text-muted-label">
                     <tr>
                       <th className="px-3 py-2">Type</th>
                       <th className="px-3 py-2">Date</th>
@@ -344,31 +344,31 @@ export function ContactDetailPage() {
                   </thead>
                   <tbody>
                     {statementData.lines.map((ln) => (
-                      <tr key={`${ln.kind}-${ln.id}`} className="border-b border-slate-100">
+                      <tr key={`${ln.kind}-${ln.id}`} className="border-b border-border">
                         <td className="px-3 py-2 capitalize">{ln.kind}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-700">
+                        <td className="whitespace-nowrap px-3 py-2 text-body">
                           {ln.date}
                           {ln.kind === "expense" && ln.bill_date && ln.bill_date !== ln.date ? (
-                            <span className="block text-[10px] font-normal normal-case text-slate-400">
+                            <span className="block text-[10px] font-normal normal-case text-muted-label">
                               Bill {ln.bill_date}
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{ln.category_name ?? "—"}</td>
-                        <td className="max-w-[12rem] px-3 py-2 text-slate-800">
+                        <td className="px-3 py-2 text-muted-label">{ln.category_name ?? "—"}</td>
+                        <td className="max-w-[12rem] px-3 py-2 text-ink">
                           <span className="truncate block">{ln.description ?? "—"}</span>
                           {ln.kind === "expense" && ln.pay_later ? (
-                            <span className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                            <span className="mt-0.5 inline-block rounded bg-neutral-bg px-1.5 py-0.5 text-[10px] font-semibold text-action">
                               Unpaid
                             </span>
                           ) : null}
                           {ln.kind === "income" && ln.pending_receivable ? (
-                            <span className="mt-0.5 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-900">
+                            <span className="mt-0.5 inline-block rounded bg-credit-bg px-1.5 py-0.5 text-[10px] font-semibold text-credit">
                               Pending receipt
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">{ln.via}</td>
+                        <td className="px-3 py-2 text-muted-label">{ln.via}</td>
                         <td className="px-3 py-2 text-right">
                           <DisplayAmountCell
                             amount={ln.amount}
@@ -387,7 +387,7 @@ export function ContactDetailPage() {
           )}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">Nothing to show.</p>
+        <p className="text-sm text-muted-label">Nothing to show.</p>
       )}
     </div>
   );

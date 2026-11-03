@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { convertWithUsdMvrRate } from "../lib/displayFx.js";
 import { loadFxRateResolver } from "../lib/fxRates.js";
+import { parseProjectScope, projectWhereClause } from "../lib/projectFilter.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import {
@@ -66,6 +67,8 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = categoryDetailQuery.parse(req.query);
+    const projectScope = parseProjectScope(req.query);
+    const projectClause = projectWhereClause(projectScope);
     const from = new Date(`${q.from}T00:00:00Z`);
     const to = new Date(`${q.to}T00:00:00Z`);
     const displayCurrency = q.display_currency ?? null;
@@ -157,6 +160,7 @@ reportsRouter.get(
               voidedAt: null,
               date: { gte: sliceFrom, lte: sliceTo },
               ...catFilter,
+              ...projectClause,
             },
             include: { account: true },
           });
@@ -169,6 +173,7 @@ reportsRouter.get(
               voidedAt: null,
               billDate: { gte: sliceFrom, lte: sliceTo },
               ...catFilter,
+              ...projectClause,
             },
             include: { account: true, debt: true },
           });
@@ -203,6 +208,7 @@ reportsRouter.get(
           voidedAt: null,
           date: { gte: from, lte: to },
           ...catFilter,
+          ...projectClause,
         },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         take: 200,
@@ -227,6 +233,7 @@ reportsRouter.get(
           voidedAt: null,
           billDate: { gte: from, lte: to },
           ...catFilter,
+          ...projectClause,
         },
         orderBy: [{ billDate: "desc" }, { createdAt: "desc" }],
         take: 200,
@@ -263,6 +270,8 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = rangeQuery.parse(req.query);
+    const projectScope = parseProjectScope(req.query);
+    const projectClause = projectWhereClause(projectScope);
     const displayCurrency = z
       .preprocess(
         (v) => (Array.isArray(v) ? v[0] : v),
@@ -272,7 +281,14 @@ reportsRouter.get(
     const dateBasis = parseDateBasis(req.query.date_basis);
 
     if (displayCurrency) {
-      const stmt = await buildIncomeStatement(userId, q.from, q.to, displayCurrency, dateBasis);
+      const stmt = await buildIncomeStatement(
+        userId,
+        q.from,
+        q.to,
+        displayCurrency,
+        dateBasis,
+        projectScope,
+      );
       res.json(stmt);
       return;
     }
@@ -288,6 +304,7 @@ reportsRouter.get(
         : { receivedDate: { not: null, gte: from, lte: to } }),
       ...(q.account_id ? { accountId: q.account_id } : {}),
       ...(q.category_id ? { categoryId: q.category_id } : {}),
+      ...projectClause,
     };
     const expenseWhere: Prisma.ExpenseEntryWhereInput = {
       userId,
@@ -298,6 +315,7 @@ reportsRouter.get(
         : { paidDate: { not: null, gte: from, lte: to } }),
       ...(q.account_id ? { accountId: q.account_id } : {}),
       ...(q.category_id ? { categoryId: q.category_id } : {}),
+      ...projectClause,
     };
     const [incomeAgg, expenseAgg] = await Promise.all([
       prisma.incomeEntry.aggregate({ where: incomeWhere, _sum: { amount: true } }),
@@ -328,6 +346,7 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = rangeQuery.parse(req.query);
+    const projectScope = parseProjectScope(req.query);
     const displayCurrency = z
       .preprocess(
         (v) => (Array.isArray(v) ? v[0] : v),
@@ -337,7 +356,14 @@ reportsRouter.get(
     const dateBasis = parseDateBasis(req.query.date_basis);
 
     const dc = displayCurrency ?? "USD";
-    const stmt = await buildCashFlowStatement(userId, q.from, q.to, dc, dateBasis);
+    const stmt = await buildCashFlowStatement(
+      userId,
+      q.from,
+      q.to,
+      dc,
+      dateBasis,
+      projectScope,
+    );
     res.json(stmt);
   }),
 );
@@ -347,6 +373,7 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const asOf = z.object({ as_of: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+    const projectScope = parseProjectScope(req.query);
     const displayCurrency = z
       .preprocess(
         (v) => (Array.isArray(v) ? v[0] : v),
@@ -354,7 +381,12 @@ reportsRouter.get(
       )
       .parse(req.query.display_currency);
 
-    const stmt = await buildBalanceSheet(userId, asOf.as_of, displayCurrency ?? "USD");
+    const stmt = await buildBalanceSheet(
+      userId,
+      asOf.as_of,
+      displayCurrency ?? "USD",
+      projectScope,
+    );
     res.json(stmt);
   }),
 );
@@ -364,6 +396,7 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const asOf = z.object({ as_of: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+    const projectScope = parseProjectScope(req.query);
     const displayCurrency = z
       .preprocess(
         (v) => (Array.isArray(v) ? v[0] : v),
@@ -371,10 +404,16 @@ reportsRouter.get(
       )
       .parse(req.query.display_currency);
 
-    const stmt = await buildBalanceSheet(userId, asOf.as_of, displayCurrency ?? "USD");
+    const stmt = await buildBalanceSheet(
+      userId,
+      asOf.as_of,
+      displayCurrency ?? "USD",
+      projectScope,
+    );
     res.json({
       as_of: stmt.as_of,
       display_currency: stmt.display_currency,
+      project_scoped: stmt.project_scoped,
       cash_and_accounts: stmt.cash_and_accounts,
       outstanding_i_owe: stmt.outstanding_i_owe,
       outstanding_owed_to_me: stmt.outstanding_owed_to_me,
@@ -389,6 +428,8 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const q = rangeQuery.parse(req.query);
+    const projectScope = parseProjectScope(req.query);
+    const projectClause = projectWhereClause(projectScope);
     const from = new Date(`${q.from}T00:00:00Z`);
     const to = new Date(`${q.to}T00:00:00Z`);
     const displayCurrency = z
@@ -415,6 +456,7 @@ reportsRouter.get(
           : { receivedDate: { not: null, gte: from, lte: to } }),
         ...(q.account_id ? { accountId: q.account_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
+        ...projectClause,
       };
       const expenseWhere = {
         userId,
@@ -425,6 +467,7 @@ reportsRouter.get(
           : { paidDate: { not: null, gte: from, lte: to } }),
         ...(q.account_id ? { accountId: q.account_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
+        ...projectClause,
       };
 
       const [incomeRows, expenseRows] = await Promise.all([
@@ -503,6 +546,7 @@ reportsRouter.get(
             : { receivedDate: { not: null, gte: prevFrom, lte: prevTo } }),
           ...(q.account_id ? { accountId: q.account_id } : {}),
           ...(q.category_id ? { categoryId: q.category_id } : {}),
+          ...projectClause,
         };
         const expenseWherePrev = {
           userId,
@@ -513,6 +557,7 @@ reportsRouter.get(
             : { paidDate: { not: null, gte: prevFrom, lte: prevTo } }),
           ...(q.account_id ? { accountId: q.account_id } : {}),
           ...(q.category_id ? { categoryId: q.category_id } : {}),
+          ...projectClause,
         };
         const [incPrev, expPrev] = await Promise.all([
           prisma.incomeEntry.findMany({
@@ -593,6 +638,17 @@ reportsRouter.get(
       return;
     }
 
+    const incomeProjectSql = projectScope.unassigned
+      ? Prisma.sql`AND i.project_id IS NULL`
+      : projectScope.projectId
+        ? Prisma.sql`AND i.project_id = ${projectScope.projectId}::uuid`
+        : Prisma.empty;
+    const expenseProjectSql = projectScope.unassigned
+      ? Prisma.sql`AND e.project_id IS NULL`
+      : projectScope.projectId
+        ? Prisma.sql`AND e.project_id = ${projectScope.projectId}::uuid`
+        : Prisma.empty;
+
     const rows = await prisma.$queryRaw<
       Array<{ kind: string; category_id: string | null; name: string | null; total: unknown }>
     >(Prisma.sql`
@@ -610,6 +666,7 @@ reportsRouter.get(
           AND i.voided_at IS NULL
           AND i.date >= ${from}::date
           AND i.date <= ${to}::date
+          ${incomeProjectSql}
         UNION ALL
         SELECT 'expense'::text AS kind,
                e.category_id,
@@ -620,6 +677,7 @@ reportsRouter.get(
           AND e.voided_at IS NULL
           AND e.bill_date >= ${from}::date
           AND e.bill_date <= ${to}::date
+          ${expenseProjectSql}
       ) x
       LEFT JOIN categories c ON c.id = x.category_id
       GROUP BY x.kind, x.category_id, c.name

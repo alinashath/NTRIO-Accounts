@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  eachMonthOfInterval,
-  format,
-  parseISO,
-} from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import clsx from "clsx";
 import {
   Area,
@@ -19,10 +15,21 @@ import {
 import { apiFetch } from "@/api/http";
 import { DateBasisToggle, dateBasisSubtitle, type DateBasis } from "@/components/DateBasisToggle";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Button, Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import {
+  appendProjectFilter,
+  projectFilterFromSearchParams,
+} from "@/context/ProjectsContext";
+import {
+  chartGranularityForDays,
+  chartGranularityLabel,
+  chartGranularityUnit,
+  trendBucketsForRange,
+} from "@/lib/chartGranularity";
 import { chartAxisProps, chartTheme } from "@/lib/chartTheme";
 import { formatMoney } from "@/lib/money";
 import {
@@ -86,12 +93,23 @@ export function ReportsPnlTab() {
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initialRange);
   const [dateBasis, setDateBasis] = useState<DateBasis>("accrual");
+  const [filterProject, setFilterProject] = useState("");
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [cats, setCats] = useState<Cat[]>([]);
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
-  const [trend, setTrend] = useState<Array<{ month: string; income: number; expense: number; net: number }>>([]);
+  const [trend, setTrend] = useState<
+    Array<{ label: string; income: number; expense: number; net: number }>
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const statementRef = useRef<HTMLDivElement>(null);
+
+  const periodDays =
+    differenceInCalendarDays(parseISO(applied.to), parseISO(applied.from)) + 1;
+  const trendGranularity = useMemo(
+    () => chartGranularityForDays(periodDays),
+    [periodDays],
+  );
+  const trendUnit = chartGranularityUnit(trendGranularity);
 
   useEffect(() => {
     const qf = searchParams.get("from");
@@ -102,64 +120,100 @@ export function ReportsPnlTab() {
       setRangePreset(inferPreset(qf, qt));
     }
     if (qb === "accrual" || qb === "cash") setDateBasis(qb);
+    setFilterProject(projectFilterFromSearchParams(searchParams));
   }, [searchParams]);
 
-  const load = useCallback(async () => {
-    setError(null);
-    const dc = encodeURIComponent(displayCurrency);
-    const db = encodeURIComponent(dateBasis);
-    const { from: f, to: t } = applied;
-    try {
-      const [p, c] = await Promise.all([
-        apiFetch<Pnl>(
-          `/api/reports/pnl?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&date_basis=${db}`,
-        ),
-        apiFetch<CategoryBreakdownRes>(
-          `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&compare=true&date_basis=${db}`,
-        ),
-      ]);
-      setPnl(p);
-      setCats(c.rows);
-      setPrevPeriod(c.previous_period ?? null);
-
-      const months = eachMonthOfInterval({
-        start: parseISO(f),
-        end: parseISO(t),
-      });
-
-      const points: Array<{ month: string; income: number; expense: number; net: number }> = [];
-      for (const m of months) {
-        const ms = format(m, "yyyy-MM-01");
-        const me = format(new Date(m.getFullYear(), m.getMonth() + 1, 0), "yyyy-MM-dd");
-        const row = await apiFetch<Pnl>(
-          `/api/reports/pnl?from=${encodeURIComponent(ms)}&to=${encodeURIComponent(me)}&display_currency=${dc}&date_basis=${db}`,
-        );
-        points.push({
-          month: format(m, "MMM yyyy"),
-          income: row.total_income,
-          expense: row.total_expenses,
-          net: row.net,
-        });
-      }
-      setTrend(points);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
-    }
-  }, [applied, dateBasis, displayCurrency]);
-
   useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setError(null);
+      setTrend([]);
+      const dc = encodeURIComponent(displayCurrency);
+      const db = encodeURIComponent(dateBasis);
+      const f = applied.from;
+      const t = applied.to;
+      const withPj = (url: string) => {
+        const [path, qs = ""] = url.split("?");
+        const q = new URLSearchParams(qs);
+        appendProjectFilter(q, filterProject);
+        return `${path}?${q.toString()}`;
+      };
+      try {
+        const [p, c] = await Promise.all([
+          apiFetch<Pnl>(
+            withPj(
+              `/api/reports/pnl?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&date_basis=${db}`,
+            ),
+          ),
+          apiFetch<CategoryBreakdownRes>(
+            withPj(
+              `/api/reports/category-breakdown?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&compare=true&date_basis=${db}`,
+            ),
+          ),
+        ]);
+        if (cancelled) return;
+
+        setPnl(p);
+        setCats(c.rows);
+        setPrevPeriod(c.previous_period ?? null);
+
+        const days = differenceInCalendarDays(parseISO(t), parseISO(f)) + 1;
+        const buckets = trendBucketsForRange(f, t, chartGranularityForDays(days));
+        const rows = await Promise.all(
+          buckets.map((b) =>
+            apiFetch<Pnl>(
+              withPj(
+                `/api/reports/pnl?from=${encodeURIComponent(b.from)}&to=${encodeURIComponent(b.to)}&display_currency=${dc}&date_basis=${db}`,
+              ),
+            ).then((row) => ({
+              label: b.label,
+              income: row.total_income,
+              expense: row.total_expenses,
+              net: row.net,
+            })),
+          ),
+        );
+        if (cancelled) return;
+        setTrend(rows);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed");
+      }
+    }
+
     void load();
-  }, [load]);
+    return () => {
+      cancelled = true;
+    };
+  }, [applied.from, applied.to, dateBasis, displayCurrency, filterProject]);
+
+  function projectParams(): Record<string, string> {
+    if (filterProject === "unassigned") return { unassigned: "true" };
+    if (filterProject) return { project_id: filterProject };
+    return {};
+  }
 
   function applyPeriod(next: { from: string; to: string; preset: RangePreset }) {
     setRangePreset(next.preset);
     setApplied({ from: next.from, to: next.to });
-    setSearchParams({ from: next.from, to: next.to, date_basis: dateBasis });
+    setSearchParams({ from: next.from, to: next.to, date_basis: dateBasis, ...projectParams() });
   }
 
   function applyDateBasis(next: DateBasis) {
     setDateBasis(next);
-    setSearchParams({ from: applied.from, to: applied.to, date_basis: next });
+    setSearchParams({ from: applied.from, to: applied.to, date_basis: next, ...projectParams() });
+  }
+
+  function applyProject(next: string) {
+    setFilterProject(next);
+    const params: Record<string, string> = {
+      from: applied.from,
+      to: applied.to,
+      date_basis: dateBasis,
+    };
+    if (next === "unassigned") params.unassigned = "true";
+    else if (next) params.project_id = next;
+    setSearchParams(params);
   }
 
   async function downloadCsv() {
@@ -192,6 +246,7 @@ export function ReportsPnlTab() {
     q.set("kind", r.kind);
     q.set("from", applied.from);
     q.set("to", applied.to);
+    appendProjectFilter(q, filterProject);
     return `/accounts/reports/categories/${encodeURIComponent(id)}?${q.toString()}`;
   }
 
@@ -252,6 +307,10 @@ export function ReportsPnlTab() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">Income statement</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[10rem]">
+            <ProjectFilter value={filterProject} onChange={applyProject} />
+          </div>
         <PeriodFilterBar
           from={applied.from}
           to={applied.to}
@@ -267,6 +326,7 @@ export function ReportsPnlTab() {
             </>
           }
         />
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground">{dateBasisSubtitle(dateBasis)}</p>
@@ -377,15 +437,26 @@ export function ReportsPnlTab() {
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-foreground">Trend by month</h3>
+            <h3 className="text-sm font-bold text-foreground">
+              Trend by {trendUnit}
+            </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Green income · red expense · blue net
+              {chartGranularityLabel(trendGranularity)} · green income · red expense · yellow net
             </p>
           </div>
         </div>
         <div className="mt-4 h-72 sm:h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart
+              key={`${applied.from}_${applied.to}_${trendGranularity}_${trend.length}`}
+              data={trend}
+              margin={{
+                top: 8,
+                right: 8,
+                left: 0,
+                bottom: trend.length > 8 ? 14 : 0,
+              }}
+            >
               <defs>
                 <linearGradient id="pnlIncomeFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={chartTheme.income} stopOpacity={0.22} />
@@ -397,7 +468,19 @@ export function ReportsPnlTab() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
-              <XAxis dataKey="month" {...chartAxisProps} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{
+                  fill: chartTheme.tick,
+                  fontSize: trend.length > 8 ? 9 : 11,
+                  fontFamily: "var(--font-num)",
+                }}
+                interval={trendGranularity === "day" || trend.length > 14 ? "preserveStartEnd" : 0}
+                minTickGap={trend.length > 8 ? 6 : 12}
+                tickMargin={trend.length > 8 ? 4 : 8}
+              />
               <YAxis
                 {...chartAxisProps}
                 width={44}
@@ -430,7 +513,7 @@ export function ReportsPnlTab() {
                 stroke={chartTheme.income}
                 strokeWidth={2}
                 fill="url(#pnlIncomeFill)"
-                dot={false}
+                dot={trend.length <= 3}
               />
               <Area
                 type="monotone"
@@ -440,7 +523,7 @@ export function ReportsPnlTab() {
                 strokeWidth={2}
                 strokeDasharray="6 4"
                 fill="url(#pnlExpenseFill)"
-                dot={false}
+                dot={trend.length <= 3}
               />
               <Area
                 type="monotone"
@@ -459,10 +542,10 @@ export function ReportsPnlTab() {
           <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3 sm:grid-cols-3">
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Best net month
+                Best net {trendUnit}
               </dt>
               <dd className="mt-0.5 text-sm font-bold text-foreground">
-                {[...trend].sort((a, b) => b.net - a.net)[0]?.month ?? "—"}
+                {[...trend].sort((a, b) => b.net - a.net)[0]?.label ?? "—"}
               </dd>
             </div>
             <div>
@@ -470,12 +553,12 @@ export function ReportsPnlTab() {
                 Highest spend
               </dt>
               <dd className="mt-0.5 text-sm font-bold text-foreground">
-                {[...trend].sort((a, b) => b.expense - a.expense)[0]?.month ?? "—"}
+                {[...trend].sort((a, b) => b.expense - a.expense)[0]?.label ?? "—"}
               </dd>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Avg monthly net
+                Avg {chartGranularityLabel(trendGranularity).toLowerCase()} net
               </dt>
               <dd className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
                 {formatMoney(
@@ -489,16 +572,16 @@ export function ReportsPnlTab() {
       </Card>
 
       <Card>
-        <h3 className="text-sm font-semibold text-slate-900">Category breakdown</h3>
+        <h3 className="text-sm font-semibold text-ink">Category breakdown</h3>
         {prevPeriod ? (
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted-label">
             vs prior period {prevPeriod.from} → {prevPeriod.to}
           </p>
         ) : null}
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted-label">
                 <th className="py-2 pr-3">Kind</th>
                 <th className="py-2 pr-3">Category</th>
                 <th className="py-2 pr-3 text-right align-bottom">Amount</th>
@@ -507,10 +590,10 @@ export function ReportsPnlTab() {
             </thead>
             <tbody>
               {cats.map((r, i) => (
-                <tr key={`${r.kind}-${r.name}-${i}`} className="border-b border-slate-100 hover:bg-slate-50/80">
+                <tr key={`${r.kind}-${r.name}-${i}`} className="border-b border-border hover:bg-neutral-bg/80">
                   <td className="py-2 pr-3 align-top">{r.kind}</td>
                   <td className="py-2 pr-3 align-top">
-                    <Link to={categoryHref(r)} className="font-medium text-sky-700 hover:underline">
+                    <Link to={categoryHref(r)} className="font-medium text-action hover:underline">
                       {r.name}
                     </Link>
                   </td>

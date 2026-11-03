@@ -121,7 +121,7 @@ export function DebtsPage() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 md:text-xl">Debts</h2>
+          <h2 className="text-lg font-bold text-ink md:text-xl">Debts</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="ghost" onClick={() => setPayModal(true)}>
@@ -136,7 +136,7 @@ export function DebtsPage() {
         </div>
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Modal open={debtModal} title="New debt" onClose={() => setDebtModal(false)}>
         <NewDebtForm
@@ -183,7 +183,7 @@ export function DebtsPage() {
           setDetail(null);
         }}
       >
-        {detailLoading ? <p className="text-sm text-slate-600">Loading…</p> : null}
+        {detailLoading ? <p className="text-sm text-muted-label">Loading…</p> : null}
         {detail && !detailLoading ? (
           <DebtHistoryPanel
             detail={detail}
@@ -211,19 +211,19 @@ export function DebtsPage() {
         <>
           <div className="grid gap-3 sm:grid-cols-3">
             <Card>
-              <p className="text-xs uppercase text-slate-500">I owe</p>
+              <p className="text-xs uppercase text-muted-label">I owe</p>
               <p className="mt-1 text-xl font-bold text-negative tabular-nums sm:text-2xl">
                 {summary.iOwe.toLocaleString(undefined, { style: "currency", currency: displayCurrency })}
               </p>
             </Card>
             <Card>
-              <p className="text-xs uppercase text-slate-500">Owed to me</p>
+              <p className="text-xs uppercase text-muted-label">Owed to me</p>
               <p className="mt-1 text-xl font-bold text-positive tabular-nums sm:text-2xl">
                 {summary.owedToMe.toLocaleString(undefined, { style: "currency", currency: displayCurrency })}
               </p>
             </Card>
             <Card>
-              <p className="text-xs uppercase text-slate-500">Net</p>
+              <p className="text-xs uppercase text-muted-label">Net</p>
               <p
                 className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl ${
                   summary.net >= 0 ? "text-positive" : "text-negative"
@@ -235,17 +235,17 @@ export function DebtsPage() {
           </div>
 
           <Card>
-            <h3 className="text-sm font-semibold text-slate-900">I owe (open)</h3>
+            <h3 className="text-sm font-semibold text-ink">I owe (open)</h3>
             <DebtList items={openIOwe} onSelect={(id) => setDetailId(id)} />
           </Card>
 
           <Card>
-            <h3 className="text-sm font-semibold text-slate-900">Owed to me (open)</h3>
+            <h3 className="text-sm font-semibold text-ink">Owed to me (open)</h3>
             <DebtList items={openOwed} onSelect={(id) => setDetailId(id)} />
           </Card>
 
           <details className="rounded-[var(--radius-md)] border border-border/80 bg-card p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
               Settled debts ({settled.length})
             </summary>
             <div className="mt-3">
@@ -260,23 +260,23 @@ export function DebtsPage() {
 
 function DebtList({ items, onSelect }: { items: DebtDto[]; onSelect: (id: string) => void }) {
   if (!items.length) {
-    return <p className="mt-2 text-sm text-slate-500">No debts.</p>;
+    return <p className="mt-2 text-sm text-muted-label">No debts.</p>;
   }
   return (
-    <ul className="mt-2 divide-y divide-slate-100 text-sm">
+    <ul className="mt-2 divide-y divide-border text-sm">
       {items.map((d) => (
         <li key={d.id}>
           <button
             type="button"
-            className="flex w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:bg-slate-50"
+            className="flex w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:bg-neutral-bg"
             onClick={() => onSelect(d.id)}
           >
             <div className="min-w-0">
-              <p className="font-semibold text-slate-900">{d.contact_name}</p>
+              <p className="font-semibold text-ink">{d.contact_name}</p>
               {d.linked_contact_name ? (
-                <p className="text-[11px] text-sky-700">Linked: {d.linked_contact_name}</p>
+                <p className="text-[11px] text-action">Linked: {d.linked_contact_name}</p>
               ) : null}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-label">
                 Principal{" "}
                 {d.principal.toLocaleString(undefined, { style: "currency", currency: d.currency })} · Paid{" "}
                 {d.total_paid.toLocaleString(undefined, { style: "currency", currency: d.currency })}
@@ -293,10 +293,10 @@ function DebtList({ items, onSelect }: { items: DebtDto[]; onSelect: (id: string
               </p>
             </div>
             <div className="text-right">
-              <p className="font-bold text-slate-900 tabular-nums">
+              <p className="font-bold text-ink tabular-nums">
                 {d.outstanding.toLocaleString(undefined, { style: "currency", currency: d.currency })}
               </p>
-              <p className="text-xs uppercase text-slate-500">{d.status}</p>
+              <p className="text-xs uppercase text-muted-label">{d.status}</p>
             </div>
           </button>
         </li>
@@ -508,22 +508,22 @@ function MergeDebtsForm({
         placeholder={keeperOpts.length ? "Select…" : "No open debts"}
       />
       {keepDebt ? (
-        <fieldset className="max-h-52 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
-          <legend className="text-xs font-medium text-slate-700">Merge these into it</legend>
+        <fieldset className="max-h-52 space-y-2 overflow-y-auto rounded-lg border border-border p-3">
+          <legend className="text-xs font-medium text-body">Merge these into it</legend>
           {!candidates.length ? (
-            <p className="text-xs text-slate-500">No other open debts with the same direction and currency.</p>
+            <p className="text-xs text-muted-label">No other open debts with the same direction and currency.</p>
           ) : (
             candidates.map((d) => (
-              <label key={d.id} className="flex cursor-pointer items-start gap-2 text-sm text-slate-800">
+              <label key={d.id} className="flex cursor-pointer items-start gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
-                  className="mt-1 rounded border-slate-300"
+                  className="mt-1 rounded border-border"
                   checked={selected.has(d.id)}
                   onChange={() => toggle(d.id)}
                 />
                 <span>
                   <span className="font-medium">{d.contact_name}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-muted-label">
                     Outstanding{" "}
                     {d.outstanding.toLocaleString(undefined, { style: "currency", currency: d.currency })}
                   </span>
@@ -690,17 +690,17 @@ function DebtHistoryPanel({
   const ccy = detail.currency;
   return (
     <div className="space-y-4">
-      <div className="text-sm text-slate-600">
+      <div className="text-sm text-muted-label">
         <p>
-          <span className="font-medium text-slate-800">Outstanding:</span>{" "}
+          <span className="font-medium text-ink">Outstanding:</span>{" "}
           {detail.outstanding.toLocaleString(undefined, { style: "currency", currency: ccy })}
         </p>
         <p>
-          <span className="font-medium text-slate-800">Principal:</span>{" "}
+          <span className="font-medium text-ink">Principal:</span>{" "}
           {detail.principal.toLocaleString(undefined, { style: "currency", currency: ccy })}
         </p>
         <p>
-          <span className="font-medium text-slate-800">Spend charged to debt:</span>{" "}
+          <span className="font-medium text-ink">Spend charged to debt:</span>{" "}
           {detail.charges_from_expenses.toLocaleString(undefined, { style: "currency", currency: ccy })}
         </p>
       </div>
@@ -716,10 +716,10 @@ function DebtHistoryPanel({
       />
 
       <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Incurred (spend on tab)</h4>
-        <div className="mt-1 overflow-x-auto rounded-lg border border-slate-200">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-label">Incurred (spend on tab)</h4>
+        <div className="mt-1 overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-neutral-bg text-muted-label">
               <tr>
                 <th className="px-2 py-2">Date</th>
                 <th className="px-2 py-2">Description</th>
@@ -728,12 +728,12 @@ function DebtHistoryPanel({
             </thead>
             <tbody>
               {(detail.expense_charges ?? []).map((c) => (
-                <tr key={c.id} className="border-t border-slate-100">
+                <tr key={c.id} className="border-t border-border">
                   <td className="whitespace-nowrap px-2 py-2">
                     {c.date.includes("T") ? c.date.slice(0, 10) : c.date.slice(0, 10)}
                   </td>
                   <td className="px-2 py-2">{c.description ?? c.merchant ?? c.category_name ?? "—"}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-orange-800">
+                  <td className="px-2 py-2 text-right tabular-nums text-debit">
                     +
                     {c.amount.toLocaleString(undefined, { style: "currency", currency: ccy })}
                   </td>
@@ -742,16 +742,16 @@ function DebtHistoryPanel({
             </tbody>
           </table>
           {!detail.expense_charges?.length ? (
-            <p className="p-3 text-center text-sm text-slate-500">No spend charges on this debt yet.</p>
+            <p className="p-3 text-center text-sm text-muted-label">No spend charges on this debt yet.</p>
           ) : null}
         </div>
       </div>
 
       <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Reduced (cash payments)</h4>
-        <div className="mt-1 overflow-x-auto rounded-lg border border-slate-200">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-label">Reduced (cash payments)</h4>
+        <div className="mt-1 overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-neutral-bg text-muted-label">
               <tr>
                 <th className="px-2 py-2">Date</th>
                 <th className="px-2 py-2">Account</th>
@@ -778,7 +778,7 @@ function DebtHistoryPanel({
             </tbody>
           </table>
           {!detail.payments.length ? (
-            <p className="p-3 text-center text-sm text-slate-500">No payments yet.</p>
+            <p className="p-3 text-center text-sm text-muted-label">No payments yet.</p>
           ) : null}
         </div>
       </div>
@@ -828,16 +828,16 @@ function AddPrincipalSection({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+    <div className="rounded-lg border border-border bg-neutral-bg/80 p-3">
       <button
         type="button"
-        className="text-left text-sm font-medium text-sky-800 underline decoration-sky-600/40 hover:decoration-sky-700"
+        className="text-left text-sm font-medium text-action underline decoration-action/40 hover:decoration-action"
         onClick={() => setExpanded((v) => !v)}
       >
         {expanded ? "Hide" : "Add to principal"} (increase amount owed / recorded loan)
       </button>
       {expanded ? (
-        <form className="mt-3 space-y-3 border-t border-slate-200 pt-3" onSubmit={(e) => void submit(e)}>
+        <form className="mt-3 space-y-3 border-t border-border pt-3" onSubmit={(e) => void submit(e)}>
           <TextField
             label={`Amount to add (${currency})`}
             type="number"
@@ -941,7 +941,7 @@ function DebtPaymentRow({
 
   if (editing) {
     return (
-      <tr className="border-t border-slate-100 bg-slate-50">
+      <tr className="border-t border-border bg-neutral-bg">
         <td colSpan={7} className="space-y-3 p-3">
           <TextField label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
           <ReceiptAttachmentField
@@ -963,11 +963,11 @@ function DebtPaymentRow({
   }
 
   return (
-    <tr className={`border-t border-slate-100 ${voided ? "opacity-60" : ""}`}>
+    <tr className={`border-t border-border ${voided ? "opacity-60" : ""}`}>
       <td className="whitespace-nowrap px-2 py-2">
         {dateStr}
         {voided ? (
-          <span className="ml-1 block text-[10px] font-semibold text-amber-800">VOID</span>
+          <span className="ml-1 block text-[10px] font-semibold text-action">VOID</span>
         ) : null}
       </td>
       <td className="px-2 py-2">{payment.account_name}</td>
@@ -975,7 +975,7 @@ function DebtPaymentRow({
         −
         {payment.amount.toLocaleString(undefined, { style: "currency", currency: debtCurrency })}
       </td>
-      <td className="px-2 py-2 text-right tabular-nums text-slate-700">
+      <td className="px-2 py-2 text-right tabular-nums text-body">
         {payment.account_amount != null
           ? `−${payment.account_amount.toLocaleString(undefined, {
               style: "currency",
@@ -983,7 +983,7 @@ function DebtPaymentRow({
             })}`
           : "—"}
       </td>
-      <td className="px-2 py-2 text-slate-600">
+      <td className="px-2 py-2 text-muted-label">
         {payment.exchange_rate != null ? payment.exchange_rate.toFixed(6) : "—"}
       </td>
       <td className="px-2 py-2">
@@ -992,7 +992,7 @@ function DebtPaymentRow({
             href={payment.attachment_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sky-700 underline"
+            className="text-action underline"
           >
             Open
           </a>
@@ -1006,7 +1006,7 @@ function DebtPaymentRow({
             <Button type="button" variant="ghost" className="h-7 px-2 text-[11px]" disabled={busy} onClick={() => setEditing(true)}>
               Edit / receipt
             </Button>
-            <Button type="button" variant="ghost" className="h-7 px-2 text-[11px] text-amber-900" disabled={busy} onClick={() => void doVoid()}>
+            <Button type="button" variant="ghost" className="h-7 px-2 text-[11px] text-action" disabled={busy} onClick={() => void doVoid()}>
               Void
             </Button>
           </div>

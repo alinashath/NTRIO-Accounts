@@ -49,7 +49,8 @@ export function SignupPage() {
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8">
       <div className="mb-6 text-center">
-        <h1 className="text-page-title text-ink">Request organization</h1>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-action">EffiBooks</p>
+        <h1 className="mt-2 text-page-title text-ink">Request organization</h1>
         <p className="mt-1 text-caption">
           Create a login and submit a new organization (tenant) for admin approval.
         </p>

@@ -1,4 +1,4 @@
-import { Apple, Pencil, Plus, Users } from "lucide-react";
+import { Apple, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
@@ -12,6 +12,8 @@ import type {
   EggStyle,
   KitchenDayDto,
   KitchenDayRoomDto,
+  RoomExtraOptionDto,
+  RoomExtraSelectionDto,
   ShoppingSummaryDto,
 } from "../../../../shared/types";
 
@@ -33,7 +35,7 @@ const eggOpts: DropdownOption[] = [
   { value: "scrambled", label: "Scrambled" },
 ];
 
-function IconBtn({
+function ActionBtn({
   label,
   onClick,
   disabled,
@@ -55,11 +57,12 @@ function IconBtn({
       onClick={onClick}
       className={
         tone === "action"
-          ? "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm bg-action text-white disabled:opacity-50"
-          : "inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-border bg-surface text-ink hover:bg-neutral-bg disabled:opacity-50"
+          ? "inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-md)] bg-action px-3 text-sm font-semibold text-[var(--on-primary)] disabled:opacity-50"
+          : "inline-flex min-h-11 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-sm font-semibold text-ink hover:bg-neutral-bg disabled:opacity-50"
       }
     >
       {children}
+      <span>{label}</span>
     </button>
   );
 }
@@ -98,16 +101,48 @@ export function KitchenOrdersPage() {
     }
   }
 
+  async function removeExtraLine(room: KitchenDayRoomDto, stockItemId: string) {
+    const lines = (room.extras.selected_lines ?? []).filter((l) => l.stock_item_id !== stockItemId);
+    try {
+      const res = await apiFetch<{ shopping?: ShoppingSummaryDto }>("/api/kitchen/extras", {
+        method: "PUT",
+        body: JSON.stringify({
+          date,
+          room_id: room.id,
+          fruits: room.extras.fruits,
+          selected_lines: lines.map((l) => ({
+            stock_item_id: l.stock_item_id,
+            quantity: l.quantity,
+          })),
+        }),
+      });
+      noteShopping(res.shopping);
+      setMsg("Extra removed");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-page-title text-ink">Breakfast orders</h1>
           <p className="mt-1 text-caption">
-            Pick a date · rooms &amp; stays in Occupancy · saving updates stock Used and shopping list.
+            Pick a date · use Add breakfast on each room. Configure ingredients under Recipes. Saving updates stock
+            Used and shopping list.
           </p>
         </div>
-        <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <div className="flex flex-wrap items-end gap-2">
+          <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Link
+            to="/kitchen/recipes"
+            className="inline-flex h-input min-h-11 items-center justify-center rounded-sm border border-action px-4 text-sm font-semibold text-action"
+          >
+            Configure recipes
+          </Link>
+        </div>
       </div>
 
       {error ? <p className="text-sm font-medium text-debit">{error}</p> : null}
@@ -127,26 +162,37 @@ export function KitchenOrdersPage() {
           caption={`Occupants ${room.occupant_count} · Breakfast guests ${room.breakfast_participants}`}
         >
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
-            <IconBtn label="Set occupants for this date" onClick={() => setOccRoom(room)}>
-              <Users className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </IconBtn>
-            <IconBtn label="Fruits and extras" onClick={() => setExtrasRoom(room)}>
-              <Apple className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </IconBtn>
-            <IconBtn
+            <ActionBtn
               label="Add breakfast"
               tone="action"
               disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
               onClick={() => setOrderModal({ room })}
             >
               <Plus className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </IconBtn>
+            </ActionBtn>
+            <ActionBtn label="Occupants" onClick={() => setOccRoom(room)}>
+              <Users className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+            </ActionBtn>
+            <ActionBtn label="Fruits & extras" onClick={() => setExtrasRoom(room)}>
+              <Apple className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+            </ActionBtn>
           </div>
 
           {room.orders.length === 0 ? (
-            <p className="border-t border-border px-4 py-3 text-caption">
-              No breakfast orders. Occupied rooms are not assumed to need breakfast.
-            </p>
+            <div className="border-t border-border px-4 py-3 space-y-2">
+              <p className="text-caption">
+                No breakfast orders yet. Tap Add breakfast — occupied rooms are not assumed to need breakfast.
+              </p>
+              <Button
+                type="button"
+                className="gap-2"
+                disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
+                onClick={() => setOrderModal({ room })}
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Add breakfast for room {room.number}
+              </Button>
+            </div>
           ) : (
             room.orders.map((o) => (
               <ListRow
@@ -176,25 +222,35 @@ export function KitchenOrdersPage() {
             ))
           )}
 
-          {(room.extras.fruits.length > 0 ||
-            room.extras.pancake ||
-            room.extras.honey ||
-            room.extras.nutella ||
-            room.extras.cereal ||
-            room.extras.water_bottle) && (
-            <p className="border-t border-border px-4 py-3 text-caption">
-              Extras:{" "}
-              {[
-                ...room.extras.fruits,
-                room.extras.pancake ? "pancake" : null,
-                room.extras.honey ? "honey" : null,
-                room.extras.nutella ? "nutella" : null,
-                room.extras.cereal ? "cereal" : null,
-                room.extras.water_bottle ? "1.5L water" : null,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </p>
+          {(room.extras.fruits.length > 0 || (room.extras.selected_lines ?? []).length > 0) && (
+            <div className="border-t border-border">
+              {room.extras.fruits.length > 0 ? (
+                <p className="px-4 py-2 text-caption">Fruits: {room.extras.fruits.join(", ")}</p>
+              ) : null}
+              {(room.extras.selected_lines ?? []).map((line) => (
+                <ListRow
+                  key={line.stock_item_id}
+                  primary={line.name ?? "Extra"}
+                  secondary={[
+                    `${line.quantity} ${line.unit ?? ""}`.trim(),
+                    line.show_on_kot ? "on KOT" : null,
+                    isPancakeOption(line) ? `${line.quantity * 20} pieces` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  right={
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                      aria-label={`Remove ${line.name ?? "extra"}`}
+                      onClick={() => void removeExtraLine(room, line.stock_item_id)}
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                    </button>
+                  }
+                />
+              ))}
+            </div>
           )}
         </PanelCard>
       ))}
@@ -232,6 +288,7 @@ export function KitchenOrdersPage() {
           <ExtrasForm
             date={date}
             room={extrasRoom}
+            options={day?.extra_options ?? []}
             onDone={(shopping) => {
               setExtrasRoom(null);
               noteShopping(shopping);
@@ -446,19 +503,26 @@ function OrderForm({
       <div className="rounded-[var(--radius)] border border-border bg-neutral-bg px-4 py-3 text-sm text-ink">
         {breakfastType === "maldivian" ? (
           <>
-            <p className="font-semibold">Maldivian includes</p>
-            <p className="text-caption">5 Roshi · 1 Mashuni · Egg (default omelette)</p>
+            <p className="font-semibold">Maldivian stock</p>
+            <p className="text-caption">
+              Ingredients come from the Maldivian recipe (Kitchen → Recipes). Add or remove items there.
+            </p>
             <label className="mt-2 flex min-h-11 items-center gap-2">
               <input type="checkbox" checked={potato} onChange={(e) => setPotato(e.target.checked)} />
-              Stir-fried potato (optional)
+              Stir-fried potato (optional extra)
             </label>
           </>
         ) : (
           <>
-            <p className="font-semibold">Continental includes</p>
-            <p className="text-caption">3 bread · 2 sausages · 2 butter · 1 jam · Egg (default fried)</p>
+            <p className="font-semibold">Continental stock</p>
+            <p className="text-caption">
+              Ingredients come from the Continental recipe (Kitchen → Recipes). Add or remove items there.
+            </p>
           </>
         )}
+        <Link to="/kitchen/recipes" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-action underline">
+          Edit breakfast recipes
+        </Link>
       </div>
 
       <Dropdown label="Egg style" value={eggStyle} onChange={(v) => setEggStyle(v as EggStyle)} options={eggOpts} />
@@ -523,24 +587,80 @@ function OrderForm({
   );
 }
 
+function defaultQty(opt: RoomExtraOptionDto) {
+  const n = Number(opt.qty_per_serving);
+  return n > 0 ? n : 1;
+}
+
+function isPancakeOption(opt: { code?: string | null; name?: string }) {
+  const code = (opt.code ?? "").toLowerCase();
+  if (code === "pancake" || code === "pancake_batch" || code === "pancakes") return true;
+  return (opt.name ?? "").toLowerCase().includes("pancake");
+}
+
+function initialSelectedLines(
+  room: KitchenDayRoomDto,
+  options: RoomExtraOptionDto[],
+): RoomExtraSelectionDto[] {
+  if ((room.extras.selected_lines ?? []).length) {
+    return room.extras.selected_lines.map((l) => {
+      const opt = options.find((o) => o.stock_item_id === l.stock_item_id);
+      return {
+        ...l,
+        name: l.name ?? opt?.name,
+        unit: l.unit ?? opt?.unit,
+        code: l.code ?? opt?.code ?? null,
+        show_on_kot: l.show_on_kot ?? opt?.show_on_kot,
+        quantity: l.quantity > 0 ? l.quantity : opt ? defaultQty(opt) : 1,
+      };
+    });
+  }
+  const byCode = new Map(options.filter((o) => o.code).map((o) => [o.code!, o]));
+  const lines: RoomExtraSelectionDto[] = [];
+  const push = (code: string) => {
+    const opt = byCode.get(code);
+    if (!opt) return;
+    lines.push({
+      stock_item_id: opt.stock_item_id,
+      quantity: defaultQty(opt),
+      name: opt.name,
+      unit: opt.unit,
+      code: opt.code,
+      show_on_kot: opt.show_on_kot,
+    });
+  };
+  if (room.extras.honey) push("honey");
+  if (room.extras.nutella) push("nutella");
+  if (room.extras.cereal) push("cornflakes");
+  if (room.extras.water_bottle) push("water_bottle");
+  if (room.extras.pancake) {
+    for (const code of ["pancake_batch", "pancake", "pancakes"]) {
+      if (byCode.has(code)) {
+        push(code);
+        break;
+      }
+    }
+  }
+  return lines;
+}
+
 function ExtrasForm({
   date,
   room,
+  options,
   onDone,
   onError,
 }: {
   date: string;
   room: KitchenDayRoomDto;
+  options: RoomExtraOptionDto[];
   onDone: (shopping?: ShoppingSummaryDto) => void;
   onError: (s: string) => void;
 }) {
   const [fruits, setFruits] = useState<string[]>(room.extras.fruits);
-  const [pancake, setPancake] = useState(room.extras.pancake);
-  const [honey, setHoney] = useState(room.extras.honey);
-  const [nutella, setNutella] = useState(room.extras.nutella);
-  const [cereal, setCereal] = useState(room.extras.cereal);
-  const [water, setWater] = useState(room.extras.water_bottle);
+  const [lines, setLines] = useState<RoomExtraSelectionDto[]>(() => initialSelectedLines(room, options));
   const [saving, setSaving] = useState(false);
+  const available = options.filter((o) => !lines.some((l) => l.stock_item_id === o.stock_item_id));
 
   function toggleFruit(id: string) {
     setFruits((prev) => {
@@ -550,10 +670,45 @@ function ExtrasForm({
     });
   }
 
+  /** Add with recipe default qty (usually 1); count stays editable on the list. */
+  function addWithDefault(opt: RoomExtraOptionDto) {
+    const qty = defaultQty(opt);
+    setLines((prev) => {
+      if (prev.some((l) => l.stock_item_id === opt.stock_item_id)) {
+        return prev.map((l) => (l.stock_item_id === opt.stock_item_id ? { ...l, quantity: qty } : l));
+      }
+      return [
+        ...prev,
+        {
+          stock_item_id: opt.stock_item_id,
+          quantity: qty,
+          name: opt.name,
+          unit: opt.unit,
+          code: opt.code,
+          show_on_kot: opt.show_on_kot,
+        },
+      ];
+    });
+  }
+
+  function removeLine(id: string) {
+    setLines((prev) => prev.filter((l) => l.stock_item_id !== id));
+  }
+
+  function updateQty(id: string, qtyStr: string) {
+    setLines((prev) =>
+      prev.map((l) => (l.stock_item_id === id ? { ...l, quantity: Number(qtyStr) || 0 } : l)),
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (fruits.length > 0 && (fruits.length < 2 || fruits.length > 3)) {
       onError("Select 2–3 fruit types, or none");
+      return;
+    }
+    if (lines.some((l) => !(l.quantity > 0))) {
+      onError("Each extra needs a quantity greater than 0");
       return;
     }
     setSaving(true);
@@ -564,11 +719,10 @@ function ExtrasForm({
           date,
           room_id: room.id,
           fruits,
-          pancake,
-          honey,
-          nutella,
-          cereal,
-          water_bottle: water,
+          selected_lines: lines.map((l) => ({
+            stock_item_id: l.stock_item_id,
+            quantity: l.quantity,
+          })),
         }),
       });
       onDone(res.shopping);
@@ -590,23 +744,99 @@ function ExtrasForm({
           </label>
         ))}
       </div>
-      <fieldset className="space-y-1">
-        <legend className="text-label">Extras</legend>
-        {(
-          [
-            ["Pancake", pancake, setPancake],
-            ["Honey", honey, setHoney],
-            ["Nutella", nutella, setNutella],
-            ["Cereal", cereal, setCereal],
-            ["1.5 L water bottle", water, setWater],
-          ] as const
-        ).map(([label, val, set]) => (
-          <label key={label} className="flex min-h-11 items-center gap-2 text-sm text-ink">
-            <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} />
-            {label}
-          </label>
-        ))}
-      </fieldset>
+
+      <div className="space-y-2">
+        <p className="text-label">Added extras</p>
+        <p className="text-caption">
+          Qty starts from the recipe default (e.g. 1 batch). Edit the count, then Save.
+        </p>
+        {lines.length ? (
+          lines.map((line) => (
+            <div
+              key={line.stock_item_id}
+              className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-border p-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink">{line.name ?? "Extra"}</p>
+                <p className="text-caption">
+                  {line.unit ?? ""}
+                  {line.show_on_kot ? " · on KOT" : " · stock only"}
+                  {isPancakeOption(line) ? " · each = 20 pieces on KOT" : ""}
+                </p>
+              </div>
+              <div className="w-28">
+                <TextField
+                  label="Count"
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={String(line.quantity)}
+                  onChange={(e) => updateQty(line.stock_item_id, e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                aria-label={`Remove ${line.name ?? "extra"}`}
+                onClick={() => removeLine(line.stock_item_id)}
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="text-caption">No extras added yet. Tap Add on an item below.</p>
+        )}
+      </div>
+
+      {options.length ? (
+        <div className="space-y-2">
+          <p className="text-label">Add from recipe</p>
+          {available.length ? (
+            available.map((opt) => (
+              <div
+                key={opt.stock_item_id}
+                className="flex flex-wrap items-center gap-2 border-t border-border py-2 first:border-t-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">{opt.name}</p>
+                  <p className="text-caption">
+                    Default {defaultQty(opt)} {opt.unit}
+                    {opt.show_on_kot ? " · on KOT" : ""}
+                    {isPancakeOption(opt) ? " · 20 pcs / batch" : ""}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={() => addWithDefault(opt)}
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add {defaultQty(opt)}
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="text-caption">All configured extras are already on the list.</p>
+          )}
+          <p className="text-caption">
+            Defaults come from{" "}
+            <Link to="/kitchen/recipes" className="font-semibold text-action underline">
+              Recipes → Room extras · Qty when selected
+            </Link>
+            .
+          </p>
+        </div>
+      ) : (
+        <p className="text-caption">
+          No extras configured.{" "}
+          <Link to="/kitchen/recipes" className="font-semibold text-action underline">
+            Add items under Recipes → Room extras
+          </Link>
+        </p>
+      )}
+
       <Button type="submit" disabled={saving}>
         {saving ? "Saving…" : "Save extras"}
       </Button>

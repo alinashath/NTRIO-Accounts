@@ -23,7 +23,7 @@ export function PanelCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[var(--radius)] border border-border bg-surface",
+        "overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface",
         className,
       )}
     >

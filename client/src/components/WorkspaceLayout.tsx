@@ -98,12 +98,12 @@ export function WorkspaceLayout({
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-[var(--content-max)] flex-col px-content pb-[calc(var(--nav-h)+env(safe-area-inset-bottom,0px))] pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:pb-6">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[200] focus:rounded-sm focus:bg-action focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[200] focus:rounded-[var(--radius-md)] focus:bg-action focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-[var(--on-primary)]"
       >
         Skip to main content
       </a>
 
-      <header className="-mx-[var(--content-pad)] mb-4 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-[var(--content-pad)] py-3 md:mx-0 md:px-0">
+      <header className="-mx-[var(--content-pad)] mb-4 flex shrink-0 items-center gap-3 border-b border-border bg-ground px-[var(--content-pad)] py-3 md:mx-0 md:bg-transparent md:px-0">
         <button
           type="button"
           onClick={() => {
@@ -112,7 +112,7 @@ export function WorkspaceLayout({
           className="min-w-0 flex-1 touch-manipulation text-left"
           aria-label={multiModule ? `${organizationTitle} workspaces` : organizationTitle}
         >
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">{organizationTitle}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-action">{organizationTitle}</p>
           <p className="mt-0.5 text-section text-ink">{title}</p>
         </button>
 
@@ -177,7 +177,9 @@ export function WorkspaceLayout({
             className={({ isActive }) =>
               clsx(
                 "inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-sm px-3 text-sm font-medium touch-manipulation",
-                isActive ? "bg-ink text-white" : "text-muted-label hover:bg-neutral-bg hover:text-ink",
+                isActive
+                  ? "bg-[var(--surface-elevated)] font-semibold text-action"
+                  : "text-muted-label hover:bg-neutral-bg hover:text-ink",
               )
             }
           >
@@ -199,7 +201,7 @@ export function WorkspaceLayout({
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-[150] h-[calc(var(--nav-h)+env(safe-area-inset-bottom,0px))] border-t border-border bg-surface pb-safe md:hidden"
+        className="fixed inset-x-0 bottom-0 z-[150] h-[calc(var(--nav-h)+env(safe-area-inset-bottom,0px))] border-t border-border bg-ground pb-safe md:hidden"
         aria-label="Main"
       >
         <div

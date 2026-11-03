@@ -1,143 +1,106 @@
 ---
-description: Ntrio design system and mobile-first Home redesign. Apply to all UI work.
+description: Ntrio design system — Binance-inspired trading UI. Apply to all UI work.
 alwaysApply: true
 ---
 
 # Ntrio UI spec (for Cursor)
 
-Place this file at `.cursor/rules/ntrio-design.mdc` (or keep as `DESIGN.md` and reference it with `@DESIGN.md`).
-
-## Task for Cursor
-
-Redesign the Ntrio app UI mobile-first using the tokens, components and Home layout below. Keep all existing data, API calls and business logic. Change presentation only. Do not add shadows, gradients, animations or decorative elements. This is an accounting tool: numbers lead, colour only carries meaning.
-
-Work in this order:
-1. Add the tokens (CSS variables or Tailwind theme extension).
-2. Build the shared components.
-3. Rebuild Home using those components.
-4. Apply the same components to Accounts, Contacts, Income, Spend, Debts, Reports, Settings.
+Binance-inspired financial platform language adapted for Ntrio accounting. **Light transactional canvas by default.** Single accent (Binance Yellow). Presentation only — do not change routes, API shapes, or business logic.
 
 ## Principles
 
-- Mobile first: design for 390px width, then scale up. Single column below 768px. At 768px+ use a max-width 960px (`--content-max`) container; KPI rows and cards may go to 2 columns.
-- **Phone = app shell**: fixed BottomNav, full-height form sheets, 44px controls, safe-area padding, bottom-sheet pickers. **Desktop browser = web app**: top nav, centered dialogs, optional 2-column form grids.
-- One screen = a stack of cards. Each card: heading, content, optional link.
-- Every amount: `--font-num` (IBM Plex Sans), tabular lining numerals, right aligned, sign shown (+ / −), currency code shown. Foreign value (USD) shown under the MVR value in caption style.
-- Colour is never the only signal: pair with +/− sign, label or tag text.
-- Touch targets at least 44px (`--tap` / `--input-h`). Real `<button>` and `<a>` elements, `aria-label` on icon-only controls. Inputs use `text-base` on mobile to avoid iOS zoom.
-- Text contrast at least 4.5:1.
+- **Light product default**: canvas `#fafafa`, cards `#ffffff`, elevated `#f5f5f5`, hairline `#eaecef`.
+- **Single brand accent**: `#FCD535` (primary CTAs, wordmark, active nav tint, links). Black text on yellow — never white on yellow.
+- **Trading semantics**: credit / income / up = `#0ECB81` (text); debit / expense / down = `#F6465D` (text). Not card fill backgrounds.
+- **Type**: Inter (≈ BinanceNova) for UI copy; IBM Plex Sans (≈ BinancePlex) for every number/amount.
+- Mobile first (390px), 44px touch targets, tabular amounts with currency and +/−. Colour is never the only signal.
+- Flat color-block elevation — no shadows, mesh gradients, glass, or emoji. Depth = ground vs card contrast.
 
 ## Tokens
 
 ```css
 :root {
-  --font: 'Inter', system-ui, sans-serif;
-  --font-num: 'IBM Plex Sans', 'Inter', system-ui, sans-serif; /* amounts, rates, qty */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
 
-  --ink: #111827;        /* text, headings */
-  --muted: #4B5563;      /* labels, captions */
-  --border: #E5E7EB;     /* dividers, card borders */
-  --ground: #F6F7F9;     /* page background */
-  --surface: #FFFFFF;    /* cards, nav */
-  --action: #1D4ED8;     /* links, primary button */
-  --credit: #047857;     /* income, money in */
-  --debit: #B91C1C;      /* expense, money out */
+  --ground: #fafafa;
+  --surface: #ffffff;
+  --surface-elevated: #f5f5f5;
+  --ink: #181a20;
+  --body: #181a20;
+  --muted: #707a8a;
+  --border: #eaecef;
+  --action: #FCD535;
+  --action-active: #f0b90b;
+  --on-primary: #181a20;
+  --credit: #0ecb81;
+  --debit: #f6465d;
+  --credit-bg: rgb(14 203 129 / 0.1); --credit-ink: #0ecb81;
+  --debit-bg:  rgb(246 70 93 / 0.1);  --debit-ink:  #f6465d;
+  --neutral-bg: #f5f5f5; --neutral-ink: #374151;
+  --info: #3b82f6;
 
-  --credit-bg: #ECFDF5; --credit-ink: #065F46;
-  --debit-bg:  #FEF2F2; --debit-ink:  #991B1B;
-  --neutral-bg:#F3F4F6; --neutral-ink:#374151;
-
-  --radius: 8px;         /* cards */
-  --radius-sm: 6px;      /* buttons, inputs */
-  --radius-xs: 4px;      /* tags */
-  --sheet-radius: 16px;  /* mobile sheet top corners; 8px from 768px */
+  --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
+  --radius: 8px; --radius-xl: 12px; --sheet-radius: 16px;
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px;
-  --tap: 44px;
-  --input-h: 44px;
-  --nav-h: 64px;
-  --content-max: 960px;
-  --content-pad: 16px;   /* 24px from 768px */
-  --form-gap: 16px;
-  --sheet-max: 92dvh;    /* 85vh from 768px */
-  --overlay: rgb(17 24 39 / 0.48);
-  --control-border: #D1D5DB; /* segmented / dashed controls */
+  --tap: 44px; --input-h: 44px; --nav-h: 64px;
+  --content-max: 1280px; --content-pad: 16px; /* 24px from 768px */
+  --form-gap: 16px; --sheet-max: 92dvh; --overlay: rgb(17 24 39 / 0.48);
+  --control-border: #cdd1d6;
 }
-body { font-family: var(--font); font-size: 14px; line-height: 20px; color: var(--ink); background: var(--ground); font-variant-numeric: tabular-nums; }
 ```
-
-Tailwind mapping: add the colours above under `theme.extend.colors`, `borderRadius: { DEFAULT: '8px', sm: '6px', xs: '4px' }`, and `fontFamily.sans = ['Inter', 'system-ui', 'sans-serif']`. Use the `tabular-nums` utility on all amounts.
-
-## Forms and sheets
-
-- **Modal**: bottom sheet on &lt;768px (grabber, `--sheet-radius` top), centered dialog on desktop. Use `variant="form"` for add income/expense so the sheet is tall and actions stay pinned.
-- **Dropdown**: on phone, options open as a bottom sheet with search; on desktop, anchored panel. Triggers and option rows are `--input-h` / `--tap`.
-- **ChoiceList**: large radio rows for settlement / mode picks — never tiny stacked radios alone.
-- **TextField / Button**: height `--input-h`, full-width primary actions on mobile; row-reverse pair on `sm+`.
-- **FormStepHeader** + **FormActions**: multi-step add flows; sticky action bar inside form sheets.
 
 ## Type scale
 
-| Role | Size / line | Weight | Notes |
-|---|---|---|---|
-| Amount large | 24/32 | 600 | tabular, nowrap |
-| Page title | 20/28 | 700 | |
-| Section heading | 16/24 | 600 | |
-| Body, row text | 14/20 | 400 or 500 | |
-| Label | 12/16 | 600 | uppercase, letter-spacing .04em, `--muted` |
-| Caption | 12/16 | 400 | `--muted` |
+| Role | Size / line | Weight | Face | Use |
+|---|---|---|---|---|
+| Amount large | 24 / 1.2 | 700 | IBM Plex | KPI values |
+| Number display | 40 / 1.1 | 700 | IBM Plex | Hero stats |
+| Page title | 20 / 1.35 | 600 | Inter | Screen titles |
+| Section heading | 16 / 1.4 | 600 | Inter | Card titles |
+| Body | 14 / 1.5 | 400–500 | Inter | Rows, copy |
+| Label | 12 / 1.4 | 500 | Inter | Uppercase muted labels |
+| Caption | 12 / 1.4 | 400 | Inter | Secondary lines |
+| Button | 14 / 1 | 600 | Inter | CTA labels |
 
 ## Components
 
-**Card**: `background: var(--surface); border: 1px solid var(--border); border-radius: 8px;` no shadow. Header row: heading left (16/24 600), caption or link right, padding `16px 16px 8px`.
+**Button primary**: bg `--action`, text `--on-primary`, radius 6px, min-height 44px. Press → `--action-active`. Never invert to white-on-yellow.
 
-**ListRow** (the base for every list): padding `12px 16px`, `border-top: 1px solid var(--border)`. Left: primary text (500) with caption under it. Right: amount (600, right aligned) with caption under it.
+**Button secondary**: bg `--surface`, text `--ink`, hairline `--border`. Not yellow outline.
 
-**StatRow** (KPI): top line = Label left, ChangeTag right. Second line = value (Amount large) left, caption "Prior …" right.
+**Button tertiary**: text-only; links use `--action`.
 
-**ChangeTag**: inline, `padding: 2px 6px; border-radius: 4px; font: 600 12/16`. Variants: `positive` (credit-bg / credit-ink), `negative` (debit-bg / debit-ink), `neutral` (neutral-bg / neutral-ink, also used for "New" and "0%"). Note: for expenses, an increase uses the `negative` variant (spent more), for income an increase uses `positive`.
+**Card / PanelCard**: bg `--surface`, border `--border`, radius 12px (`--radius-xl`). Header 16px padding.
 
-**Amount**: `<span class="amount credit|debit">` with format `+MVR 5,600.00` for credit, `−MVR 840.00` for debit (use the true minus sign U+2212). Optional second line caption `US$280.00`.
+**ListRow / StatRow**: hairline dividers; amounts right-aligned in `--font-num`.
 
-**ProgressBar**: height 6px, radius 3px, track `--border`, fill `--ink` (spend share) or `--action` (account share) or `--credit` / `--debit` (income vs expense).
+**ChangeTag**: trading text colour (credit/debit) on translucent tint. Neutral = elevated + muted.
 
-**Button**: min-height 44px, padding `0 16px`, radius 6px, weight 600. Primary: `--action` fill, white text. Secondary: white fill, `--action` text and border.
+**Amount**: always `--font-num`; credit/debit as text colour; + / − (U+2212) + currency.
 
-**SegmentedControl** (USD | MVR, All | Bank | Cash | Wallet): 1px `#D1D5DB` border, radius 6px, buttons min-height 44px, active = `--ink` fill with white text.
+**ProgressBar**: 6px track `--border`; fill ink / action / credit / debit.
 
-**TopBar**: white, bottom border, padding `12px 16px`. Left: wordmark "NTRIO" (12px, 700, tracked) and user email caption. Right: currency SegmentedControl. Sign out moves into More.
+**SegmentedControl**: hairline border; active = ink fill + white text.
 
-**BottomNav**: fixed bottom, height 64px, white, top border, 5 items: Home, Accounts, Add (opens add transaction sheet), Reports, More. Icon 20px stroke 1.8 plus 11px label. Active = `--action` and weight 600. Contacts, Income, Spend, Debts, Settings, Sign out live under More.
+**TopBar / BottomNav**: white / soft surface; wordmark can use `--action`; active tab = `--action` + weight 600.
 
-## Home layout (top to bottom, 16px gap between cards, 16px screen padding)
+**Modal / form sheets**: bottom sheet on &lt;768px, centered dialog on desktop.
 
-1. **TopBar**
-2. **Title row**: "Home" (page title) left, date range button right (secondary button, e.g. `Oct 1 – Oct 25, 2026`). Opens a period picker sheet.
-3. **This month** card, caption "vs <previous range>". Rows: StatRow Income, StatRow Expenses, StatRow Net (caption "34% of income kept"), then a caption row "Avg spend per day" with value.
-4. **Balance position** card: three ListRows: Cash & accounts, Pay later unpaid (debit colour), Net worth (debit colour when negative). The "?" help icons become a tap-to-open info sheet.
-5. **Cash movement** card: income bar (credit) and expense bar (debit) scaled to the larger value, with values. Footer row: trend sentence and a "Daily chart" link that opens the full interactive daily chart on its own screen (keep the existing chart component there, it must not be crammed into Home on mobile).
-6. **Accounts** card: link "View all". Total balance (Amount large) with USD equivalent, MVR/USD held split as caption, then a ListRow per account: name, "Type · Currency · % of total", amount and USD equivalent. Remove the multi-colour icon tiles and the rainbow split bar; account type is in the caption text.
-7. **Top expenses** card: caption "<range> vs <previous range>". Summary: Top 5 total, change tag, previous total caption. Then a row per category: name and amount, a ProgressBar, caption "Prev MVR x · n% of top 5" with a ChangeTag right. Footer caption explaining red = spent more.
-8. **Recent transactions** card: link "View all". One TransactionRow per entry: date + description left, signed Amount right with USD caption. Group by date with a sticky date label when the list grows past one day.
+## Home layout
 
-## Data rules
+Unchanged structure (This month → Balance → Cash movement → Accounts → Top expenses → Recent). Light cards + yellow CTAs/links + trading green/red amounts.
 
-- Percent change: `(current − prior) / prior`; if prior = 0 show tag `New`.
-- Net = income − expenses. "Kept" = net / income.
-- Show MVR as the base currency everywhere. USD toggle switches the primary line; the other currency is always the caption.
-- Empty states: one line of caption text plus a secondary button (e.g. "Add first transaction").
-- Loading: skeleton rows in `--border` colour, no spinners over content.
+## Do / Don't
 
-## Do not
+**Do**: reserve yellow for CTAs, brand, and focal links; use green/red only for money direction; numbers always IBM Plex; keep the light canvas.
 
-- No shadows, gradients, glass effects, emoji or illustration.
-- No more than three colours on a screen besides neutrals.
-- No colour-only meaning. No amounts left aligned. No truncated amounts (wrap labels, never numbers).
-- Do not change routes, API shapes or data models.
+**Don't**: second brand colour; yellow body text or large yellow fills; green/red as card surfaces; soft display weights; atmospheric gradients; white text on yellow primary buttons; dark product theme unless explicitly requested.
 
-## Acceptance check
+## Acceptance
 
-- At 390px width there is no horizontal scroll and every amount is fully visible.
-- Every interactive element is 44px tall or has a 44px hit area.
-- All amounts use tabular numerals and show currency plus sign.
-- Home reads income → expenses → net → balances → accounts → top expenses → transactions without opening any sheet.
+- 390px: no horizontal scroll; amounts fully visible; 44px targets.
+- Primary CTA reads yellow + black everywhere.
+- Light canvas throughout.
+- No API / route / model changes.

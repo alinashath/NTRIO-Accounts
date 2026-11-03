@@ -32,7 +32,9 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(opt.value)}
             className={cn(
               "min-h-11 min-w-11 cursor-pointer touch-manipulation rounded-sm px-3 text-sm font-semibold",
-              active ? "bg-ink text-white" : "bg-transparent text-muted-label hover:text-ink",
+              active
+                ? "bg-[var(--segment-active-bg)] text-[var(--segment-active-ink)]"
+                : "bg-transparent text-muted-label hover:text-ink",
             )}
           >
             {opt.label}

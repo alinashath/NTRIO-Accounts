@@ -8,6 +8,7 @@ import {
   computeIngredientNeeds,
   type ExtrasLike,
   type OrderLike,
+  type RecipeNeedSource,
 } from "./breakfastRequirements.js";
 
 function balanceOf(opening: number, received: number, used: number) {
@@ -77,38 +78,91 @@ async function loadOrderExtras(userId: string, date: Date) {
     guestNumber: o.guestNumber,
   }));
 
-  const extrasLikes: ExtrasLike[] = extras.map((e) => ({
-    roomNumber: e.room.number,
-    fruits: e.fruits,
-    pancake: e.pancake,
-    honey: e.honey,
-    nutella: e.nutella,
-    cereal: e.cereal,
-    waterBottle: e.waterBottle,
-  }));
+  const extrasLikes: ExtrasLike[] = extras.map((e) => {
+    const selectedLines = Array.isArray(e.selectedLines)
+      ? (e.selectedLines as Array<Record<string, unknown>>)
+          .map((row) => {
+            const id =
+              typeof row.stock_item_id === "string"
+                ? row.stock_item_id
+                : typeof row.stockItemId === "string"
+                  ? row.stockItemId
+                  : null;
+            const quantity = Number(row.quantity);
+            if (!id || !(quantity > 0)) return null;
+            return { stockItemId: id, quantity };
+          })
+          .filter((x): x is { stockItemId: string; quantity: number } => !!x)
+      : [];
+    return {
+      roomNumber: e.room.number,
+      fruits: e.fruits,
+      selectedLines,
+      selectedItemIds: e.selectedItemIds?.length
+        ? e.selectedItemIds
+        : selectedLines.map((l) => l.stockItemId),
+      pancake: e.pancake,
+      honey: e.honey,
+      nutella: e.nutella,
+      cereal: e.cereal,
+      waterBottle: e.waterBottle,
+    };
+  });
 
   return { orderLikes, extrasLikes };
 }
 
+async function loadRecipeSources(userId: string): Promise<RecipeNeedSource[]> {
+  const recipes = await prisma.recipe.findMany({
+    where: { userId, isActive: true },
+    include: {
+      lines: {
+        include: {
+          stockItem: { select: { id: true, code: true, name: true, unit: true, isActive: true } },
+        },
+      },
+    },
+  });
+  return recipes.map((r) => ({
+    apply_to: r.applyTo as RecipeNeedSource["apply_to"],
+    lines: r.lines
+      .filter((l) => l.stockItem.isActive)
+      .map((l) => ({
+        stock_item_id: l.stockItemId,
+        code: l.stockItem.code,
+        name: l.stockItem.name,
+        unit: l.stockItem.unit,
+        qty_per_serving: dec(l.qtyPerServing),
+        show_on_kot: l.showOnKot,
+      })),
+  }));
+}
+
 /**
  * Write computed breakfast ingredient needs into StockLedgerDay.used for the date.
- * Idempotent: replaces Used with the current requirement total for kitchen-coded items.
+ * Idempotent: replaces Used with the current requirement total for kitchen items.
  */
 export async function applyKitchenUsageForDate(userId: string, dateStr: string) {
   const date = parseYmd(dateStr);
-  const { orderLikes, extrasLikes } = await loadOrderExtras(userId, date);
-  const needs = computeIngredientNeeds(orderLikes, extrasLikes);
+  const [{ orderLikes, extrasLikes }, recipes] = await Promise.all([
+    loadOrderExtras(userId, date),
+    loadRecipeSources(userId),
+  ]);
+  const needs = computeIngredientNeeds(orderLikes, extrasLikes, recipes);
 
   const items = await prisma.stockItem.findMany({
     where: { userId, kind: "kitchen", isActive: true },
   });
+  const byId = new Map(items.map((i) => [i.id, i]));
   const byCode = new Map(items.filter((i) => i.code).map((i) => [i.code!, i]));
 
   const updated: string[] = [];
   const touchedIds = new Set<string>();
 
-  for (const [code, qty] of needs.entries()) {
-    const item = byCode.get(code);
+  for (const need of needs) {
+    const item =
+      (need.stock_item_id ? byId.get(need.stock_item_id) : undefined) ??
+      (need.code ? byCode.get(need.code) : undefined);
     if (!item) continue;
     touchedIds.add(item.id);
 
@@ -123,15 +177,15 @@ export async function applyKitchenUsageForDate(userId: string, dateStr: string) 
         date,
         opening,
         received: 0,
-        used: qty,
+        used: need.quantity,
         waste: 0,
         expenditure: 0,
       },
       update: {
-        used: qty,
+        used: need.quantity,
       },
     });
-    updated.push(code);
+    updated.push(item.code ?? item.id);
   }
 
   // Clear Used on kitchen catalog lines no longer required for this date
@@ -179,19 +233,28 @@ export type ShoppingLine = {
  */
 export async function buildShoppingListForDate(userId: string, dateStr: string) {
   const date = parseYmd(dateStr);
-  const { orderLikes, extrasLikes } = await loadOrderExtras(userId, date);
-  const needs = computeIngredientNeeds(orderLikes, extrasLikes);
+  const [{ orderLikes, extrasLikes }, recipes] = await Promise.all([
+    loadOrderExtras(userId, date),
+    loadRecipeSources(userId),
+  ]);
+  const needs = computeIngredientNeeds(orderLikes, extrasLikes, recipes);
 
   const items = await prisma.stockItem.findMany({
     where: { userId, isActive: true },
   });
+  const byId = new Map(items.map((i) => [i.id, i]));
   const byCode = new Map(items.filter((i) => i.code).map((i) => [i.code!, i]));
 
   const lines: ShoppingLine[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenCodes = new Set<string>();
 
-  for (const [code, required] of needs.entries()) {
-    const item = byCode.get(code);
+  for (const need of needs) {
+    const required = need.quantity;
+    const item =
+      (need.stock_item_id ? byId.get(need.stock_item_id) : undefined) ??
+      (need.code ? byCode.get(need.code) : undefined);
+    const code = item?.code ?? need.code ?? "custom";
     if (!item) {
       lines.push({
         code,
@@ -207,7 +270,7 @@ export async function buildShoppingListForDate(userId: string, dateStr: string) 
         use_notes: "Not in inventory catalog — add stock item or buy full requirement",
         pack_info: null,
       });
-      seen.add(code);
+      if (need.code) seenCodes.add(need.code);
       continue;
     }
 
@@ -235,19 +298,20 @@ export async function buildShoppingListForDate(userId: string, dateStr: string) 
       use_notes: item.useNotes,
       pack_info: item.packInfo,
     });
-    seen.add(code);
+    seenIds.add(item.id);
+    if (item.code) seenCodes.add(item.code);
   }
 
   // Items below min with no breakfast requirement still need replenishment
   for (const item of items) {
-    if (!item.code || seen.has(item.code)) continue;
+    if (seenIds.has(item.id) || (item.code && seenCodes.has(item.code))) continue;
     const minStock = dec(item.minStock);
     if (minStock <= 0) continue;
     const { available } = await availableForDate(userId, item.id, date);
     if (available >= minStock) continue;
     const toBuy = minStock - available;
     lines.push({
-      code: item.code,
+      code: item.code ?? `item:${item.id}`,
       stock_item_id: item.id,
       name: item.name,
       unit: item.unit,

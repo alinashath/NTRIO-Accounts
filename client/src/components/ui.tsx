@@ -9,7 +9,7 @@ export const Card = forwardRef<
     <div
       ref={ref}
       className={clsx(
-        "rounded-[var(--radius)] border border-border bg-surface p-4",
+        "rounded-[var(--radius-xl)] border border-border bg-surface p-4",
         className,
       )}
     >
@@ -88,10 +88,11 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex h-input min-h-11 cursor-pointer touch-manipulation items-center justify-center rounded-sm px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50",
-        resolved === "primary" && "bg-action text-white hover:bg-action/90",
+        "inline-flex h-input min-h-11 cursor-pointer touch-manipulation items-center justify-center rounded-[var(--radius-md)] px-4 text-sm font-semibold disabled:cursor-not-allowed",
+        resolved === "primary" &&
+          "bg-action text-[var(--on-primary)] hover:bg-[var(--action-active)] disabled:bg-[var(--action-disabled)] disabled:text-[var(--muted)] disabled:opacity-100",
         resolved === "secondary" &&
-          "border border-action bg-surface text-action hover:bg-neutral-bg",
+          "border border-border bg-surface text-ink hover:bg-neutral-bg disabled:opacity-50",
         className,
       )}
       {...rest}
@@ -115,7 +116,7 @@ export function TextField({
       <span className="mb-1.5 block text-sm font-medium text-ink">{label}</span>
       <input
         className={clsx(
-          "h-input w-full touch-manipulation rounded-sm border border-border bg-surface px-3 text-base text-ink placeholder:text-muted-label focus-visible:border-action sm:text-sm",
+          "h-input w-full touch-manipulation rounded-[var(--radius-md)] border border-border bg-surface px-3 text-base text-ink placeholder:text-muted-label focus-visible:border-info sm:text-sm",
           className,
         )}
         {...rest}

@@ -7,7 +7,9 @@ import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { Button, Card, ChoiceList, FormActions, FormStepHeader, TextField } from "@/components/ui";
+import { appendProjectFilter, useProjects } from "@/context/ProjectsContext";
 import { ACCOUNT_CURRENCIES } from "@/lib/fx";
 import { useAuthStore } from "@/store/auth";
 import type {
@@ -36,6 +38,7 @@ function dateInputValue(d: string) {
 
 export function ExpensesPage() {
   const userId = useAuthStore((s) => s.session?.user.id ?? "");
+  const { projectsEnabled, projects, createProject, refresh: refreshProjects } = useProjects();
   const [rows, setRows] = useState<ExpenseEntryDto[]>([]);
   const [total, setTotal] = useState(0);
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
@@ -54,6 +57,7 @@ export function ExpensesPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
+  const [filterProjectId, setFilterProjectId] = useState("");
   const [filterAccountId, setFilterAccountId] = useState("");
   const [settlement, setSettlement] = useState<"all" | "account" | "debt" | "pay_later">("all");
   const [page, setPage] = useState(1);
@@ -67,10 +71,11 @@ export function ExpensesPage() {
         dateTo,
         filterCategoryId,
         filterAccountId,
+        filterProjectId,
         settlement,
         showVoided ? "1" : "0",
       ].join("\u0001"),
-    [debouncedSearch, dateFrom, dateTo, filterCategoryId, filterAccountId, settlement, showVoided],
+    [debouncedSearch, dateFrom, dateTo, filterCategoryId, filterAccountId, filterProjectId, settlement, showVoided],
   );
 
   const prevFilterKey = useRef(filterKey);
@@ -84,9 +89,10 @@ export function ExpensesPage() {
           dateTo ||
           filterCategoryId ||
           filterAccountId ||
+          filterProjectId ||
           settlement !== "all",
       ),
-    [searchInput, debouncedSearch, dateFrom, dateTo, filterCategoryId, filterAccountId, settlement],
+    [searchInput, debouncedSearch, dateFrom, dateTo, filterCategoryId, filterAccountId, filterProjectId, settlement],
   );
 
   const clearListFilters = useCallback(() => {
@@ -96,6 +102,7 @@ export function ExpensesPage() {
     setDateTo("");
     setFilterCategoryId("");
     setFilterAccountId("");
+    setFilterProjectId("");
     setSettlement("all");
   }, []);
 
@@ -114,6 +121,7 @@ export function ExpensesPage() {
       if (dateFrom) q.set("from", dateFrom);
       if (dateTo) q.set("to", dateTo);
       if (filterCategoryId) q.set("category_id", filterCategoryId);
+      appendProjectFilter(q, filterProjectId);
       if (filterAccountId) q.set("account_id", filterAccountId);
       if (settlement !== "all") q.set("settlement", settlement);
       return `/api/expenses?${q.toString()}`;
@@ -125,6 +133,7 @@ export function ExpensesPage() {
       dateTo,
       filterCategoryId,
       filterAccountId,
+      filterProjectId,
       settlement,
     ],
   );
@@ -287,6 +296,21 @@ export function ExpensesPage() {
     return row.id;
   }, []);
 
+  const createExpenseProject = useCallback(
+    async (name: string) => {
+      const id = await createProject(name.trim());
+      await refreshProjects();
+      return id;
+    },
+    [createProject, refreshProjects],
+  );
+
+  const projectOpts: DropdownOption[] = useMemo(
+    () => projects.map((p) => ({ value: p.id, label: p.name })),
+    [projects],
+  );
+
+
   const createVendorContact = useCallback(async (name: string) => {
     const row = await apiFetch<{ id: string }>("/api/contacts", {
       method: "POST",
@@ -376,6 +400,7 @@ export function ExpensesPage() {
               required={false}
               placeholder="Any category"
             />
+            <ProjectFilter value={filterProjectId} onChange={setFilterProjectId} />
             <Dropdown
               label="Account"
               value={filterAccountId}
@@ -418,6 +443,9 @@ export function ExpensesPage() {
           categoryOptions={catDropdownOpts}
           contactOptions={contactOpts}
           createExpenseCategory={createExpenseCategory}
+          projectOptions={projectOpts}
+          projectsEnabled={projectsEnabled}
+          createExpenseProject={createExpenseProject}
           createVendorContact={createVendorContact}
           onDone={() => {
             setModalOpen(false);
@@ -446,6 +474,9 @@ export function ExpensesPage() {
             categoryOptions={catDropdownOpts}
             contactOptions={contactOpts}
             createExpenseCategory={createExpenseCategory}
+          projectOptions={projectOpts}
+          projectsEnabled={projectsEnabled}
+          createExpenseProject={createExpenseProject}
             createVendorContact={createVendorContact}
             onClose={() => setDetail(null)}
             onListChange={(e) => {
@@ -499,7 +530,7 @@ export function ExpensesPage() {
                         </span>
                       ) : null}
                       {r.pay_later ? (
-                        <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-800">
+                        <span className="shrink-0 rounded bg-neutral-bg px-1 text-[10px] font-semibold text-action">
                           Unpaid
                         </span>
                       ) : null}
@@ -566,7 +597,10 @@ function ExpenseForm({
   debtOptions,
   categoryOptions,
   contactOptions,
+  projectOptions,
+  projectsEnabled,
   createExpenseCategory,
+  createExpenseProject,
   createVendorContact,
   onDone,
   onError,
@@ -578,7 +612,10 @@ function ExpenseForm({
   debtOptions: DropdownOption[];
   categoryOptions: DropdownOption[];
   contactOptions: DropdownOption[];
+  projectOptions: DropdownOption[];
+  projectsEnabled: boolean;
   createExpenseCategory: (name: string) => Promise<string>;
+  createExpenseProject: (name: string) => Promise<string>;
   createVendorContact: (name: string) => Promise<string>;
   onDone: () => void;
   onError: (s: string | null) => void;
@@ -594,6 +631,7 @@ function ExpenseForm({
   const [debtId, setDebtId] = useState("");
   const [billCcy, setBillCcy] = useState("USD");
   const [categoryId, setCategoryId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [contactId, setContactId] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -668,6 +706,7 @@ function ExpenseForm({
         description: description.trim() || undefined,
         merchant: merchant.trim() || undefined,
         category_id: categoryId || undefined,
+          project_id: projectId || undefined,
         contact_id: contactId || undefined,
         attachment_url: attachmentUrl.trim() || undefined,
       };
@@ -817,6 +856,18 @@ function ExpenseForm({
               placeholder="None"
               onAddNotFound={createExpenseCategory}
             />
+            {projectsEnabled ? (
+              <Dropdown
+                label="Project (optional)"
+                value={projectId}
+                onChange={setProjectId}
+                options={projectOptions}
+                required={false}
+                placeholder="None"
+                onAddNotFound={createExpenseProject}
+                addNotFoundLabel="Add project"
+              />
+            ) : null}
           </>
         ) : null}
 
@@ -858,7 +909,10 @@ function ExpenseDetailPanel({
   debtOptions,
   categoryOptions,
   contactOptions,
+  projectOptions,
+  projectsEnabled,
   createExpenseCategory,
+  createExpenseProject,
   createVendorContact,
   onClose,
   onListChange,
@@ -872,7 +926,10 @@ function ExpenseDetailPanel({
   debtOptions: DropdownOption[];
   categoryOptions: DropdownOption[];
   contactOptions: DropdownOption[];
+  projectOptions: DropdownOption[];
+  projectsEnabled: boolean;
   createExpenseCategory: (name: string) => Promise<string>;
+  createExpenseProject: (name: string) => Promise<string>;
   createVendorContact: (name: string) => Promise<string>;
   onClose: () => void;
   onListChange: (e: { kind: "upsert"; row: ExpenseEntryDto } | { kind: "delete"; id: string }) => void;
@@ -892,6 +949,7 @@ function ExpenseDetailPanel({
   const [debtId, setDebtId] = useState(row.debt_id ?? "");
   const [billCcy, setBillCcy] = useState(row.bill_currency ?? "USD");
   const [categoryId, setCategoryId] = useState(row.category_id ?? "");
+  const [projectId, setProjectId] = useState(row.project_id ?? "");
   const [contactId, setContactId] = useState(row.contact_id ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
   const [attachmentUrl, setAttachmentUrl] = useState(row.attachment_url ?? "");
@@ -967,6 +1025,7 @@ function ExpenseDetailPanel({
           pay_later: settlement === "pay_later",
           bill_currency: settlement === "pay_later" ? billCcy : undefined,
           category_id: categoryId || null,
+          project_id: projectId || null,
           contact_id: contactId || null,
           notes: notes.trim() || undefined,
           attachment_url: attachmentUrl.trim() || null,
@@ -1163,6 +1222,19 @@ function ExpenseDetailPanel({
               disabled={voided}
               onAddNotFound={voided ? undefined : createExpenseCategory}
             />
+            {projectsEnabled ? (
+              <Dropdown
+                label="Project (optional)"
+                value={projectId}
+                onChange={setProjectId}
+                options={projectOptions}
+                required={false}
+                placeholder="None"
+                disabled={voided}
+                onAddNotFound={voided ? undefined : createExpenseProject}
+                addNotFoundLabel="Add project"
+              />
+            ) : null}
             <TextField
               label="Notes (optional)"
               value={notes}

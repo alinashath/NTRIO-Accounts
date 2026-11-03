@@ -8,8 +8,8 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-neutral-bg text-neutral-ink",
-        positive: "bg-credit-bg text-credit-ink",
-        negative: "bg-debit-bg text-debit-ink",
+        positive: "bg-credit-bg text-credit",
+        negative: "bg-debit-bg text-debit",
         neutral: "bg-neutral-bg text-neutral-ink",
         outline: "border border-border bg-transparent text-muted-label",
       },

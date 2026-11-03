@@ -8,7 +8,9 @@ import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { Button, Card, FormActions, FormStepHeader, TextField } from "@/components/ui";
+import { appendProjectFilter, useProjects } from "@/context/ProjectsContext";
 import { ACCOUNT_CURRENCIES } from "@/lib/fx";
 import { useAuthStore } from "@/store/auth";
 import type {
@@ -37,6 +39,7 @@ function dateInputValue(d: string) {
 
 export function IncomePage() {
   const userId = useAuthStore((s) => s.session?.user.id ?? "");
+  const { projectsEnabled, projects, createProject, refresh: refreshProjects } = useProjects();
   const [rows, setRows] = useState<IncomeEntryDto[]>([]);
   const [total, setTotal] = useState(0);
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
@@ -55,6 +58,7 @@ export function IncomePage() {
   const [dateTo, setDateTo] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [filterAccountId, setFilterAccountId] = useState("");
+  const [filterProjectId, setFilterProjectId] = useState("");
   const [incomeType, setIncomeType] = useState<"all" | "uncategorized">("all");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -67,6 +71,7 @@ export function IncomePage() {
         dateTo,
         filterCategoryId,
         filterAccountId,
+        filterProjectId,
         incomeType,
         showVoided ? "1" : "0",
       ].join("\u0001"),
@@ -76,6 +81,7 @@ export function IncomePage() {
       dateTo,
       filterCategoryId,
       filterAccountId,
+      filterProjectId,
       incomeType,
       showVoided,
     ],
@@ -92,6 +98,7 @@ export function IncomePage() {
           dateTo ||
           filterCategoryId ||
           filterAccountId ||
+          filterProjectId ||
           incomeType !== "all",
       ),
     [
@@ -101,6 +108,7 @@ export function IncomePage() {
       dateTo,
       filterCategoryId,
       filterAccountId,
+      filterProjectId,
       incomeType,
     ],
   );
@@ -112,6 +120,7 @@ export function IncomePage() {
     setDateTo("");
     setFilterCategoryId("");
     setFilterAccountId("");
+    setFilterProjectId("");
     setIncomeType("all");
   }, []);
 
@@ -132,6 +141,7 @@ export function IncomePage() {
       if (filterCategoryId) q.set("category_id", filterCategoryId);
       if (filterAccountId === PENDING_ACCOUNT_FILTER) q.set("pending_receivable", "true");
       else if (filterAccountId) q.set("account_id", filterAccountId);
+      appendProjectFilter(q, filterProjectId);
       if (incomeType === "uncategorized") q.set("income_type", "uncategorized");
       return `/api/income?${q.toString()}`;
     },
@@ -142,6 +152,7 @@ export function IncomePage() {
       dateTo,
       filterCategoryId,
       filterAccountId,
+      filterProjectId,
       incomeType,
     ],
   );
@@ -293,6 +304,20 @@ export function IncomePage() {
     return row.id;
   }, []);
 
+  const createIncomeProject = useCallback(
+    async (name: string) => {
+      const id = await createProject(name.trim());
+      await refreshProjects();
+      return id;
+    },
+    [createProject, refreshProjects],
+  );
+
+  const projectOpts: DropdownOption[] = useMemo(
+    () => projects.map((p) => ({ value: p.id, label: p.name })),
+    [projects],
+  );
+
   const createCustomerContact = useCallback(async (name: string) => {
     const row = await apiFetch<{ id: string }>("/api/contacts", {
       method: "POST",
@@ -398,6 +423,7 @@ export function IncomePage() {
               required={false}
               searchable={false}
             />
+            <ProjectFilter value={filterProjectId} onChange={setFilterProjectId} />
           </div>
           <div className="flex flex-wrap justify-end gap-1.5 border-t border-border pt-3">
             <Button type="button" variant="ghost" onClick={clearListFilters}>
@@ -417,7 +443,10 @@ export function IncomePage() {
           accountOptions={accountOpts}
           categoryOptions={catDropdownOpts}
           contactOptions={contactOpts}
+          projectOptions={projectOpts}
+          projectsEnabled={projectsEnabled}
           createIncomeCategory={createIncomeCategory}
+          createIncomeProject={createIncomeProject}
           createCustomerContact={createCustomerContact}
           onDone={() => {
             setModalOpen(false);
@@ -435,7 +464,7 @@ export function IncomePage() {
         onClose={() => setDetail(null)}
       >
         {detail ? (
-          <IncomeDetailPanel
+          <IncomeDetailForm
             key={detail.id}
             row={detail}
             userId={userId}
@@ -443,7 +472,10 @@ export function IncomePage() {
             accountOptions={accountOpts}
             categoryOptions={catDropdownOpts}
             contactOptions={contactOpts}
+            projectOptions={projectOpts}
+            projectsEnabled={projectsEnabled}
             createIncomeCategory={createIncomeCategory}
+            createIncomeProject={createIncomeProject}
             createCustomerContact={createCustomerContact}
             onClose={() => setDetail(null)}
             onListChange={(e) => {
@@ -497,7 +529,7 @@ export function IncomePage() {
                         </span>
                       ) : null}
                       {r.pending_receivable ? (
-                        <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-800">
+                        <span className="shrink-0 rounded bg-neutral-bg px-1 text-[10px] font-semibold text-action">
                           Pending
                         </span>
                       ) : null}
@@ -558,7 +590,10 @@ function IncomeForm({
   accountOptions,
   categoryOptions,
   contactOptions,
+  projectOptions,
+  projectsEnabled,
   createIncomeCategory,
+  createIncomeProject,
   createCustomerContact,
   onDone,
   onError,
@@ -568,7 +603,10 @@ function IncomeForm({
   accountOptions: DropdownOption[];
   categoryOptions: DropdownOption[];
   contactOptions: DropdownOption[];
+  projectOptions: DropdownOption[];
+  projectsEnabled: boolean;
   createIncomeCategory: (name: string) => Promise<string>;
+  createIncomeProject: (name: string) => Promise<string>;
   createCustomerContact: (name: string) => Promise<string>;
   onDone: () => void;
   onError: (s: string | null) => void;
@@ -582,6 +620,7 @@ function IncomeForm({
   const [description, setDescription] = useState("");
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [contactId, setContactId] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -649,6 +688,7 @@ function IncomeForm({
           description: description.trim() || undefined,
           account_id: receivable ? undefined : accountId,
           category_id: categoryId || undefined,
+          project_id: projectId || undefined,
           contact_id: contactId || undefined,
           attachment_url: attachmentUrl.trim() || undefined,
         }),
@@ -657,6 +697,7 @@ function IncomeForm({
       setDescription("");
       setAccountId("");
       setCategoryId("");
+      setProjectId("");
       setContactId("");
       setAttachmentUrl("");
       setReceivable(false);
@@ -762,6 +803,18 @@ function IncomeForm({
               placeholder="None"
               onAddNotFound={createIncomeCategory}
             />
+            {projectsEnabled ? (
+              <Dropdown
+                label="Project (optional)"
+                value={projectId}
+                onChange={setProjectId}
+                options={projectOptions}
+                required={false}
+                placeholder="None"
+                onAddNotFound={createIncomeProject}
+                addNotFoundLabel="Add project"
+              />
+            ) : null}
             <Dropdown
               label="Customer / contact (optional)"
               value={contactId}
@@ -804,14 +857,17 @@ function IncomeForm({
   );
 }
 
-function IncomeDetailPanel({
+function IncomeDetailForm({
   row,
   userId,
   accounts,
   accountOptions,
   categoryOptions,
   contactOptions,
+  projectOptions,
+  projectsEnabled,
   createIncomeCategory,
+  createIncomeProject,
   createCustomerContact,
   onClose,
   onListChange,
@@ -823,7 +879,10 @@ function IncomeDetailPanel({
   accountOptions: DropdownOption[];
   categoryOptions: DropdownOption[];
   contactOptions: DropdownOption[];
+  projectOptions: DropdownOption[];
+  projectsEnabled: boolean;
   createIncomeCategory: (name: string) => Promise<string>;
+  createIncomeProject: (name: string) => Promise<string>;
   createCustomerContact: (name: string) => Promise<string>;
   onClose: () => void;
   onListChange: (e: { kind: "upsert"; row: IncomeEntryDto } | { kind: "delete"; id: string }) => void;
@@ -838,6 +897,7 @@ function IncomeDetailPanel({
   const [receiveAccountId, setReceiveAccountId] = useState("");
   const [receiveDate, setReceiveDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [categoryId, setCategoryId] = useState(row.category_id ?? "");
+  const [projectId, setProjectId] = useState(row.project_id ?? "");
   const [contactId, setContactId] = useState(row.contact_id ?? "");
   const [source, setSource] = useState(row.source ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
@@ -893,6 +953,7 @@ function IncomeDetailPanel({
         date: earnedDate,
         description: description.trim() || undefined,
         category_id: categoryId || null,
+        project_id: projectId || null,
         contact_id: contactId || null,
         source: source.trim() || undefined,
         notes: notes.trim() || undefined,
@@ -1093,6 +1154,19 @@ function IncomeDetailPanel({
               disabled={voided}
               onAddNotFound={voided ? undefined : createIncomeCategory}
             />
+            {projectsEnabled ? (
+              <Dropdown
+                label="Project (optional)"
+                value={projectId}
+                onChange={setProjectId}
+                options={projectOptions}
+                required={false}
+                placeholder="None"
+                disabled={voided}
+                onAddNotFound={voided ? undefined : createIncomeProject}
+                addNotFoundLabel="Add project"
+              />
+            ) : null}
             <Dropdown
               label="Customer / contact (optional)"
               value={contactId}

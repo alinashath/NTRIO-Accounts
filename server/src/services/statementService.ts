@@ -1,5 +1,10 @@
 import { convertWithUsdMvrRate } from "../lib/displayFx.js";
 import { getUsdMvrRate, loadFxRateResolver } from "../lib/fxRates.js";
+import {
+  isProjectScoped,
+  projectWhereClause,
+  type ProjectScope,
+} from "../lib/projectFilter.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { transferCreditToDestination } from "./balanceService.js";
@@ -8,6 +13,8 @@ export type DisplayCurrency = "USD" | "MVR";
 
 /** Accrual = earned / bill (incurred) date. Cash = received / paid (transaction) date. */
 export type DateBasis = "accrual" | "cash";
+
+export type { ProjectScope };
 
 export { getUsdMvrRate };
 
@@ -105,6 +112,42 @@ export async function accountBalanceAsOf(accountId: string, asOfYmd: string): Pr
   );
 }
 
+/**
+ * Project-attributed cash on an account as of date: only income/expense cash
+ * movements matching the project scope (no opening, transfers, debts, adjustments).
+ */
+export async function accountAttributedBalanceAsOf(
+  accountId: string,
+  asOfYmd: string,
+  scope: ProjectScope,
+): Promise<number> {
+  const end = dayEnd(asOfYmd);
+  const projectClause = projectWhereClause(scope);
+  const [inc, exp] = await Promise.all([
+    prisma.incomeEntry.aggregate({
+      where: {
+        accountId,
+        deletedAt: null,
+        voidedAt: null,
+        receivedDate: { not: null, lte: end },
+        ...projectClause,
+      },
+      _sum: { amount: true },
+    }),
+    prisma.expenseEntry.aggregate({
+      where: {
+        accountId,
+        deletedAt: null,
+        voidedAt: null,
+        paidDate: { not: null, lte: end },
+        ...projectClause,
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+  return toMoney(Number(inc._sum.amount ?? 0) - Number(exp._sum.amount ?? 0));
+}
+
 export type BalanceSheetLine = {
   key: string;
   label: string;
@@ -116,6 +159,8 @@ export type BalanceSheetLine = {
 export type BalanceSheetStatement = {
   as_of: string;
   display_currency: DisplayCurrency;
+  /** True when filtered to a project or unassigned — attributed position, not full org sheet. */
+  project_scoped: boolean;
   assets: {
     cash_accounts: BalanceSheetLine[];
     total_cash: number;
@@ -148,8 +193,11 @@ export async function buildBalanceSheet(
   userId: string,
   asOfYmd: string,
   displayCurrency: DisplayCurrency,
+  projectScope: ProjectScope = {},
 ): Promise<BalanceSheetStatement> {
   const end = dayEnd(asOfYmd);
+  const scoped = isProjectScoped(projectScope);
+  const projectClause = projectWhereClause(projectScope);
   /** Point-in-time: convert all sheet lines at the as-of date rate. */
   const rate = await getUsdMvrRate(userId, asOfYmd);
   const accounts = await prisma.account.findMany({
@@ -160,7 +208,10 @@ export async function buildBalanceSheet(
   const cashAccounts: BalanceSheetLine[] = [];
   let totalCash = 0;
   for (const a of accounts) {
-    const native = await accountBalanceAsOf(a.id, asOfYmd);
+    const native = scoped
+      ? await accountAttributedBalanceAsOf(a.id, asOfYmd, projectScope)
+      : await accountBalanceAsOf(a.id, asOfYmd);
+    if (scoped && native === 0) continue;
     const amount = conv(native, a.currency, displayCurrency, rate);
     cashAccounts.push({
       key: a.id,
@@ -172,61 +223,89 @@ export async function buildBalanceSheet(
     totalCash = toMoney(totalCash + amount);
   }
 
-  const debts = await prisma.debt.findMany({
-    where: { userId, createdAt: { lte: end } },
-    include: { payments: true },
-  });
-
-  const debtIds = debts.map((d) => d.id);
-  const accGroups =
-    debtIds.length === 0
-      ? []
-      : await prisma.expenseEntry.groupBy({
-          by: ["debtId"],
-          where: {
-            userId,
-            debtId: { in: debtIds },
-            deletedAt: null,
-            voidedAt: null,
-            billDate: { lte: end },
-          },
-          _sum: { amount: true },
-        });
-  const accMap = new Map(
-    accGroups
-      .filter((g): g is typeof g & { debtId: string } => g.debtId != null)
-      .map((g) => [g.debtId, toMoney(Number(g._sum.amount ?? 0))]),
-  );
-
   const receivables: BalanceSheetLine[] = [];
   const debtsPayable: BalanceSheetLine[] = [];
   let totalReceivables = 0;
   let totalDebtsPayable = 0;
 
-  for (const d of debts) {
-    const paid = toMoney(
-      d.payments
-        .filter((p) => !p.voidedAt && p.date <= end)
-        .reduce((s, p) => s + Number(p.amount), 0),
+  if (!scoped) {
+    const debts = await prisma.debt.findMany({
+      where: { userId, createdAt: { lte: end } },
+      include: { payments: true },
+    });
+
+    const debtIds = debts.map((d) => d.id);
+    const accGroups =
+      debtIds.length === 0
+        ? []
+        : await prisma.expenseEntry.groupBy({
+            by: ["debtId"],
+            where: {
+              userId,
+              debtId: { in: debtIds },
+              deletedAt: null,
+              voidedAt: null,
+              billDate: { lte: end },
+            },
+            _sum: { amount: true },
+          });
+    const accMap = new Map(
+      accGroups
+        .filter((g): g is typeof g & { debtId: string } => g.debtId != null)
+        .map((g) => [g.debtId, toMoney(Number(g._sum.amount ?? 0))]),
     );
-    const principal = toMoney(Number(d.principal));
-    const accrued = accMap.get(d.id) ?? 0;
-    const outst = toMoney(principal + accrued - paid);
-    if (outst <= 0) continue;
-    const amount = conv(outst, d.currency, displayCurrency, rate);
-    const line: BalanceSheetLine = {
-      key: d.id,
-      label: d.contactName,
-      amount,
-      native_currency: d.currency,
-      native_amount: outst,
-    };
-    if (d.direction === "owed_to_me") {
-      receivables.push(line);
+
+    for (const d of debts) {
+      const paid = toMoney(
+        d.payments
+          .filter((p) => !p.voidedAt && p.date <= end)
+          .reduce((s, p) => s + Number(p.amount), 0),
+      );
+      const principal = toMoney(Number(d.principal));
+      const accrued = accMap.get(d.id) ?? 0;
+      const outst = toMoney(principal + accrued - paid);
+      if (outst <= 0) continue;
+      const amount = conv(outst, d.currency, displayCurrency, rate);
+      const line: BalanceSheetLine = {
+        key: d.id,
+        label: d.contactName,
+        amount,
+        native_currency: d.currency,
+        native_amount: outst,
+      };
+      if (d.direction === "owed_to_me") {
+        receivables.push(line);
+        totalReceivables = toMoney(totalReceivables + amount);
+      } else {
+        debtsPayable.push(line);
+        totalDebtsPayable = toMoney(totalDebtsPayable + amount);
+      }
+    }
+  } else {
+    /** Project-scoped: undeposited income for this project (not debt receivables). */
+    const arRows = await prisma.incomeEntry.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        voidedAt: null,
+        accountId: null,
+        date: { lte: end },
+        ...projectClause,
+      },
+      select: { id: true, amount: true, currency: true, description: true, source: true },
+    });
+    for (const r of arRows) {
+      const native = toMoney(Number(r.amount));
+      const ccy = (r.currency ?? "USD").toUpperCase();
+      const amount = conv(native, ccy, displayCurrency, rate);
+      receivables.push({
+        key: r.id,
+        label: r.description ?? r.source ?? "Receivable",
+        amount,
+        native_currency: ccy,
+        native_amount: native,
+      });
       totalReceivables = toMoney(totalReceivables + amount);
-    } else {
-      debtsPayable.push(line);
-      totalDebtsPayable = toMoney(totalDebtsPayable + amount);
     }
   }
 
@@ -239,6 +318,7 @@ export async function buildBalanceSheet(
       billDate: { lte: end },
       debtId: null,
       OR: [{ paidDate: null }, { paidDate: { gt: end } }],
+      ...projectClause,
     },
     select: { id: true, amount: true, billCurrency: true, description: true, merchant: true },
   });
@@ -264,6 +344,7 @@ export async function buildBalanceSheet(
   return {
     as_of: asOfYmd,
     display_currency: displayCurrency,
+    project_scoped: scoped,
     assets: {
       cash_accounts: cashAccounts,
       total_cash: totalCash,
@@ -332,9 +413,12 @@ export async function buildCashFlowStatement(
   toYmd: string,
   displayCurrency: DisplayCurrency,
   dateBasis: DateBasis = "accrual",
+  projectScope: ProjectScope = {},
 ): Promise<CashFlowStatement> {
   const from = dayStart(fromYmd);
   const to = dayEnd(toYmd);
+  const scoped = isProjectScoped(projectScope);
+  const projectClause = projectWhereClause(projectScope);
   const rateFor = await loadFxRateResolver(userId);
   const accounts = await prisma.account.findMany({
     where: { userId },
@@ -371,6 +455,7 @@ export async function buildCashFlowStatement(
           deletedAt: null,
           voidedAt: null,
           ...incomeDateWhere,
+          ...projectClause,
         },
         include: { category: true },
       }),
@@ -381,23 +466,32 @@ export async function buildCashFlowStatement(
           deletedAt: null,
           voidedAt: null,
           ...expenseDateWhere,
+          ...projectClause,
         },
         include: { category: true },
       }),
-      prisma.accountTransfer.findMany({
-        where: { userId, fromAccountId: a.id, date: { gte: from, lte: to } },
-      }),
-      prisma.accountTransfer.findMany({
-        where: { userId, toAccountId: a.id, date: { gte: from, lte: to } },
-        include: { fromAccount: true, toAccount: true },
-      }),
-      prisma.debtPayment.findMany({
-        where: { accountId: a.id, voidedAt: null, date: { gte: from, lte: to } },
-        include: { debt: true },
-      }),
-      prisma.accountBalanceAdjustment.findMany({
-        where: { accountId: a.id, date: { gte: from, lte: to } },
-      }),
+      scoped
+        ? Promise.resolve([])
+        : prisma.accountTransfer.findMany({
+            where: { userId, fromAccountId: a.id, date: { gte: from, lte: to } },
+          }),
+      scoped
+        ? Promise.resolve([])
+        : prisma.accountTransfer.findMany({
+            where: { userId, toAccountId: a.id, date: { gte: from, lte: to } },
+            include: { fromAccount: true, toAccount: true },
+          }),
+      scoped
+        ? Promise.resolve([])
+        : prisma.debtPayment.findMany({
+            where: { accountId: a.id, voidedAt: null, date: { gte: from, lte: to } },
+            include: { debt: true },
+          }),
+      scoped
+        ? Promise.resolve([])
+        : prisma.accountBalanceAdjustment.findMany({
+            where: { accountId: a.id, date: { gte: from, lte: to } },
+          }),
     ]);
 
     let incomeSum = 0;
@@ -503,6 +597,7 @@ export async function buildCashFlowStatement(
           deletedAt: null,
           voidedAt: null,
           date: { gte: from, lte: to },
+          ...projectClause,
         },
         include: { category: true },
       }),
@@ -513,6 +608,7 @@ export async function buildCashFlowStatement(
           deletedAt: null,
           voidedAt: null,
           billDate: { gte: from, lte: to },
+          ...projectClause,
         },
         include: { category: true, debt: true },
       }),
@@ -557,8 +653,12 @@ export async function buildCashFlowStatement(
   let cashBeginning = 0;
   let cashEnding = 0;
   for (const a of accounts) {
-    const b0 = await accountBalanceAsOf(a.id, beginYmd);
-    const b1 = await accountBalanceAsOf(a.id, toYmd);
+    const b0 = scoped
+      ? await accountAttributedBalanceAsOf(a.id, beginYmd, projectScope)
+      : await accountBalanceAsOf(a.id, beginYmd);
+    const b1 = scoped
+      ? await accountAttributedBalanceAsOf(a.id, toYmd, projectScope)
+      : await accountBalanceAsOf(a.id, toYmd);
     cashBeginning = toMoney(
       cashBeginning + conv(b0, a.currency, displayCurrency, rateFor(beginYmd)),
     );
@@ -631,10 +731,12 @@ export async function buildIncomeStatement(
   toYmd: string,
   displayCurrency: DisplayCurrency,
   dateBasis: DateBasis = "accrual",
+  projectScope: ProjectScope = {},
 ): Promise<IncomeStatement> {
   const from = dayStart(fromYmd);
   const to = dayEnd(toYmd);
   const rateFor = await loadFxRateResolver(userId);
+  const projectClause = projectWhereClause(projectScope);
 
   const incomeWhere =
     dateBasis === "accrual"
@@ -643,12 +745,14 @@ export async function buildIncomeStatement(
           deletedAt: null,
           voidedAt: null,
           date: { gte: from, lte: to },
+          ...projectClause,
         }
       : {
           userId,
           deletedAt: null,
           voidedAt: null,
           receivedDate: { not: null, gte: from, lte: to },
+          ...projectClause,
         };
 
   const expenseWhere =
@@ -658,12 +762,14 @@ export async function buildIncomeStatement(
           deletedAt: null,
           voidedAt: null,
           billDate: { gte: from, lte: to },
+          ...projectClause,
         }
       : {
           userId,
           deletedAt: null,
           voidedAt: null,
           paidDate: { not: null, gte: from, lte: to },
+          ...projectClause,
         };
 
   const [incomeRows, expenseRows] = await Promise.all([

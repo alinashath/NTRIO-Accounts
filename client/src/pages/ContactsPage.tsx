@@ -60,8 +60,8 @@ export function ContactsPage() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 md:text-xl">Contacts</h2>
-          <p className="text-sm text-slate-500">Search and open a contact for statement &amp; vendor tools.</p>
+          <h2 className="text-lg font-bold text-ink md:text-xl">Contacts</h2>
+          <p className="text-sm text-muted-label">Search and open a contact for statement &amp; vendor tools.</p>
         </div>
         <Button
           type="button"
@@ -93,7 +93,7 @@ export function ContactsPage() {
         </div>
       </Card>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Modal
         open={modalOpen}
@@ -115,12 +115,12 @@ export function ContactsPage() {
       </Modal>
 
       <Card className="overflow-hidden p-0">
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-border">
           {rows.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
               <div className="min-w-0">
-                <p className="font-semibold text-slate-900">{c.name}</p>
-                <p className="text-xs text-slate-500 capitalize">
+                <p className="font-semibold text-ink">{c.name}</p>
+                <p className="text-xs text-muted-label capitalize">
                   {c.kind}
                   {c.email ? ` · ${c.email}` : ""}
                   {c.phone ? ` · ${c.phone}` : ""}
@@ -148,7 +148,7 @@ export function ContactsPage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="text-xs text-red-700"
+                  className="text-xs text-debit"
                   onClick={() => {
                     if (!window.confirm(`Delete contact “${c.name}”? Links on transactions will be cleared.`)) {
                       return;
@@ -165,10 +165,10 @@ export function ContactsPage() {
           ))}
         </ul>
         {!rows.length ? (
-          <p className="p-4 text-center text-sm text-slate-500">No contacts match.</p>
+          <p className="p-4 text-center text-sm text-muted-label">No contacts match.</p>
         ) : null}
         {total > PAGE_SIZE ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 text-sm text-slate-600">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-sm text-muted-label">
             <span>
               Page {page} of {totalPages} · {total} total
             </span>

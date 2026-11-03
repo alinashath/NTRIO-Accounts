@@ -98,8 +98,8 @@ export function PeriodFilterBar({
                 className={clsx(
                   "min-h-11 rounded-sm px-3 text-sm font-semibold touch-manipulation",
                   draftPreset === opt.id
-                    ? "bg-ink text-white"
-                    : "bg-neutral-bg text-ink hover:bg-border",
+                    ? "bg-action text-[var(--on-primary)]"
+                    : "bg-neutral-bg text-ink hover:bg-[var(--surface-elevated)]",
                 )}
               >
                 {opt.label}

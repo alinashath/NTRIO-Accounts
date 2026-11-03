@@ -65,6 +65,7 @@ settingsRouter.get(
       global_usd_mvr_rate: Number(row.globalUsdMvrRate),
       organization_id: org.id,
       organization_title: org.title?.trim() || "NTRIO",
+      projects_enabled: row.projectsEnabled,
       fx_rates,
     });
   }),
@@ -127,10 +128,14 @@ const patchSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     organization_title: z.string().trim().min(1).max(64).optional(),
+    projects_enabled: z.boolean().optional(),
   })
   .refine(
-    (b) => b.global_usd_mvr_rate !== undefined || b.organization_title !== undefined,
-    { message: "Provide global_usd_mvr_rate and/or organization_title" },
+    (b) =>
+      b.global_usd_mvr_rate !== undefined ||
+      b.organization_title !== undefined ||
+      b.projects_enabled !== undefined,
+    { message: "Provide global_usd_mvr_rate, organization_title, and/or projects_enabled" },
   );
 
 settingsRouter.patch(
@@ -147,6 +152,14 @@ settingsRouter.patch(
         preferred,
         (req as AuthedRequest).userEmail,
       );
+    }
+
+    if (body.projects_enabled !== undefined) {
+      await prisma.userSettings.upsert({
+        where: { userId },
+        create: { userId, projectsEnabled: body.projects_enabled },
+        update: { projectsEnabled: body.projects_enabled },
+      });
     }
 
     if (body.global_usd_mvr_rate !== undefined) {
@@ -189,6 +202,7 @@ settingsRouter.patch(
       global_usd_mvr_rate: Number(refreshed.globalUsdMvrRate),
       organization_id: org.id,
       organization_title: org.title?.trim() || "NTRIO",
+      projects_enabled: refreshed.projectsEnabled,
       fx_rates,
     });
   }),

@@ -23,6 +23,7 @@ function mapRecipe(r: {
     stockItemId: string;
     qtyPerServing: { toNumber?: () => number } | number;
     notes: string | null;
+    showOnKot?: boolean;
     stockItem: { name: string; unit: string; code: string | null };
   }>;
 }) {
@@ -43,6 +44,7 @@ function mapRecipe(r: {
       stock_item_code: l.stockItem.code,
       qty_per_serving: dec(l.qtyPerServing),
       notes: l.notes,
+      show_on_kot: l.showOnKot !== false,
     })),
   };
 }
@@ -51,6 +53,7 @@ const lineSchema = z.object({
   stock_item_id: z.string().uuid(),
   qty_per_serving: z.number().positive(),
   notes: z.string().max(500).optional().nullable(),
+  show_on_kot: z.boolean().optional().default(true),
 });
 
 const createSchema = z.object({
@@ -128,6 +131,7 @@ recipesRouter.post(
             stockItemId: l.stock_item_id,
             qtyPerServing: l.qty_per_serving,
             notes: l.notes ?? null,
+            showOnKot: l.show_on_kot ?? true,
           })),
         },
       },
@@ -167,6 +171,7 @@ recipesRouter.put(
           stockItemId: l.stock_item_id,
           qtyPerServing: l.qty_per_serving,
           notes: l.notes ?? null,
+          showOnKot: l.show_on_kot ?? true,
         })),
       });
     }

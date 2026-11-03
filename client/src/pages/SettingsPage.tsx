@@ -25,6 +25,11 @@ const sections = [
     caption: "Labels and budgets for spend",
   },
   {
+    to: "/accounts/settings/projects",
+    title: "Projects",
+    caption: "Optional tags and report filters",
+  },
+  {
     to: "/accounts/settings/organization",
     title: "Organization",
     caption: "Wordmark title (e.g. NTRIO)",

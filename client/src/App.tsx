@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-r
 import { useAuthStore } from "./store/auth";
 import { DisplayCurrencyProvider } from "./context/DisplayCurrencyContext";
 import { OrganizationProvider, useOrganization } from "./context/OrganizationContext";
+import { ProjectsProvider } from "./context/ProjectsContext";
 import { WorkspaceLayout } from "./components/WorkspaceLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
@@ -27,6 +28,7 @@ import { SettingsAccountPage } from "./pages/settings/SettingsAccountPage";
 import { SettingsUsersPage } from "./pages/settings/SettingsUsersPage";
 import { SettingsIncomeCategoriesPage } from "./pages/settings/SettingsIncomeCategoriesPage";
 import { SettingsExpenseCategoriesPage } from "./pages/settings/SettingsExpenseCategoriesPage";
+import { SettingsProjectsPage } from "./pages/settings/SettingsProjectsPage";
 import { SettingsOrganizationPage } from "./pages/settings/SettingsOrganizationPage";
 import { SettingsExchangeRatePage } from "./pages/settings/SettingsExchangeRatePage";
 import { CashMovementPage } from "./pages/CashMovementPage";
@@ -76,9 +78,11 @@ function Protected() {
   return (
     <OrganizationProvider>
       <DisplayCurrencyProvider>
-        <OrgGate>
-          <Outlet />
-        </OrgGate>
+        <ProjectsProvider>
+          <OrgGate>
+            <Outlet />
+          </OrgGate>
+        </ProjectsProvider>
       </DisplayCurrencyProvider>
     </OrganizationProvider>
   );
@@ -148,6 +152,7 @@ export default function App() {
           <Route path="settings/users" element={<SettingsUsersPage />} />
           <Route path="settings/income-categories" element={<SettingsIncomeCategoriesPage />} />
           <Route path="settings/expense-categories" element={<SettingsExpenseCategoriesPage />} />
+          <Route path="settings/projects" element={<SettingsProjectsPage />} />
           <Route path="settings/organization" element={<SettingsOrganizationPage />} />
           <Route path="settings/exchange-rate" element={<SettingsExchangeRatePage />} />
           <Route path="cash-movement" element={<CashMovementPage />} />

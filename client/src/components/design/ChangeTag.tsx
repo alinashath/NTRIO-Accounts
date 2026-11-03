@@ -15,9 +15,9 @@ export function ChangeTag({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-xs px-1.5 py-0.5 text-xs font-semibold leading-4 tabular-nums",
-        variant === "positive" && "bg-credit-bg text-credit-ink",
-        variant === "negative" && "bg-debit-bg text-debit-ink",
+        "inline-flex items-center rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs font-semibold leading-4 tabular-nums",
+        variant === "positive" && "bg-credit-bg text-credit",
+        variant === "negative" && "bg-debit-bg text-debit",
         variant === "neutral" && "bg-neutral-bg text-neutral-ink",
         className,
       )}

@@ -208,7 +208,7 @@ export function OccupancyCalendarPage() {
                         }}
                         className={`flex shrink-0 items-center justify-center border-r border-border tabular-nums touch-manipulation ${
                           filled
-                            ? "bg-ink text-sm font-semibold text-white hover:opacity-90"
+                            ? "bg-action text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--action-active)]"
                             : "bg-surface text-muted-label hover:bg-neutral-bg"
                         } ${d === today && !filled ? "ring-inset ring-1 ring-border" : ""}`}
                         style={{ width: CELL, minHeight: CELL }}

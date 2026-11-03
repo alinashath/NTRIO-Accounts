@@ -21,7 +21,7 @@ export function ReceiptPreviewIcon({
     <>
       <button
         type="button"
-        className={`inline-flex rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 ${className}`}
+        className={`inline-flex rounded-lg border border-border bg-surface p-1.5 text-muted-label transition hover:border-border hover:bg-neutral-bg hover:text-ink ${className}`}
         aria-label="View receipt"
         onClick={(e) => {
           e.stopPropagation();
@@ -33,12 +33,12 @@ export function ReceiptPreviewIcon({
       <Modal open={open} title="Receipt" size="lg" onClose={() => setOpen(false)}>
         <div className="space-y-3">
           {pdf ? (
-            <iframe src={url} className="h-[min(70vh,560px)] w-full rounded-lg border border-slate-200" title="Receipt PDF" />
+            <iframe src={url} className="h-[min(70vh,560px)] w-full rounded-lg border border-border" title="Receipt PDF" />
           ) : (
-            <img src={url} alt="Receipt" className="mx-auto max-h-[min(70vh,560px)] w-auto max-w-full rounded-lg border border-slate-200" />
+            <img src={url} alt="Receipt" className="mx-auto max-h-[min(70vh,560px)] w-auto max-w-full rounded-lg border border-border" />
           )}
           <p className="text-center text-xs">
-            <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-sky-700 underline">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-action underline">
               Open in new tab
             </a>
           </p>

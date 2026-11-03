@@ -18,7 +18,16 @@ export interface SettingsDto {
   organization_id: string;
   /** Wordmark in TopBar / Hub. Default NTRIO. */
   organization_title: string;
+  /** When true, project tagging and filters are available. */
+  projects_enabled: boolean;
   fx_rates: FxDailyRateDto[];
+}
+
+/** GET /api/projects */
+export interface ProjectDto {
+  id: string;
+  name: string;
+  created_at: string;
 }
 
 /** Workspace modules (tenant feature flags). */
@@ -197,6 +206,8 @@ export interface IncomeEntryDto {
   description: string | null;
   category_id: string | null;
   category_name: string | null;
+  project_id: string | null;
+  project_name: string | null;
   account_id: string | null;
   account_name: string;
   account_currency: string;
@@ -232,6 +243,8 @@ export interface ExpenseEntryDto {
   description: string | null;
   category_id: string | null;
   category_name: string | null;
+  project_id: string | null;
+  project_name: string | null;
   account_id: string | null;
   account_name: string;
   account_currency: string;
@@ -369,9 +382,33 @@ export interface BreakfastOrderDto {
   updated_at: string;
 }
 
+export interface RoomExtraOptionDto {
+  stock_item_id: string;
+  name: string;
+  unit: string;
+  code: string | null;
+  qty_per_serving: number;
+  notes: string | null;
+  show_on_kot: boolean;
+}
+
+export interface RoomExtraSelectionDto {
+  stock_item_id: string;
+  quantity: number;
+  /** Present when returned from day/summaries APIs. */
+  name?: string;
+  unit?: string;
+  code?: string | null;
+  show_on_kot?: boolean;
+}
+
 export interface RoomDayExtrasDto {
   id: string | null;
   fruits: string[];
+  /** @deprecated Prefer selected_lines. Kept for older clients. */
+  selected_item_ids: string[];
+  /** Configurable extras with quantities (stock units). */
+  selected_lines: RoomExtraSelectionDto[];
   pancake: boolean;
   honey: boolean;
   nutella: boolean;
@@ -392,6 +429,8 @@ export interface KitchenDayRoomDto {
 export interface KitchenDayDto {
   date: string;
   serving_times: string[];
+  /** Choosable room extras from Recipes → Room extras (configure there). */
+  extra_options: RoomExtraOptionDto[];
   rooms: KitchenDayRoomDto[];
 }
 
@@ -407,6 +446,14 @@ export interface ServerSummaryRowDto {
   outside_normal_window: boolean;
 }
 
+export interface KitchenPlanExtraLineDto {
+  name: string;
+  unit: string;
+  code: string | null;
+  quantity: number;
+  rooms: string[];
+}
+
 export interface KitchenPlanDto {
   roshi: number;
   mashuni_cups: number;
@@ -417,6 +464,8 @@ export interface KitchenPlanDto {
   eggs_scrambled: number;
   potato_servings: number;
   pancakes: number;
+  /** Configurable extras with Show on KOT enabled. */
+  extras: KitchenPlanExtraLineDto[];
   schedule: Array<{
     room_number: string;
     guest_number: number;
@@ -533,6 +582,7 @@ export interface RecipeLineDto {
   stock_item_code: string | null;
   qty_per_serving: number;
   notes: string | null;
+  show_on_kot: boolean;
 }
 
 export interface RecipeDto {

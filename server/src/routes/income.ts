@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { parseProjectScope, projectWhereClause } from "../lib/projectFilter.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -52,7 +53,7 @@ const listQuery = z.object({
   income_type: z.enum(["all", "uncategorized"]).optional(),
 });
 
-const incomeInclude = { category: true, account: true, contact: true } as const;
+const incomeInclude = { category: true, project: true, account: true, contact: true } as const;
 
 async function loadIncomeListRow(userId: string, id: string) {
   const row = await prisma.incomeEntry.findFirst({
@@ -72,6 +73,8 @@ function mapIncomeListRow(r: {
   description: string | null;
   categoryId: string | null;
   category: { name: string } | null;
+  projectId: string | null;
+  project: { name: string } | null;
   accountId: string | null;
   account: { name: string; currency: string } | null;
   contactId: string | null;
@@ -97,6 +100,8 @@ function mapIncomeListRow(r: {
     description: r.description,
     category_id: r.categoryId,
     category_name: r.category?.name ?? null,
+    project_id: r.projectId,
+    project_name: r.project?.name ?? null,
     account_id: r.accountId,
     account_name: r.account?.name ?? "Receivable",
     account_currency: r.account?.currency ?? r.currency,
@@ -131,6 +136,7 @@ incomeRouter.get(
     const userId = (req as AuthedRequest).userId;
     const q = listQuery.parse(req.query);
     const status = statusFromQuery(req.query.status);
+    const projectScope = parseProjectScope(req.query);
 
     const search = q.search;
     const searchClause = search
@@ -157,6 +163,7 @@ incomeRouter.get(
       ...incomeListDateClause(q.from, q.to),
       ...(q.category_id ? { categoryId: q.category_id } : {}),
       ...(q.account_id ? { accountId: q.account_id } : {}),
+      ...projectWhereClause(projectScope),
       ...pendingClause,
       ...searchClause,
       ...typeClause,
@@ -210,6 +217,7 @@ const createSchema = z
     pending_receivable: z.boolean().optional(),
     description: z.string().optional(),
     category_id: z.string().uuid().optional(),
+    project_id: z.string().uuid().optional(),
     account_id: z.string().uuid().optional(),
     currency: z.string().min(1).max(8).optional(),
     contact_id: z.string().uuid().optional(),
@@ -276,6 +284,16 @@ incomeRouter.post(
       }
     }
 
+    if (body.project_id) {
+      const project = await prisma.project.findFirst({
+        where: { id: body.project_id, userId },
+      });
+      if (!project) {
+        res.status(400).json({ error: "Invalid project" });
+        return;
+      }
+    }
+
     if (body.contact_id) {
       const c = await prisma.contact.findFirst({
         where: { id: body.contact_id, userId },
@@ -295,6 +313,7 @@ incomeRouter.post(
         currency,
         description: body.description ?? null,
         categoryId: body.category_id ?? null,
+        projectId: body.project_id ?? null,
         accountId,
         contactId: body.contact_id ?? null,
         source: body.source ?? null,
@@ -319,6 +338,7 @@ const updateSchema = z.object({
   received_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   description: z.string().optional(),
   category_id: z.string().uuid().nullable().optional(),
+  project_id: z.string().uuid().nullable().optional(),
   account_id: z.string().uuid().nullable().optional(),
   currency: z.string().min(1).max(8).optional(),
   contact_id: z.string().uuid().nullable().optional(),
@@ -419,6 +439,16 @@ incomeRouter.put(
       }
     }
 
+    if (body.project_id) {
+      const project = await prisma.project.findFirst({
+        where: { id: body.project_id, userId },
+      });
+      if (!project) {
+        res.status(400).json({ error: "Invalid project" });
+        return;
+      }
+    }
+
     if (body.contact_id) {
       const c = await prisma.contact.findFirst({
         where: { id: body.contact_id, userId },
@@ -439,6 +469,7 @@ incomeRouter.put(
         currency: body.currency !== undefined ? nextCurrency : undefined,
         description: body.description,
         categoryId: body.category_id === undefined ? undefined : body.category_id,
+        projectId: body.project_id === undefined ? undefined : body.project_id,
         accountId: body.account_id === undefined ? undefined : nextAccountId,
         contactId: body.contact_id === undefined ? undefined : body.contact_id,
         source: body.source,

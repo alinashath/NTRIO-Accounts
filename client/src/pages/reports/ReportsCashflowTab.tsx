@@ -14,10 +14,12 @@ import { apiFetch } from "@/api/http";
 import { DateBasisToggle, dateBasisSubtitle, type DateBasis } from "@/components/DateBasisToggle";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { ReportPdfButton } from "@/components/ReportPdfButton";
 import { StatementHeader, StatementRow } from "@/components/StatementRow";
 import { Card } from "@/components/ui";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { appendProjectFilter } from "@/context/ProjectsContext";
 import { chartAxisProps, chartTheme } from "@/lib/chartTheme";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
 import { formatMoney } from "@/lib/money";
@@ -72,6 +74,7 @@ export function ReportsCashflowTab() {
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initial);
   const [dateBasis, setDateBasis] = useState<DateBasis>("accrual");
+  const [filterProject, setFilterProject] = useState("");
   const [stmt, setStmt] = useState<CashflowRes | null>(null);
   const [prevStmt, setPrevStmt] = useState<CashflowRes | null>(null);
   const [prevPeriod, setPrevPeriod] = useState<{ from: string; to: string } | null>(null);
@@ -86,13 +89,23 @@ export function ReportsCashflowTab() {
     const prev = previousInclusivePeriodYmd(f, t);
     const dc = encodeURIComponent(displayCurrency);
     const db = encodeURIComponent(dateBasis);
+    const withPj = (url: string) => {
+      const [path, qs = ""] = url.split("?");
+      const q = new URLSearchParams(qs);
+      appendProjectFilter(q, filterProject);
+      return `${path}?${q.toString()}`;
+    };
     try {
       const [data, prior] = await Promise.all([
         apiFetch<CashflowRes>(
-          `/api/reports/cashflow?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&date_basis=${db}`,
+          withPj(
+            `/api/reports/cashflow?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}&display_currency=${dc}&date_basis=${db}`,
+          ),
         ),
         apiFetch<CashflowRes>(
-          `/api/reports/cashflow?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${dc}&date_basis=${db}`,
+          withPj(
+            `/api/reports/cashflow?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${dc}&date_basis=${db}`,
+          ),
         ),
       ]);
       setStmt(data);
@@ -103,7 +116,7 @@ export function ReportsCashflowTab() {
     } finally {
       setLoading(false);
     }
-  }, [applied, dateBasis, displayCurrency]);
+  }, [applied, dateBasis, displayCurrency, filterProject]);
 
   useEffect(() => {
     void load();
@@ -175,25 +188,30 @@ export function ReportsCashflowTab() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">Cash flow</h3>
-        <PeriodFilterBar
-          from={applied.from}
-          to={applied.to}
-          preset={rangePreset}
-          onApply={({ from, to, preset }) => {
-            setRangePreset(preset);
-            setApplied({ from, to });
-          }}
-          actions={
-            <>
-              <DateBasisToggle value={dateBasis} onChange={setDateBasis} />
-              <ReportPdfButton
-                title="Statement of Cash Flows"
-                targetRef={statementRef}
-                disabled={!stmt}
-              />
-            </>
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[10rem]">
+            <ProjectFilter value={filterProject} onChange={setFilterProject} />
+          </div>
+          <PeriodFilterBar
+            from={applied.from}
+            to={applied.to}
+            preset={rangePreset}
+            onApply={({ from, to, preset }) => {
+              setRangePreset(preset);
+              setApplied({ from, to });
+            }}
+            actions={
+              <>
+                <DateBasisToggle value={dateBasis} onChange={setDateBasis} />
+                <ReportPdfButton
+                  title="Statement of Cash Flows"
+                  targetRef={statementRef}
+                  disabled={!stmt}
+                />
+              </>
+            }
+          />
+        </div>
       </div>
       <p className="text-[11px] text-muted-foreground">
         {dateBasisSubtitle(dateBasis)}

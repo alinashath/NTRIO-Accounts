@@ -225,7 +225,7 @@ export function AdminOrgRequestsPage() {
                         onClick={() => void toggleModule(org, moduleId)}
                         className={`flex min-h-11 items-center justify-between rounded-sm border px-3 text-left text-sm font-semibold touch-manipulation ${
                           on
-                            ? "border-ink bg-ink text-white"
+                            ? "border-action bg-action text-[var(--on-primary)]"
                             : "border-border bg-surface text-ink hover:bg-neutral-bg"
                         }`}
                         aria-pressed={on}

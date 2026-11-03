@@ -18,9 +18,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { CashMovementPoint } from "@/components/CashMovementCard";
+import {
+  chartGranularityLabel,
+  chartGranularityUnit,
+  type CashChartGranularity,
+} from "@/lib/chartGranularity";
 import { chartTheme } from "@/lib/chartTheme";
 import { formatMoney, formatMoneyAmountOnly, toMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
+
+export type { CashChartGranularity };
 
 type ChartRow = CashMovementPoint & {
   expenseNeg: number;
@@ -85,11 +92,11 @@ function StatCell({
   );
 }
 
-/** Full interactive daily/weekly cash chart — keep off Home on mobile. */
+/** Full interactive cash chart — keep off Home on mobile. */
 export function CashMovementChart({
   data,
   currency,
-  weekly,
+  granularity,
   compact,
   incomeTotal,
   expenseTotal,
@@ -99,7 +106,7 @@ export function CashMovementChart({
 }: {
   data: CashMovementPoint[];
   currency: string;
-  weekly: boolean;
+  granularity: CashChartGranularity;
   compact: boolean;
   incomeTotal: number;
   expenseTotal: number;
@@ -129,6 +136,11 @@ export function CashMovementChart({
 
   const selected = sel != null ? chartData[sel] : null;
 
+  const tickCount = chartData.length;
+  const denseAxis = tickCount > 8;
+  const axisFontSize = denseAxis ? (compact ? 8 : 9) : compact ? 10 : 11;
+  const axisBottom = denseAxis ? (compact ? 18 : 14) : 0;
+
   return (
     <Card className={cn("overflow-hidden", className)}>
       <CardHeader className="gap-3">
@@ -136,7 +148,7 @@ export function CashMovementChart({
           <div className="min-w-0">
             <CardTitle>Cash movement</CardTitle>
             <CardDescription className="mt-1">
-              {weekly ? "Weekly" : "Daily"} · income above zero, expenses below
+              {chartGranularityLabel(granularity)} · income above zero, expenses below
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-caption">
@@ -178,7 +190,8 @@ export function CashMovementChart({
           ) : (
             <>
               <p className="text-sm text-muted-label">
-                Tap a bar to see that day&apos;s income, expense and net.
+                Tap a bar to see that {chartGranularityUnit(granularity)}&apos;s income, expense and
+                net.
               </p>
               {!empty ? (
                 <p
@@ -189,7 +202,7 @@ export function CashMovementChart({
                 >
                   Trend: net {trendMeta.slope < 0 ? "falling" : "rising"} about{" "}
                   {formatMoney(Math.abs(trendMeta.slope), currency)} a{" "}
-                  {weekly ? "week" : "day"}
+                  {chartGranularityUnit(granularity)}
                 </p>
               ) : null}
             </>
@@ -206,13 +219,13 @@ export function CashMovementChart({
           <div
             className="h-56 touch-pan-y select-none sm:h-60"
             role="img"
-            aria-label={`${weekly ? "Weekly" : "Daily"} cash movement chart.`}
+            aria-label={`${chartGranularityLabel(granularity)} cash movement chart.`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={chartData}
                 stackOffset="sign"
-                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                margin={{ top: 8, right: 8, left: 0, bottom: axisBottom }}
                 barCategoryGap={compact ? "28%" : "32%"}
                 onMouseMove={(state) => {
                   const idx =
@@ -236,10 +249,15 @@ export function CashMovementChart({
                   dataKey="day"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fill: chartTheme.tick, fontSize: compact ? 10 : 11 }}
-                  interval={weekly ? 0 : "preserveStartEnd"}
-                  minTickGap={compact ? 28 : 14}
-                  tickMargin={8}
+                  tick={{
+                    fill: chartTheme.tick,
+                    fontSize: axisFontSize,
+                    fontFamily: "var(--font-num)",
+                  }}
+                  interval={granularity === "day" || tickCount > 14 ? "preserveStartEnd" : 0}
+                  minTickGap={denseAxis ? (compact ? 4 : 6) : compact ? 20 : 12}
+                  tickMargin={denseAxis ? 4 : 8}
+                  height={denseAxis ? 28 : 24}
                 />
                 <YAxis
                   tickLine={false}
@@ -284,7 +302,7 @@ export function CashMovementChart({
                 <Line
                   type="linear"
                   dataKey="trend"
-                  stroke="#111827"
+                  stroke="#707A8A"
                   strokeWidth={1.5}
                   strokeDasharray="1 5"
                   strokeLinecap="round"

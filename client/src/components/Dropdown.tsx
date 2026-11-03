@@ -265,7 +265,7 @@ export function Dropdown({
           >
             <div
               ref={panelRef}
-              className="flex max-h-[min(85dvh,640px)] w-full flex-col overflow-hidden rounded-t-[var(--sheet-radius)] border border-border bg-surface"
+              className="theme-light flex max-h-[min(85dvh,640px)] w-full flex-col overflow-hidden rounded-t-[var(--sheet-radius)] border border-border bg-surface"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => {
                 if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
@@ -296,7 +296,7 @@ export function Dropdown({
         ? createPortal(
             <div
               ref={panelRef}
-              className="fixed z-[500] flex flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-surface"
+              className="theme-light fixed z-[500] flex flex-col overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface"
               style={{
                 top: panelPos.top,
                 left: panelPos.left,

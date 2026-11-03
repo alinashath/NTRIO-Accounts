@@ -3,6 +3,7 @@ import {
   eachDayOfInterval,
   format,
   parseISO,
+  startOfMonth,
   startOfWeek,
   differenceInCalendarDays,
 } from "date-fns";
@@ -12,6 +13,7 @@ import { CashMovementChart } from "@/components/CashMovementChart";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
 import { SkeletonLine } from "@/components/Skeleton";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { chartGranularityForDays } from "@/lib/chartGranularity";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
 import {
   DASHBOARD_PERIOD_PRESETS,
@@ -121,30 +123,55 @@ export function CashMovementPage() {
     return days;
   }, [displayCurrency, expenses, getUsdMvrRateForDate, income, periodFrom, periodTo]);
 
-  const useWeeklyBuckets = compactCharts || periodDays > 45;
+  const granularity = chartGranularityForDays(periodDays);
 
   const trend = useMemo(() => {
-    if (!useWeeklyBuckets) {
+    if (granularity === "day") {
       return dailyTrend.map(({ day, income, expense, net }) => ({ day, income, expense, net }));
     }
+
     const buckets = new Map<
       string,
       { day: string; sort: string; income: number; expense: number; net: number }
     >();
+
     for (const row of dailyTrend) {
-      const weekStart = startOfWeek(new Date(row.key), { weekStartsOn: 1 });
-      const sort = format(weekStart, "yyyy-MM-dd");
-      const label = `W ${format(weekStart, "MMM d")}`;
-      const cur = buckets.get(sort) ?? { day: label, sort, income: 0, expense: 0, net: 0 };
-      cur.income += row.income;
-      cur.expense += row.expense;
-      cur.net += row.net;
-      buckets.set(sort, cur);
+      const date = new Date(row.key);
+      if (granularity === "week") {
+        const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+        const sort = format(weekStart, "yyyy-MM-dd");
+        const label = format(weekStart, "MMM d");
+        const cur = buckets.get(sort) ?? { day: label, sort, income: 0, expense: 0, net: 0 };
+        cur.income += row.income;
+        cur.expense += row.expense;
+        cur.net += row.net;
+        buckets.set(sort, cur);
+      } else {
+        const monthStart = startOfMonth(date);
+        const sort = format(monthStart, "yyyy-MM");
+        // Short axis labels; year shown only when the range spans years
+        const label = format(monthStart, "MMM");
+        const cur = buckets.get(sort) ?? { day: label, sort, income: 0, expense: 0, net: 0 };
+        cur.income += row.income;
+        cur.expense += row.expense;
+        cur.net += row.net;
+        buckets.set(sort, cur);
+      }
     }
-    return [...buckets.values()]
-      .sort((a, b) => (a.sort < b.sort ? -1 : 1))
-      .map(({ day, income, expense, net }) => ({ day, income, expense, net }));
-  }, [dailyTrend, useWeeklyBuckets]);
+
+    const rows = [...buckets.values()].sort((a, b) => (a.sort < b.sort ? -1 : 1));
+
+    if (granularity === "month") {
+      const years = new Set(rows.map((r) => r.sort.slice(0, 4)));
+      if (years.size > 1) {
+        for (const r of rows) {
+          r.day = format(parseISO(`${r.sort}-01`), "MMM yy");
+        }
+      }
+    }
+
+    return rows.map(({ day, income, expense, net }) => ({ day, income, expense, net }));
+  }, [dailyTrend, granularity]);
 
   const totals = useMemo(() => {
     const incomeTotal = dailyTrend.reduce((s, d) => s + d.income, 0);
@@ -186,9 +213,10 @@ export function CashMovementPage() {
         </div>
       ) : (
         <CashMovementChart
+          key={`${periodFrom}_${periodTo}_${granularity}`}
           data={trend}
           currency={displayCurrency}
-          weekly={useWeeklyBuckets}
+          granularity={granularity}
           compact={compactCharts}
           incomeTotal={totals.incomeTotal}
           expenseTotal={totals.expenseTotal}

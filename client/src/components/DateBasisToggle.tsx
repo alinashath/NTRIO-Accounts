@@ -29,7 +29,7 @@ export function DateBasisToggle({
           className={clsx(
             "h-8 touch-manipulation rounded-[calc(var(--radius-md)-2px)] px-2.5 text-xs font-semibold transition",
             value === opt.value
-              ? "bg-primary text-on-primary shadow-sm"
+              ? "bg-action text-[var(--on-primary)]"
               : "text-muted-foreground hover:bg-card hover:text-foreground",
           )}
         >

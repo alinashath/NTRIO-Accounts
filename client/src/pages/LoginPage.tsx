@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { clearStoredActiveOrganization, getStoredOrganizationTitle } from "@/lib/orgStorage";
+import { clearStoredActiveOrganization } from "@/lib/orgStorage";
 import { useAuthStore } from "@/store/auth";
 import { Button, Card } from "@/components/ui";
+
+const SOFTWARE_NAME = "EffiBooks";
 
 export function LoginPage() {
   const session = useAuthStore((s) => s.session);
@@ -11,7 +13,6 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [orgTitle] = useState(() => getStoredOrganizationTitle());
 
   if (session) {
     return <Navigate to="/" replace />;
@@ -39,16 +40,16 @@ export function LoginPage() {
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
       <div className="mb-6 text-center">
-        <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">{orgTitle}</p>
-        <h1 className="mt-1 text-page-title text-ink">Sign in</h1>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-action">{SOFTWARE_NAME}</p>
+        <h1 className="mt-2 text-page-title text-ink">Sign in</h1>
         <p className="mt-1 text-caption">Multi-tenant accounts — each organization is isolated</p>
       </div>
-      <Card>
+      <Card className="rounded-[var(--radius-xl)] p-6">
         <form className="space-y-4" onSubmit={handleEmailLogin}>
           <label className="block text-sm font-medium text-ink">
             Email
             <input
-              className="mt-1 h-11 w-full touch-manipulation rounded-sm border border-border bg-surface px-3 text-sm text-ink"
+              className="mt-1 h-11 w-full touch-manipulation rounded-[var(--radius-md)] border border-border bg-[var(--surface-elevated)] px-3 text-sm text-ink"
               type="email"
               autoComplete="email"
               inputMode="email"
@@ -60,7 +61,7 @@ export function LoginPage() {
           <label className="block text-sm font-medium text-ink">
             Password
             <input
-              className="mt-1 h-11 w-full touch-manipulation rounded-sm border border-border bg-surface px-3 text-sm text-ink"
+              className="mt-1 h-11 w-full touch-manipulation rounded-[var(--radius-md)] border border-border bg-[var(--surface-elevated)] px-3 text-sm text-ink"
               type="password"
               autoComplete="current-password"
               value={password}

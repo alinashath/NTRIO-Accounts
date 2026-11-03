@@ -79,23 +79,23 @@ export function ReportsCategoryDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to={backHref} className="text-sm font-medium text-sky-700 hover:underline">
+        <Link to={backHref} className="text-sm font-medium text-action hover:underline">
           ← P &amp; L
         </Link>
-        <h3 className="mt-1 text-base font-semibold text-slate-900">
+        <h3 className="mt-1 text-base font-semibold text-ink">
           {loading ? "Loading…" : data ? `${data.name} (${data.kind})` : "Category"}
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-label">
           {from} → {to}
         </p>
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       {data && !loading ? (
         <>
           <Card>
-            <h4 className="text-sm font-semibold text-slate-900">Trend by month</h4>
+            <h4 className="text-sm font-semibold text-ink">Trend by month</h4>
             <div className="mt-4 h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.trend}>
@@ -117,10 +117,10 @@ export function ReportsCategoryDetailPage() {
           </Card>
 
           <Card>
-            <h4 className="text-sm font-semibold text-slate-900">Transactions</h4>
+            <h4 className="text-sm font-semibold text-ink">Transactions</h4>
             <div className="mt-3 max-h-[min(50vh,400px)] overflow-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="sticky top-0 border-b border-border bg-neutral-bg text-xs uppercase text-muted-label">
                   <tr>
                     <th className="py-2 pr-3">Date</th>
                     <th className="py-2 pr-3">Description</th>
@@ -129,9 +129,9 @@ export function ReportsCategoryDetailPage() {
                 </thead>
                 <tbody>
                   {data.transactions.map((t) => (
-                    <tr key={`${t.kind}-${t.id}`} className="border-b border-slate-100">
-                      <td className="py-2 pr-3 whitespace-nowrap text-slate-700">{t.date}</td>
-                      <td className="py-2 pr-3 text-slate-800">{t.description ?? "—"}</td>
+                    <tr key={`${t.kind}-${t.id}`} className="border-b border-border">
+                      <td className="py-2 pr-3 whitespace-nowrap text-body">{t.date}</td>
+                      <td className="py-2 pr-3 text-ink">{t.description ?? "—"}</td>
                       <td className="py-2 text-right">
                         <DisplayAmountCell
                           amount={t.amount}
@@ -145,7 +145,7 @@ export function ReportsCategoryDetailPage() {
                 </tbody>
               </table>
               {!data.transactions.length ? (
-                <p className="py-4 text-center text-sm text-slate-500">No transactions in this range.</p>
+                <p className="py-4 text-center text-sm text-muted-label">No transactions in this range.</p>
               ) : null}
             </div>
           </Card>

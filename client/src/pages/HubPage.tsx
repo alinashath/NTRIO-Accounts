@@ -51,10 +51,10 @@ export function HubPage() {
 
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-[960px] flex-col px-4 pb-8 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
-      <header className="-mx-4 mb-6 border-b border-border bg-surface px-4 py-4">
+      <header className="-mx-4 mb-6 border-b border-border bg-ground px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink">{organizationTitle}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-action">{organizationTitle}</p>
             <h1 className="mt-1 text-page-title text-ink">Workspaces</h1>
             <p className="mt-1 text-caption">
               {visible.map((id) => WORKSPACE_META[id].title).join(" · ")}

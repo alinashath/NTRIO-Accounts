@@ -12,6 +12,7 @@ import { CashMovementCard } from "@/components/CashMovementCard";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { Modal } from "@/components/Modal";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
+import { ProjectFilter } from "@/components/ProjectFilter";
 import { SkeletonLine } from "@/components/Skeleton";
 import {
   TopExpensesCard,
@@ -19,6 +20,7 @@ import {
 } from "@/components/TopExpensesCard";
 import { Amount, ListRow, PanelCard, PctChangeTag, StatRow } from "@/components/design";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
+import { appendProjectFilter } from "@/context/ProjectsContext";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
 import { formatUnsignedAmount } from "@/lib/amountFormat";
 import { formatSharePct } from "@/lib/periodCompare";
@@ -95,6 +97,7 @@ export function DashboardPage() {
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initial);
+  const [filterProject, setFilterProject] = useState("");
   const [infoHint, setInfoHint] = useState<string | null>(null);
 
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
@@ -119,31 +122,37 @@ export function DashboardPage() {
     async function load() {
       setLoading(true);
       const prev = comparablePriorPeriod(periodFrom, periodTo, rangePreset);
+      const pj = (base: string) => {
+        const q = new URLSearchParams(base.includes("?") ? base.split("?")[1] : "");
+        const path = base.includes("?") ? base.split("?")[0] : base;
+        appendProjectFilter(q, filterProject);
+        return `${path}?${q.toString()}`;
+      };
       try {
         const [accs, pnlRes, pnlPrior, nwRes, inc, exp, d, br, brPrior] =
           await Promise.all([
             apiFetch<AccountDto[]>("/api/accounts"),
             apiFetch<Pnl>(
-              `/api/reports/pnl?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+              pj(`/api/reports/pnl?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<Pnl>(
-              `/api/reports/pnl?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+              pj(`/api/reports/pnl?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<NetWorth>(
-              `/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+              pj(`/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<IncomeEntryDto[]>(
-              `/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
+              pj(`/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`),
             ),
             apiFetch<ExpenseEntryDto[]>(
-              `/api/expenses?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`,
+              pj(`/api/expenses?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`),
             ),
             apiFetch<DebtDto[]>("/api/debts?status=open"),
             apiFetch<{ rows: CatRow[] }>(
-              `/api/reports/category-breakdown?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+              pj(`/api/reports/category-breakdown?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<{ rows: CatRow[] }>(
-              `/api/reports/category-breakdown?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`,
+              pj(`/api/reports/category-breakdown?from=${encodeURIComponent(prev.from)}&to=${encodeURIComponent(prev.to)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
           ]);
         if (cancelled) return;
@@ -181,7 +190,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [asOf, displayCurrency, periodFrom, periodTo, rangePreset]);
+  }, [asOf, displayCurrency, filterProject, periodFrom, periodTo, rangePreset]);
 
   const incomeKept = pnl
     ? formatSharePct(pnl.net, pnl.total_income, "of income kept")
@@ -301,18 +310,23 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-page-title text-ink">Home</h1>
-        <PeriodFilterBar
-          from={applied.from}
-          to={applied.to}
-          preset={rangePreset}
-          presets={DASHBOARD_PERIOD_PRESETS}
-          onApply={({ from, to, preset }) => {
-            setRangePreset(preset);
-            setApplied({ from, to });
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[10rem]">
+            <ProjectFilter value={filterProject} onChange={setFilterProject} />
+          </div>
+          <PeriodFilterBar
+            from={applied.from}
+            to={applied.to}
+            preset={rangePreset}
+            presets={DASHBOARD_PERIOD_PRESETS}
+            onApply={({ from, to, preset }) => {
+              setRangePreset(preset);
+              setApplied({ from, to });
+            }}
+          />
+        </div>
       </div>
 
       {error ? (

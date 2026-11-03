@@ -2,7 +2,6 @@ import {
   endOfMonth,
   endOfWeek,
   format,
-  getDate,
   min,
   parseISO,
   startOfMonth,
@@ -86,7 +85,7 @@ export function rangeForPreset(preset: Exclude<RangePreset, "custom">, now = new
 
 /**
  * Prior period for comparison.
- * - this_month → same MTD window last calendar month
+ * - this_month → full previous calendar month
  * - this_week → previous Mon–Sun week (or Mon–same weekday)
  * - this_year → same YTD last year
  * - last_month / custom → equal-length period immediately before
@@ -98,15 +97,7 @@ export function comparablePriorPeriod(
   now = new Date(),
 ): { from: string; to: string } {
   if (preset === "this_month") {
-    const start = startOfMonth(subMonths(now, 1));
-    const day = getDate(parseISO(toYmd));
-    const candidate = new Date(start);
-    candidate.setDate(day);
-    const end = min([candidate, endOfMonth(start)]);
-    return {
-      from: format(start, "yyyy-MM-dd"),
-      to: format(end, "yyyy-MM-dd"),
-    };
+    return lastMonthRange(now);
   }
 
   if (preset === "this_week") {

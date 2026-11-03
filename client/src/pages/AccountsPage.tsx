@@ -49,7 +49,7 @@ export function AccountsPage() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 md:text-xl">Accounts</h2>
+          <h2 className="text-lg font-bold text-ink md:text-xl">Accounts</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => setXferOpen(true)} variant="ghost">
@@ -61,16 +61,16 @@ export function AccountsPage() {
         </div>
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {rows.map((a) => (
           <Card key={a.id} className="p-4">
             <div className="flex items-start justify-between gap-2">
-              <Link to={`/accounts/ledger/${a.id}`} className="min-w-0 flex-1 rounded-lg outline-offset-2 hover:bg-slate-50/80">
-                <p className="text-xs uppercase tracking-wide text-slate-500">{a.type}</p>
-                <p className="text-lg font-semibold text-slate-900">{a.name}</p>
-                <p className="mt-1 text-xs text-slate-500">{a.currency}</p>
+              <Link to={`/accounts/ledger/${a.id}`} className="min-w-0 flex-1 rounded-lg outline-offset-2 hover:bg-neutral-bg/80">
+                <p className="text-xs uppercase tracking-wide text-muted-label">{a.type}</p>
+                <p className="text-lg font-semibold text-ink">{a.name}</p>
+                <p className="mt-1 text-xs text-muted-label">{a.currency}</p>
                 <p className="mt-2 text-2xl font-bold">
                   <DisplayAmountCell amount={a.balance} nativeCurrency={a.currency} tone="auto" className="font-semibold" />
                 </p>

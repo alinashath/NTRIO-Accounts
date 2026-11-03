@@ -89,9 +89,18 @@ export function KitchenSummariesPage() {
     if (!data) return "";
     const k = data.kitchen_plan;
     const lines = kotNonZeroLines(k);
+    const extras = k.extras ?? [];
     return [
       `KOT / Kitchen plan — ${data.date}`,
       ...(lines.length ? lines.map((l) => `${l.label}: ${l.value}`) : ["(No prep quantities)"]),
+      "",
+      "Extras:",
+      ...(extras.length
+        ? extras.map(
+            (e) =>
+              `${e.name}: ${e.quantity}${e.unit ? ` ${e.unit}` : ""} · rooms ${e.rooms.join(", ")}`,
+          )
+        : ["(None)"]),
       "",
       "Schedule:",
       ...k.schedule.map(
@@ -172,6 +181,10 @@ export function KitchenSummariesPage() {
       ["Metric", "Quantity"],
       kotNonZeroLines(k).map((l) => [l.label, l.value]),
     );
+    const extras = toCsv(
+      ["Extra", "Unit", "Quantity", "Rooms"],
+      (k.extras ?? []).map((e) => [e.name, e.unit, e.quantity, e.rooms.join("; ")]),
+    );
     const schedule = toCsv(
       ["Serving time", "Room", "Guest", "Type", "Egg", "Outside window", "Special requests"],
       k.schedule.map((s) => [
@@ -184,7 +197,7 @@ export function KitchenSummariesPage() {
         s.special_requests,
       ]),
     );
-    downloadText(`KOT-${date}.csv`, `${summary}\n\n${schedule}`, "text/csv;charset=utf-8");
+    downloadText(`KOT-${date}.csv`, `${summary}\n\n${extras}\n\n${schedule}`, "text/csv;charset=utf-8");
   }
 
   function downloadKotPng() {
@@ -198,6 +211,15 @@ export function KitchenSummariesPage() {
         ? lines.map((l) => ({ label: l.label, value: String(l.value) }))
         : [{ label: "Prep quantities", value: "None" }],
       sections: [
+        {
+          heading: "Extras (on KOT)",
+          lines: (k.extras ?? []).length
+            ? (k.extras ?? []).map(
+                (e) =>
+                  `${e.name}: ${e.quantity}${e.unit ? ` ${e.unit}` : ""} · ${e.rooms.join(", ")}`,
+              )
+            : ["None"],
+        },
         {
           heading: "Preparation schedule",
           lines: k.schedule.length
@@ -247,10 +269,20 @@ export function KitchenSummariesPage() {
           `<tr><td>${s.serving_time}</td><td>${s.room_number}</td><td>${s.guest_number}</td><td>${s.breakfast_type}</td><td>${s.egg_style}</td><td>${s.outside_normal_window ? "FLAG" : ""}</td><td>${s.special_requests ?? ""}</td></tr>`,
       )
       .join("");
+    const extrasList = (k.extras ?? []).length
+      ? `<ul>${(k.extras ?? [])
+          .map(
+            (e) =>
+              `<li>${e.name}: ${e.quantity}${e.unit ? ` ${e.unit}` : ""} (rooms ${e.rooms.join(", ")})</li>`,
+          )
+          .join("")}</ul>`
+      : "<p>No extras on KOT</p>";
     printHtml(
       `KOT ${date}`,
       `<h1>KOT / Kitchen plan</h1><p>${date}</p>
       ${metrics}
+      <h2>Extras</h2>
+      ${extrasList}
       <h2>Preparation schedule</h2>
       <table><thead><tr><th>Time</th><th>Room</th><th>Guest</th><th>Type</th><th>Egg</th><th>Outside</th><th>Requests</th></tr></thead><tbody>${sched}</tbody></table>`,
     );
@@ -258,6 +290,7 @@ export function KitchenSummariesPage() {
 
   const k = data?.kitchen_plan;
   const kotLines = k ? kotNonZeroLines(k) : [];
+  const kotExtras = k?.extras ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -353,6 +386,40 @@ export function KitchenSummariesPage() {
         ))}
         {k && kotLines.length === 0 ? (
           <p className="border-t border-border px-4 py-3 text-caption">No prep quantities for this date.</p>
+        ) : null}
+
+        <div className="border-t border-border px-4 py-3">
+          <p className="text-label">Extras on KOT</p>
+          <p className="mt-0.5 text-caption">
+            Configured in Recipes → Room extras (Show on KOT). Chosen per room on Breakfast orders.
+          </p>
+        </div>
+        {kotExtras.map((e) => {
+          const pancake =
+            e.code === "pancake" ||
+            e.code === "pancake_batch" ||
+            e.code === "pancakes" ||
+            e.name.toLowerCase().includes("pancake");
+          return (
+            <ListRow
+              key={`${e.code ?? e.name}-${e.rooms.join("-")}`}
+              primary={e.name}
+              secondary={[
+                `Rooms ${e.rooms.join(", ")}`,
+                e.unit || null,
+                pancake ? `${e.quantity * 20} pieces` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              right={<span className="text-sm font-semibold tabular-nums text-ink">{e.quantity}</span>}
+              rightSecondary={pancake ? "batches" : e.unit || undefined}
+            />
+          );
+        })}
+        {k && kotExtras.length === 0 ? (
+          <p className="border-t border-border px-4 py-3 text-caption">
+            No extras selected for this date (or none marked Show on KOT).
+          </p>
         ) : null}
 
         <div className="border-t border-border px-4 py-3">

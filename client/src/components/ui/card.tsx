@@ -6,7 +6,7 @@ export function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-0 rounded-[var(--radius)] border border-border bg-surface text-ink",
+        "flex flex-col gap-0 rounded-[var(--radius-xl)] border border-border bg-surface text-ink",
         className,
       )}
       {...props}
