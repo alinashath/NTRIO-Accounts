@@ -26,6 +26,7 @@ import { Modal } from "@/components/Modal";
 import { SegmentedControl } from "@/components/design";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
 import { useOrganization } from "@/context/OrganizationContext";
+import { clearOrganizationChoiceRequired, clearStoredActiveOrganization } from "@/lib/orgStorage";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
 import { pathForModule, WORKSPACE_META, type WorkspaceModuleId } from "@/lib/workspaces";
@@ -41,7 +42,8 @@ export function WorkspaceLayout({
 }) {
   const navigate = useNavigate();
   const { displayCurrency, setDisplayCurrency, globalUsdMvrRate } = useDisplayCurrency();
-  const { organizationTitle, enabledModules, ready, isSystemAdmin } = useOrganization();
+  const { organizationTitle, enabledModules, ready, isSystemAdmin, organizations, requireOrgPickOnLogin } =
+    useOrganization();
   const [moreOpen, setMoreOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -55,6 +57,8 @@ export function WorkspaceLayout({
   }, [enabledModules, workspace]);
 
   async function signOut() {
+    clearOrganizationChoiceRequired();
+    clearStoredActiveOrganization();
     await supabase.auth.signOut();
     useAuthStore.getState().setSession(null);
     navigate("/login", { replace: true });
@@ -112,9 +116,22 @@ export function WorkspaceLayout({
           className="min-w-0 flex-1 touch-manipulation text-left"
           aria-label={multiModule ? `${organizationTitle} workspaces` : organizationTitle}
         >
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-action">{organizationTitle}</p>
-          <p className="mt-0.5 text-section text-ink">{title}</p>
+          <p className="truncate text-xs font-bold uppercase tracking-[0.08em] text-action">{organizationTitle}</p>
+          <p className="mt-0.5 truncate text-section text-ink">{title}</p>
         </button>
+
+        {organizations.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => {
+              requireOrgPickOnLogin();
+              navigate("/select-organization");
+            }}
+            className="inline-flex min-h-11 shrink-0 items-center rounded-sm border border-border px-3 text-sm font-semibold text-ink hover:bg-neutral-bg"
+          >
+            Switch
+          </button>
+        ) : null}
 
         {workspace === "accounts" ? (
           <div title={`1 USD = ${globalUsdMvrRate.toFixed(4)} MVR`}>
@@ -329,6 +346,20 @@ export function WorkspaceLayout({
 
       <Modal open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
         <div className="grid gap-1">
+          {organizations.length > 1 ? (
+            <button
+              type="button"
+              className="flex min-h-11 items-center gap-3 rounded-sm px-3 text-left text-sm font-medium text-ink hover:bg-neutral-bg"
+              onClick={() => {
+                setMoreOpen(false);
+                requireOrgPickOnLogin();
+                navigate("/select-organization");
+              }}
+            >
+              <LayoutGrid className="h-5 w-5 text-muted-label" strokeWidth={1.8} aria-hidden />
+              Switch organization
+            </button>
+          ) : null}
           {moreItems.map(({ to, label, icon: Icon }) => (
             <button
               key={to}

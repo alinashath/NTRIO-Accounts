@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { clearStoredActiveOrganization } from "@/lib/orgStorage";
+import { markOrganizationChoiceRequired } from "@/lib/orgStorage";
 import { useAuthStore } from "@/store/auth";
 import { Button, Card } from "@/components/ui";
 
@@ -32,7 +32,7 @@ export function LoginPage() {
       return;
     }
     if (data.session) {
-      clearStoredActiveOrganization();
+      markOrganizationChoiceRequired();
       useAuthStore.getState().setSession(data.session);
     }
   }

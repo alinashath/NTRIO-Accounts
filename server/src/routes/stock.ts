@@ -3,12 +3,14 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { dec, parseYmd, ymd } from "../lib/dates.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
 import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
 import { buildShoppingListForDate } from "../services/stockPlanning.js";
 
 export const stockRouter = Router();
 stockRouter.use(requireAuth);
+stockRouter.use(scopeOrganizationData);
 
 function balanceOf(opening: number, received: number, used: number) {
   return opening + received - used;

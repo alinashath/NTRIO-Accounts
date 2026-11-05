@@ -1,5 +1,6 @@
 import { Button, Card } from "@/components/ui";
 import { useOrganization } from "@/context/OrganizationContext";
+import { clearOrganizationChoiceRequired, clearStoredActiveOrganization } from "@/lib/orgStorage";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
 
@@ -8,6 +9,8 @@ export function PendingApprovalPage() {
   const setSession = useAuthStore((s) => s.setSession);
 
   async function signOut() {
+    clearOrganizationChoiceRequired();
+    clearStoredActiveOrganization();
     await supabase.auth.signOut();
     setSession(null);
   }

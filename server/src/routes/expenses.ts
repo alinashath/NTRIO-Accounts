@@ -4,12 +4,14 @@ import { parseProjectScope, projectWhereClause } from "../lib/projectFilter.js";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { recalculateAccountBalance } from "../services/balanceService.js";
 import { refreshDebtSettlement } from "../services/debtService.js";
 import { asyncHandler } from "../utils/http.js";
 
 export const expensesRouter = Router();
 expensesRouter.use(requireAuth);
+expensesRouter.use(scopeOrganizationData);
 
 function statusFromQuery(q: unknown) {
   return (

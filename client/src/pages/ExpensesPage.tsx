@@ -433,7 +433,14 @@ export function ExpensesPage() {
         </div>
       </Modal>
 
-      <Modal open={modalOpen} title="New expense" size="lg" variant="form" onClose={() => setModalOpen(false)}>
+      <Modal
+        open={modalOpen}
+        title="New expense"
+        size="lg"
+        variant="form"
+        closeOnDismiss={false}
+        onClose={() => setModalOpen(false)}
+      >
         <ExpenseForm
           userId={userId}
           accounts={accounts}
@@ -451,6 +458,7 @@ export function ExpensesPage() {
             setModalOpen(false);
             reload();
           }}
+          onCancel={() => setModalOpen(false)}
           onError={setError}
         />
       </Modal>
@@ -460,6 +468,7 @@ export function ExpensesPage() {
         title="Edit expense"
         size="lg"
         variant="form"
+        closeOnDismiss={false}
         onClose={() => setDetail(null)}
       >
         {detail ? (
@@ -603,6 +612,7 @@ function ExpenseForm({
   createExpenseProject,
   createVendorContact,
   onDone,
+  onCancel,
   onError,
 }: {
   userId: string;
@@ -618,6 +628,7 @@ function ExpenseForm({
   createExpenseProject: (name: string) => Promise<string>;
   createVendorContact: (name: string) => Promise<string>;
   onDone: () => void;
+  onCancel: () => void;
   onError: (s: string | null) => void;
 }) {
   const [step, setStep] = useState(0);
@@ -746,7 +757,6 @@ function ExpenseForm({
       className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (step === 2) void submitSave();
       }}
     >
       <FormStepHeader step={step} total={3} titles={stepTitles} />
@@ -886,10 +896,18 @@ function ExpenseForm({
             Next
           </Button>
         ) : (
-          <Button type="submit" className="w-full sm:flex-1" disabled={busy}>
+          <Button
+            type="button"
+            className="w-full sm:flex-1"
+            disabled={busy}
+            onClick={() => void submitSave()}
+          >
             {busy ? "Saving…" : "Save expense"}
           </Button>
         )}
+        <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={onCancel}>
+          Cancel
+        </Button>
         {step > 0 ? (
           <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={goBack}>
             Back
@@ -1095,7 +1113,6 @@ function ExpenseDetailPanel({
       className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (step === 2 && !voided) void save();
       }}
     >
       <FormStepHeader step={step} total={3} titles={stepTitles} />
@@ -1322,7 +1339,12 @@ function ExpenseDetailPanel({
             Next
           </Button>
         ) : !voided ? (
-          <Button type="submit" className="w-full sm:flex-1" disabled={busy}>
+          <Button
+            type="button"
+            className="w-full sm:flex-1"
+            disabled={busy}
+            onClick={() => void save()}
+          >
             {busy ? "Saving…" : "Save changes"}
           </Button>
         ) : (
@@ -1330,6 +1352,11 @@ function ExpenseDetailPanel({
             Done
           </Button>
         )}
+        {step < 2 || !voided ? (
+          <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={onClose}>
+            Cancel
+          </Button>
+        ) : null}
         {step > 0 ? (
           <Button type="button" variant="ghost" className="w-full sm:flex-1" onClick={goBack}>
             Back

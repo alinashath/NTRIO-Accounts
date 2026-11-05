@@ -10,9 +10,12 @@ import {
 import { apiFetch } from "@/api/http";
 import {
   applyDocumentTitle,
+  clearOrganizationChoiceRequired,
   clearStoredActiveOrganization,
   getStoredActiveOrganizationId,
   getStoredOrganizationTitle,
+  isOrganizationChoiceRequired,
+  markOrganizationChoiceRequired,
   setStoredActiveOrganization,
   setStoredOrganizationTitle,
 } from "@/lib/orgStorage";
@@ -46,6 +49,8 @@ type Ctx = {
   needsSelection: boolean;
   /** No tenant membership yet (waiting for system admin). */
   needsApproval: boolean;
+  /** Organizations could not be loaded (API down or request failed). */
+  loadError: string | null;
   pendingRequest: PendingOrgRequest | null;
   isSystemAdmin: boolean;
   selectOrganization: (organizationId: string) => Promise<void>;
@@ -60,7 +65,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [organizations, setOrganizations] = useState<OrgOption[]>([]);
   const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(() =>
-    getStoredActiveOrganizationId(),
+    isOrganizationChoiceRequired() ? null : getStoredActiveOrganizationId(),
   );
   const [organizationTitle, setOrganizationTitle] = useState(getStoredOrganizationTitle);
   const [enabledModules, setEnabledModules] = useState<WorkspaceModuleId[]>([
@@ -68,6 +73,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   ]);
   const [pendingRequest, setPendingRequest] = useState<PendingOrgRequest | null>(null);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const applyActive = useCallback((org: OrgOption) => {
     setActiveOrganizationId(org.id);
@@ -85,14 +91,27 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, [organizationTitle]);
 
   const refreshOrganizations = useCallback(async () => {
-    const data = await apiFetch<{
+    let data: {
+      organizations: OrgOption[];
+      active_organization_id: string | null;
+      enabled_modules?: WorkspaceModuleId[];
+      pending_request?: PendingOrgRequest | null;
+      is_system_admin?: boolean;
+    };
+    try {
+      data = await apiFetch<{
       organizations: OrgOption[];
       active_organization_id: string | null;
       enabled_modules?: WorkspaceModuleId[];
       pending_request?: PendingOrgRequest | null;
       is_system_admin?: boolean;
     }>("/api/settings/organizations");
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not load organizations");
+      throw e;
+    }
 
+    setLoadError(null);
     const orgs = data.organizations ?? [];
     setOrganizations(orgs);
     setPendingRequest(data.pending_request ?? null);
@@ -102,12 +121,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     const storedOrg = stored ? orgs.find((o) => o.id === stored) : undefined;
 
     if (orgs.length === 0) {
+      clearOrganizationChoiceRequired();
       setActiveOrganizationId(null);
       setEnabledModules([...ALL_WORKSPACE_MODULES]);
       return;
     }
 
     if (orgs.length === 1) {
+      clearOrganizationChoiceRequired();
       applyActive(orgs[0]);
       if (data.enabled_modules?.length) {
         setEnabledModules(normalizeEnabledModules(data.enabled_modules));
@@ -117,6 +138,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           method: "POST",
           body: JSON.stringify({ organization_id: orgs[0].id }),
         }).catch(() => {});
+      }
+      return;
+    }
+
+    if (isOrganizationChoiceRequired()) {
+      clearStoredActiveOrganization();
+      setActiveOrganizationId(null);
+      if (data.enabled_modules?.length) {
+        setEnabledModules(normalizeEnabledModules(data.enabled_modules));
       }
       return;
     }
@@ -138,7 +168,11 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void refreshOrganizations()
-      .catch(() => {})
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : "Could not load organizations");
+        }
+      })
       .finally(() => {
         if (!cancelled) setReady(true);
       });
@@ -157,6 +191,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         method: "POST",
         body: JSON.stringify({ organization_id: organizationId }),
       });
+      clearOrganizationChoiceRequired();
       applyActive({
         id: data.organization_id,
         title: data.organization_title,
@@ -168,11 +203,11 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   );
 
   const requireOrgPickOnLogin = useCallback(() => {
-    clearStoredActiveOrganization();
+    markOrganizationChoiceRequired();
     setActiveOrganizationId(null);
   }, []);
 
-  const needsApproval = ready && organizations.length === 0;
+  const needsApproval = ready && !loadError && organizations.length === 0;
   const needsSelection =
     ready &&
     organizations.length > 1 &&
@@ -187,6 +222,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       enabledModules,
       needsSelection,
       needsApproval,
+      loadError,
       pendingRequest,
       isSystemAdmin,
       selectOrganization,
@@ -202,6 +238,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       enabledModules,
       needsSelection,
       needsApproval,
+      loadError,
       pendingRequest,
       isSystemAdmin,
       selectOrganization,

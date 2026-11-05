@@ -13,10 +13,12 @@ import {
   type DateBasis,
 } from "../services/statementService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
+reportsRouter.use(scopeOrganizationData);
 
 const rangeQuery = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

@@ -179,6 +179,79 @@ export function readPreferredOrgId(req: Request): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
+/**
+ * Books (accounts, entries, rooms, stock, FX) are stored on one user id.
+ * That id is a founding member of the organization (earliest membership).
+ * People added later read and write those same records while the organization is active.
+ */
+export async function dataOwnerForOrganization(organizationId: string): Promise<string> {
+  const members = await prisma.organizationMember.findMany({
+    where: { organizationId },
+    orderBy: [{ createdAt: "asc" }, { user: { createdAt: "asc" } }],
+    select: {
+      createdAt: true,
+      userId: true,
+      user: { select: { createdAt: true, _count: { select: { accounts: true } } } },
+    },
+  });
+  if (members.length === 0) {
+    throw new OrgAccessError();
+  }
+  const foundedAt = members[0]!.createdAt.getTime();
+  const founders = members.filter((m) => m.createdAt.getTime() === foundedAt);
+  founders.sort((a, b) => {
+    const byAccounts = b.user._count.accounts - a.user._count.accounts;
+    if (byAccounts !== 0) return byAccounts;
+    return a.user.createdAt.getTime() - b.user.createdAt.getTime();
+  });
+  return founders[0]!.userId;
+}
+
+/** Active organization for this login, then the user id that owns its books. */
+export async function resolveOrganizationDataUserId(
+  actorUserId: string,
+  preferredOrgId: string | null,
+): Promise<string> {
+  if (preferredOrgId) {
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        userId_organizationId: { userId: actorUserId, organizationId: preferredOrgId },
+      },
+      select: { organizationId: true },
+    });
+    if (!membership) {
+      throw new OrgAccessError("You are not a member of that organization");
+    }
+    return dataOwnerForOrganization(preferredOrgId);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: actorUserId },
+    select: { organizationId: true },
+  });
+  if (user?.organizationId) {
+    const membership = await prisma.organizationMember.findUnique({
+      where: {
+        userId_organizationId: { userId: actorUserId, organizationId: user.organizationId },
+      },
+      select: { organizationId: true },
+    });
+    if (membership) {
+      return dataOwnerForOrganization(user.organizationId);
+    }
+  }
+
+  const first = await prisma.organizationMember.findFirst({
+    where: { userId: actorUserId },
+    orderBy: { createdAt: "asc" },
+    select: { organizationId: true },
+  });
+  if (!first) {
+    throw new OrgAccessError();
+  }
+  return dataOwnerForOrganization(first.organizationId);
+}
+
 export async function setActiveOrganization(userId: string, organizationId: string) {
   const membership = await prisma.organizationMember.findUnique({
     where: {

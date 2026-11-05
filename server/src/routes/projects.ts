@@ -2,10 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
+projectsRouter.use(scopeOrganizationData);
 
 function mapProject(row: { id: string; name: string; createdAt: Date }) {
   return {

@@ -32,7 +32,21 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: { error?: unknown; hint?: unknown } | null = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as { error?: unknown; hint?: unknown };
+    } catch {
+      if (!res.ok) {
+        throw new Error(
+          res.status === 502 || res.status === 500
+            ? "The accounts API is not running."
+            : `Request failed (${res.status})`,
+        );
+      }
+      throw new Error("The server returned an unreadable response.");
+    }
+  }
 
   if (!res.ok) {
     const msg =

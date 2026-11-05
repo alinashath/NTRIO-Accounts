@@ -8,10 +8,12 @@ import {
 } from "../lib/fxRates.js";
 import {
   attachUserToOrganization,
+  dataOwnerForOrganization,
   ensureUserOrganization,
   ensureUserOrganizations,
   listOrganizationMembers,
   readPreferredOrgId,
+  resolveOrganizationDataUserId,
   setActiveOrganization,
   setOrganizationTitle,
 } from "../lib/organization.js";
@@ -47,18 +49,19 @@ function serviceSupabase() {
 settingsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const userId = (req as AuthedRequest).userId;
+    const actorId = (req as AuthedRequest).userId;
     const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(
+      actorId,
+      preferred,
+      (req as AuthedRequest).userEmail,
+    );
+    const userId = await dataOwnerForOrganization(org.id);
     const row = await prisma.userSettings.upsert({
       where: { userId },
       create: { userId },
       update: {},
     });
-    const org = await ensureUserOrganization(
-      userId,
-      preferred,
-      (req as AuthedRequest).userEmail,
-    );
     await ensureFxBaseline(userId);
     const fx_rates = await listFxDailyRates(userId);
     res.json({
@@ -141,18 +144,20 @@ const patchSchema = z
 settingsRouter.patch(
   "/",
   asyncHandler(async (req, res) => {
-    const userId = (req as AuthedRequest).userId;
+    const actorId = (req as AuthedRequest).userId;
     const preferred = readPreferredOrgId(req);
     const body = patchSchema.parse(req.body);
 
     if (body.organization_title !== undefined) {
       await setOrganizationTitle(
-        userId,
+        actorId,
         body.organization_title,
         preferred,
         (req as AuthedRequest).userEmail,
       );
     }
+
+    const userId = await resolveOrganizationDataUserId(actorId, preferred);
 
     if (body.projects_enabled !== undefined) {
       await prisma.userSettings.upsert({
@@ -191,9 +196,13 @@ settingsRouter.patch(
       }
     }
 
-    const refreshed = await prisma.userSettings.findUniqueOrThrow({ where: { userId } });
+    const refreshed = await prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    });
     const org = await ensureUserOrganization(
-      userId,
+      actorId,
       preferred,
       (req as AuthedRequest).userEmail,
     );

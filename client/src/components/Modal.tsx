@@ -16,6 +16,11 @@ type ModalProps = {
    */
   variant?: "auto" | "form";
   footer?: React.ReactNode;
+  /**
+   * When false, backdrop taps and Escape leave the dialog open.
+   * The header close button still calls onClose.
+   */
+  closeOnDismiss?: boolean;
 };
 
 export function Modal({
@@ -26,6 +31,7 @@ export function Modal({
   size = "md",
   variant = "auto",
   footer,
+  closeOnDismiss = true,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -37,13 +43,13 @@ export function Modal({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !closeOnDismiss) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, closeOnDismiss]);
 
   if (!open) return null;
 
@@ -55,7 +61,9 @@ export function Modal({
       style={{ backgroundColor: "var(--overlay)" }}
       role="presentation"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        if (closeOnDismiss) onClose();
       }}
     >
       <div

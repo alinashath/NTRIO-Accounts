@@ -26,18 +26,51 @@ type DropdownProps = {
   addNotFoundLabel?: string;
 };
 
-function useIsMobileSheet() {
-  const [mobile, setMobile] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : true,
+/** Phones, tablets, and touch devices use a bottom picker instead of a floating menu. */
+const PICKER_QUERY = "(max-width: 1023px), (pointer: coarse)";
+
+type ViewportBox = { top: number; left: number; width: number; height: number };
+
+function readViewportBox(): ViewportBox {
+  const vv = window.visualViewport;
+  if (!vv) {
+    return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+  return { top: vv.offsetTop, left: vv.offsetLeft, width: vv.width, height: vv.height };
+}
+
+function usePickerSheet() {
+  const [sheet, setSheet] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(PICKER_QUERY).matches : true,
   );
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const onChange = () => setMobile(mq.matches);
+    const mq = window.matchMedia(PICKER_QUERY);
+    const onChange = () => setSheet(mq.matches);
     onChange();
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-  return mobile;
+  return sheet;
+}
+
+function useVisualViewportBox(active: boolean) {
+  const [box, setBox] = useState<ViewportBox>(() =>
+    typeof window !== "undefined" ? readViewportBox() : { top: 0, left: 0, width: 0, height: 0 },
+  );
+  useLayoutEffect(() => {
+    if (!active) return;
+    const update = () => setBox(readViewportBox());
+    update();
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [active]);
+  return box;
 }
 
 export function Dropdown({
@@ -58,7 +91,8 @@ export function Dropdown({
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
-  const mobileSheet = useIsMobileSheet();
+  const pickerSheet = usePickerSheet();
+  const viewportBox = useVisualViewportBox(open && pickerSheet);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -77,7 +111,7 @@ export function Dropdown({
   const showSearch = searchable && (options.length > 0 || !!onAddNotFound);
 
   const updatePanelPos = useCallback(() => {
-    if (mobileSheet) return;
+    if (pickerSheet) return;
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -94,10 +128,10 @@ export function Dropdown({
       width: Math.max(r.width, 240),
       maxH,
     });
-  }, [mobileSheet]);
+  }, [pickerSheet]);
 
   useLayoutEffect(() => {
-    if (!open || mobileSheet) {
+    if (!open || pickerSheet) {
       setPanelPos(null);
       return;
     }
@@ -108,7 +142,7 @@ export function Dropdown({
       window.removeEventListener("scroll", updatePanelPos, true);
       window.removeEventListener("resize", updatePanelPos);
     };
-  }, [open, updatePanelPos, options.length, value, mobileSheet]);
+  }, [open, updatePanelPos, options.length, value, pickerSheet]);
 
   useEffect(() => {
     if (!open) setQuery("");
@@ -119,10 +153,10 @@ export function Dropdown({
   }, [open]);
 
   useEffect(() => {
-    if (open && showSearch) {
-      queueMicrotask(() => searchRef.current?.focus());
+    if (open && showSearch && !pickerSheet) {
+      queueMicrotask(() => searchRef.current?.focus({ preventScroll: true }));
     }
-  }, [open, showSearch]);
+  }, [open, showSearch, pickerSheet]);
 
   useEffect(() => {
     if (!open) return;
@@ -208,14 +242,22 @@ export function Dropdown({
       {options.length > 0 && filteredOptions.length === 0 && !canShowAddNotFound ? (
         <p className="border-b border-border px-4 py-3 text-sm text-muted-label">No matches</p>
       ) : null}
-      <div id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+      <div
+        id={listId}
+        role="listbox"
+        className="max-h-[min(50dvh,420px)] min-h-0 flex-1 overflow-y-auto overscroll-contain py-1"
+      >
         {!required ? (
           <button
             type="button"
             role="option"
             aria-selected={value === ""}
             className="flex min-h-11 w-full touch-manipulation items-center px-4 text-left text-sm text-muted-label hover:bg-neutral-bg"
-            onClick={() => selectValue("")}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectValue("");
+            }}
           >
             —
           </button>
@@ -230,7 +272,11 @@ export function Dropdown({
               "flex min-h-11 w-full touch-manipulation items-center px-4 text-left text-sm hover:bg-neutral-bg",
               value === o.value ? "bg-neutral-bg font-semibold text-ink" : "text-ink",
             )}
-            onClick={() => selectValue(o.value)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectValue(o.value);
+            }}
           >
             {o.label}
           </button>
@@ -253,22 +299,34 @@ export function Dropdown({
   );
 
   const panel =
-    open && mobileSheet
+    open && pickerSheet
       ? createPortal(
           <div
-            className="fixed inset-0 z-[500] flex items-end justify-center touch-manipulation"
-            style={{ backgroundColor: "var(--overlay)" }}
+            className="z-[500] flex items-end justify-center touch-manipulation"
+            style={{
+              position: "fixed",
+              top: viewportBox.top,
+              left: viewportBox.left,
+              width: viewportBox.width,
+              height: viewportBox.height,
+              backgroundColor: "var(--overlay)",
+            }}
             role="presentation"
             onPointerDown={(e) => {
-              if (e.target === e.currentTarget) setOpen(false);
+              if (e.target !== e.currentTarget) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
             }}
           >
             <div
               ref={panelRef}
-              className="theme-light flex max-h-[min(85dvh,640px)] w-full flex-col overflow-hidden rounded-t-[var(--sheet-radius)] border border-border bg-surface"
+              className="theme-light flex w-full min-h-0 flex-col overflow-hidden rounded-t-[var(--sheet-radius)] border border-border bg-surface pb-[env(safe-area-inset-bottom,0px)]"
+              style={{ maxHeight: "min(85%, 640px)" }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => {
-                if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
+                const target = e.target as HTMLElement;
+                if (target.closest?.('[data-dropdown-search="1"]') && target.tagName !== "INPUT") {
                   e.preventDefault();
                 }
               }}
@@ -304,7 +362,8 @@ export function Dropdown({
                 maxHeight: panelPos.maxH,
               }}
               onMouseDown={(e) => {
-                if ((e.target as HTMLElement).closest?.('[data-dropdown-search="1"]')) {
+                const target = e.target as HTMLElement;
+                if (target.closest?.('[data-dropdown-search="1"]') && target.tagName !== "INPUT") {
                   e.preventDefault();
                 }
               }}

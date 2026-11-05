@@ -45,12 +45,28 @@ const GATE_ALLOW = new Set(["/pending-approval", "/admin", "/select-organization
 
 function OrgGate({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { ready, needsSelection, needsApproval, isSystemAdmin } = useOrganization();
+  const { ready, needsSelection, needsApproval, isSystemAdmin, loadError, refreshOrganizations } =
+    useOrganization();
 
   if (!ready) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-ground text-muted-label">
         Loading…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-3 px-4 text-center">
+        <p className="text-sm text-ink">{loadError}</p>
+        <button
+          type="button"
+          className="mx-auto inline-flex min-h-11 items-center justify-center rounded-[var(--radius-md)] bg-action px-4 text-sm font-semibold text-[var(--on-primary)]"
+          onClick={() => void refreshOrganizations()}
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -70,6 +86,18 @@ function OrgGate({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+function OrganizationData({ children }: { children: React.ReactNode }) {
+  const { ready, needsSelection, needsApproval, activeOrganizationId } = useOrganization();
+  if (!ready || needsSelection || needsApproval || !activeOrganizationId) {
+    return children;
+  }
+  return (
+    <DisplayCurrencyProvider key={activeOrganizationId}>
+      <ProjectsProvider key={activeOrganizationId}>{children}</ProjectsProvider>
+    </DisplayCurrencyProvider>
+  );
+}
+
 function Protected() {
   const session = useAuthStore((s) => s.session);
   if (!session) {
@@ -77,13 +105,11 @@ function Protected() {
   }
   return (
     <OrganizationProvider>
-      <DisplayCurrencyProvider>
-        <ProjectsProvider>
-          <OrgGate>
-            <Outlet />
-          </OrgGate>
-        </ProjectsProvider>
-      </DisplayCurrencyProvider>
+      <OrgGate>
+        <OrganizationData>
+          <Outlet />
+        </OrganizationData>
+      </OrgGate>
     </OrganizationProvider>
   );
 }

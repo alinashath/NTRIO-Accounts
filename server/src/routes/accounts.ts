@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import {
   recalculateAccountBalance,
   recalculateAccounts,
@@ -11,6 +12,7 @@ import { asyncHandler } from "../utils/http.js";
 
 export const accountsRouter = Router();
 accountsRouter.use(requireAuth);
+accountsRouter.use(scopeOrganizationData);
 
 const accountType = z.enum(["bank", "cash", "wallet"]);
 

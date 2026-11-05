@@ -3,11 +3,13 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { dec } from "../lib/dates.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
 import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
 
 export const recipesRouter = Router();
 recipesRouter.use(requireAuth);
+recipesRouter.use(scopeOrganizationData);
 
 function mapRecipe(r: {
   id: string;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { toMoney } from "../lib/money.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { recalculateAccountBalance } from "../services/balanceService.js";
 import {
   accruedFromExpenses,
@@ -13,6 +14,7 @@ import { asyncHandler } from "../utils/http.js";
 
 export const debtsRouter = Router();
 debtsRouter.use(requireAuth);
+debtsRouter.use(scopeOrganizationData);
 
 debtsRouter.get(
   "/",
