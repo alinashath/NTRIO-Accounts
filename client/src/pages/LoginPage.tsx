@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { markOrganizationChoiceRequired } from "@/lib/orgStorage";
@@ -13,6 +13,10 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.title = SOFTWARE_NAME;
+  }, []);
 
   if (session) {
     return <Navigate to="/" replace />;

@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
-import { applyDocumentTitle } from "./lib/orgStorage";
 import { supabase } from "./lib/supabase";
 import { useAuthStore } from "./store/auth";
 
@@ -11,10 +10,6 @@ function Boot() {
   const setSession = useAuthStore((s) => s.setSession);
   const markAuthReady = useAuthStore((s) => s.markAuthReady);
   const authReady = useAuthStore((s) => s.authReady);
-
-  useEffect(() => {
-    applyDocumentTitle();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
