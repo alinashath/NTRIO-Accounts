@@ -480,6 +480,9 @@ export interface MealMenuLineDto {
   sort_order: number;
   /** Human mapping label for editors. */
   mapping: string;
+  /** Ingredient cost for this line (qty × unit price / prepared BOM). */
+  estimated_cost: number | null;
+  cost_incomplete: boolean;
 }
 
 export interface MealMenuDto {
@@ -493,6 +496,9 @@ export interface MealMenuDto {
   created_at: string;
   updated_at: string;
   lines: MealMenuLineDto[];
+  /** Typical per-serving cost (base + avg choice groups; options excluded). */
+  estimated_cost: number | null;
+  cost_incomplete: boolean;
 }
 
 /** Choosable side on a Maldivian / Continental breakfast order. */
@@ -612,6 +618,12 @@ export interface KitchenPlanMainMealDto {
   menu_code: string | null;
   count: number;
   egg_styles: Array<{ style: string; count: number }>;
+  /** Estimated ingredient cost for all servings of this menu (from stock unit prices). */
+  estimated_cost: number | null;
+  /** Estimated ingredient cost per serving. */
+  cost_per_serving: number | null;
+  /** True when some ingredients lack a unit price. */
+  cost_incomplete: boolean;
 }
 
 export interface KitchenPlanRoomGuestDto {
@@ -698,11 +710,34 @@ export interface KitchenPlanDto {
   stock_needed: KitchenPlanStockNeedDto[];
   /** Shortfalls / below-min / missing catalog items. */
   stock_alerts: KitchenPlanStockAlertDto[];
+  /** Sum of estimated ingredient cost across main meals (+ room extras when priced). */
+  estimated_meals_cost: number | null;
+  /** True when any priced meal is missing some unit prices. */
+  meals_cost_incomplete: boolean;
+}
+
+/** Per room + time: plated items to put on the table (not stock units). */
+export interface TableServiceItemDto {
+  name: string;
+  quantity: number;
+}
+
+export interface TableServiceRowDto {
+  room_number: string;
+  serving_time: string;
+  meal_period: MealPeriod;
+  guest_count: number;
+  menu_names: string[];
+  serve_items: TableServiceItemDto[];
+  special_requests: string[];
+  outside_normal_window: boolean;
 }
 
 export interface KitchenSummariesDto {
   date: string;
   server_summary: ServerSummaryRowDto[];
+  /** Table run sheet — what to serve on each table. */
+  table_service: TableServiceRowDto[];
   kitchen_plan: KitchenPlanDto;
 }
 
@@ -713,6 +748,8 @@ export interface StockItemDto {
   unit: string;
   kind: StockItemKind;
   min_stock: number;
+  /** Latest known unit price from a refill (meal cost estimates). */
+  last_unit_cost: number | null;
   use_notes: string | null;
   pack_info: string | null;
   sort_order: number;
@@ -732,7 +769,10 @@ export interface StockInventoryRowDto {
   used: number;
   waste: number;
   expenditure: number;
+  /** Unit price recorded on this day's refill (or last known). */
   unit_cost: number | null;
+  /** Latest catalog unit price used for meal costing. */
+  last_unit_cost: number | null;
   balance: number;
   below_min: boolean;
   ledger_id: string | null;
@@ -808,6 +848,9 @@ export interface RecipeLineDto {
   show_on_kot: boolean;
   /** Choosable side on Maldivian/Continental orders (not always included). */
   is_option: boolean;
+  /** Line cost = qty × last unit price. */
+  estimated_cost: number | null;
+  unit_cost: number | null;
 }
 
 export interface RecipeDto {
@@ -821,4 +864,7 @@ export interface RecipeDto {
   created_at: string;
   updated_at: string;
   lines: RecipeLineDto[];
+  /** Sum of BOM line costs per serving / batch. */
+  estimated_cost: number | null;
+  cost_incomplete: boolean;
 }

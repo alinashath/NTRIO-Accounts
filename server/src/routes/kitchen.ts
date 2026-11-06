@@ -10,6 +10,7 @@ import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
 import {
   computeIngredientNeeds,
   computeServerSummary,
+  computeTableService,
   isOutsideNormalWindow,
   normalServingTimes,
   normalizeChoiceIds,
@@ -1235,6 +1236,7 @@ kitchenRouter.get(
     const orderLikes = toOrderLikes(orders);
     const extrasLikes = toExtrasLikes(extras);
     const server = computeServerSummary(dateStr, orderLikes, mealCatalog.menus, mealPeriod);
+    const tableService = computeTableService(orderLikes, mealCatalog.menus, mealPeriod);
     const { kitchen, kotExtras, schedule, groups } = await buildGroupedKitchenPlan(
       userId,
       dateStr,
@@ -1247,6 +1249,7 @@ kitchenRouter.get(
       date: dateStr,
       meal_period: mealPeriod ?? null,
       server_summary: server,
+      table_service: tableService,
       kitchen_plan: {
         ...kitchen,
         prep_lines: kitchen.prep_lines.map((e) => ({
@@ -1269,6 +1272,8 @@ kitchenRouter.get(
         prepared_needed: groups.prepared_needed,
         stock_needed: groups.stock_needed,
         stock_alerts: groups.stock_alerts,
+        estimated_meals_cost: groups.estimated_meals_cost,
+        meals_cost_incomplete: groups.meals_cost_incomplete,
       },
     });
   }),

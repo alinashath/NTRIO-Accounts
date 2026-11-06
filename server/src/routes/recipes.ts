@@ -6,6 +6,8 @@ import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
 import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
+import { costPreparedBom, stockUnitPrice } from "../services/stockCost.js";
+import { toMoney } from "../lib/money.js";
 
 export const recipesRouter = Router();
 recipesRouter.use(requireAuth);
@@ -34,9 +36,15 @@ function mapRecipe(r: {
     notes: string | null;
     showOnKot?: boolean;
     isOption?: boolean;
-    stockItem: { name: string; unit: string; code: string | null };
+    stockItem: {
+      name: string;
+      unit: string;
+      code: string | null;
+      lastUnitCost?: { toNumber?: () => number } | number | null;
+    };
   }>;
 }) {
+  const bom = costPreparedBom(r.lines);
   return {
     id: r.id,
     name: r.name,
@@ -47,17 +55,25 @@ function mapRecipe(r: {
     is_active: r.isActive,
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
-    lines: r.lines.map((l) => ({
-      id: l.id,
-      stock_item_id: l.stockItemId,
-      stock_item_name: l.stockItem.name,
-      stock_item_unit: l.stockItem.unit,
-      stock_item_code: l.stockItem.code,
-      qty_per_serving: dec(l.qtyPerServing),
-      notes: l.notes,
-      show_on_kot: l.showOnKot !== false,
-      is_option: Boolean(l.isOption),
-    })),
+    estimated_cost: bom.estimated_cost,
+    cost_incomplete: bom.cost_incomplete,
+    lines: r.lines.map((l) => {
+      const unit = stockUnitPrice(l.stockItem);
+      const qty = dec(l.qtyPerServing);
+      return {
+        id: l.id,
+        stock_item_id: l.stockItemId,
+        stock_item_name: l.stockItem.name,
+        stock_item_unit: l.stockItem.unit,
+        stock_item_code: l.stockItem.code,
+        qty_per_serving: qty,
+        notes: l.notes,
+        show_on_kot: l.showOnKot !== false,
+        is_option: Boolean(l.isOption),
+        unit_cost: unit,
+        estimated_cost: unit != null ? toMoney(qty * unit) : null,
+      };
+    }),
   };
 }
 

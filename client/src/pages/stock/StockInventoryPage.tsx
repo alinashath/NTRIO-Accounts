@@ -63,7 +63,20 @@ export function StockInventoryPage() {
     downloadText(
       `inventory-${date}.csv`,
       toCsv(
-        ["Item", "Unit", "Opening", "Received", "Used", "Balance", "Min Stock", "Waste", "Expenditure", "Use", "Kind"],
+        [
+          "Item",
+          "Unit",
+          "Opening",
+          "Received",
+          "Used",
+          "Balance",
+          "Min Stock",
+          "Waste",
+          "Unit price",
+          "Expenditure",
+          "Use",
+          "Kind",
+        ],
         visibleRows.map((r) => [
           r.name,
           r.unit,
@@ -73,6 +86,7 @@ export function StockInventoryPage() {
           r.balance,
           r.min_stock,
           r.waste,
+          r.unit_cost,
           r.expenditure,
           r.use_notes,
           r.kind,
@@ -193,8 +207,10 @@ export function StockInventoryPage() {
               </span>
             }
             secondary={`${r.unit} · Open ${fmt(r.opening)} · Rec ${fmt(r.received)} · Used ${fmt(r.used)}${
-              r.use_notes ? ` · ${r.use_notes}` : ""
-            }${r.below_min ? ` · Min ${fmt(r.min_stock)}` : ""}`}
+              r.unit_cost != null ? ` · @ ${fmt(r.unit_cost)}` : ""
+            }${r.use_notes ? ` · ${r.use_notes}` : ""}${
+              r.below_min ? ` · Min ${fmt(r.min_stock)}` : ""
+            }`}
             right={
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1">
@@ -298,9 +314,21 @@ function ItemEditForm({
   const [received, setReceived] = useState(String(row.received));
   const [used, setUsed] = useState(String(row.used));
   const [waste, setWaste] = useState(String(row.waste));
+  const [unitCost, setUnitCost] = useState(
+    row.unit_cost != null ? String(row.unit_cost) : row.last_unit_cost != null ? String(row.last_unit_cost) : "",
+  );
   const [expenditure, setExpenditure] = useState(String(row.expenditure));
+  const [expTouched, setExpTouched] = useState(row.expenditure > 0);
   const [minStock, setMinStock] = useState(String(row.min_stock));
   const [saving, setSaving] = useState(false);
+
+  function syncExpenditureFromPrice(nextReceived: string, nextUnitCost: string) {
+    if (expTouched) return;
+    const qty = Number(nextReceived);
+    const price = Number(nextUnitCost);
+    if (!(qty > 0) || !(price >= 0) || !Number.isFinite(qty) || !Number.isFinite(price)) return;
+    setExpenditure(String(Math.round(qty * price * 100) / 100));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -320,6 +348,7 @@ function ItemEditForm({
           pack_info: packInfo.trim() || null,
         }),
       });
+      const unitPrice = unitCost.trim() === "" ? null : Number(unitCost);
       await apiFetch("/api/stock/ledger", {
         method: "PUT",
         body: JSON.stringify({
@@ -329,7 +358,8 @@ function ItemEditForm({
           received: Number(received),
           used: Number(used),
           waste: Number(waste),
-          expenditure: Number(expenditure),
+          expenditure: Number(expenditure) || 0,
+          unit_cost: unitPrice != null && Number.isFinite(unitPrice) ? unitPrice : null,
         }),
       });
       onDone(name.trim());
@@ -343,7 +373,7 @@ function ItemEditForm({
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
       <p className="text-caption">
-        Kind: {row.kind}. Balance = Opening + Received − Used.
+        Kind: {row.kind}. Balance = Opening + Received − Used. Unit price is saved on refill and used for meal cost estimates.
         {row.code ? ` Catalog code: ${row.code}.` : ""}
       </p>
       <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -357,15 +387,41 @@ function ItemEditForm({
       <TextField label="Pack info" value={packInfo} onChange={(e) => setPackInfo(e.target.value)} />
       <div className="grid grid-cols-2 gap-3">
         <TextField label="Opening" type="number" step="any" value={opening} onChange={(e) => setOpening(e.target.value)} />
-        <TextField label="Received" type="number" step="any" value={received} onChange={(e) => setReceived(e.target.value)} />
+        <TextField
+          label="Received (refill)"
+          type="number"
+          step="any"
+          value={received}
+          onChange={(e) => {
+            const v = e.target.value;
+            setReceived(v);
+            syncExpenditureFromPrice(v, unitCost);
+          }}
+        />
         <TextField label="Used" type="number" step="any" value={used} onChange={(e) => setUsed(e.target.value)} />
         <TextField label="Waste" type="number" step="any" value={waste} onChange={(e) => setWaste(e.target.value)} />
         <TextField
-          label="Expenditure"
+          label={`Unit price / ${unit || "unit"}`}
+          type="number"
+          step="any"
+          min="0"
+          value={unitCost}
+          onChange={(e) => {
+            const v = e.target.value;
+            setUnitCost(v);
+            syncExpenditureFromPrice(received, v);
+          }}
+          placeholder="Price paid per unit"
+        />
+        <TextField
+          label="Expenditure (total)"
           type="number"
           step="any"
           value={expenditure}
-          onChange={(e) => setExpenditure(e.target.value)}
+          onChange={(e) => {
+            setExpTouched(true);
+            setExpenditure(e.target.value);
+          }}
         />
         <TextField label="Min stock" type="number" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
       </div>

@@ -43,6 +43,44 @@ const PERIOD_LABEL: Record<MealPeriod, string> = {
   dinner: "Dinner",
 };
 
+function fmtCost(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return n.toFixed(2);
+}
+
+function CostCell({
+  cost,
+  incomplete,
+}: {
+  cost: number | null | undefined;
+  incomplete?: boolean;
+}) {
+  return (
+    <div className="flex w-[5.5rem] shrink-0 flex-col items-end justify-center">
+      <span
+        className={`text-sm font-semibold tabular-nums ${
+          cost == null ? "text-muted" : "text-ink"
+        }`}
+      >
+        {fmtCost(cost)}
+      </span>
+      {incomplete && cost != null ? (
+        <span className="text-[11px] leading-tight text-muted">partial</span>
+      ) : null}
+    </div>
+  );
+}
+
+function ListColumnHeader({ nameLabel = "Name" }: { nameLabel?: string }) {
+  return (
+    <div className="flex items-center gap-3 border-t border-border bg-surface-elevated px-4 py-2">
+      <p className="min-w-0 flex-1 text-label">{nameLabel}</p>
+      <p className="w-[5.5rem] shrink-0 text-right text-label">Cost</p>
+      <p className="w-[5.75rem] shrink-0 text-right text-label"> </p>
+    </div>
+  );
+}
+
 export function KitchenRecipesPage() {
   const [tab, setTab] = useState<ConfigTab>("menus");
   const [menus, setMenus] = useState<MealMenuDto[]>([]);
@@ -174,47 +212,60 @@ export function KitchenRecipesPage() {
             <PanelCard
               key={group.period}
               title={group.label}
-              caption={`${group.items.length} menu${group.items.length === 1 ? "" : "s"}`}
+              caption={`${group.items.length} menu${
+                group.items.length === 1 ? "" : "s"
+              } · Cost = base + avg choices (from stock unit prices)`}
             >
               {!group.items.length ? (
                 <p className="border-t border-border px-4 py-3 text-caption">
                   No menus yet for {group.label.toLowerCase()}. Create one to take guest orders.
                 </p>
               ) : (
-                group.items.map((m) => (
-                  <ListRow
-                    key={m.id}
-                    primary={m.name}
-                    secondary={
-                      m.lines.length
-                        ? m.lines
-                            .map((l) => `${l.display_name} → ${l.mapping} (${l.role})`)
-                            .join(" · ")
-                        : "No lines — add base, options, or choices"
-                    }
-                    right={
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-action hover:bg-neutral-bg"
-                          aria-label={`Edit ${m.name}`}
-                          onClick={() => setMenuModal(m)}
-                        >
-                          <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
-                          aria-label={`Delete ${m.name}`}
-                          onClick={() => void removeMenu(m.id, m.name)}
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                        </button>
-                      </div>
-                    }
-                  />
-                ))
+                <>
+                  <ListColumnHeader nameLabel="Menu" />
+                  {group.items.map((m) => (
+                    <ListRow
+                      key={m.id}
+                      primary={m.name}
+                      secondary={
+                        m.lines.length
+                          ? m.lines
+                              .map(
+                                (l) =>
+                                  `${l.display_name} → ${l.mapping} (${l.role})${
+                                    l.estimated_cost != null ? ` · ${fmtCost(l.estimated_cost)}` : ""
+                                  }`,
+                              )
+                              .join(" · ")
+                          : "No lines — add base, options, or choices"
+                      }
+                      right={
+                        <div className="flex items-center gap-2">
+                          <CostCell cost={m.estimated_cost} incomplete={m.cost_incomplete} />
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-action hover:bg-neutral-bg"
+                              aria-label={`Edit ${m.name}`}
+                              onClick={() => setMenuModal(m)}
+                            >
+                              <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                              aria-label={`Delete ${m.name}`}
+                              onClick={() => void removeMenu(m.id, m.name)}
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    />
+                  ))}
+                </>
               )}
             </PanelCard>
           ))
@@ -225,10 +276,13 @@ export function KitchenRecipesPage() {
           title={tab === "prepared" ? "Prepared items" : "Shared add-ons"}
           caption={
             tab === "prepared"
-              ? "BOM recipes (e.g. Roshi, pancake batter) used when a menu line maps to them"
-              : "Choosable extras on guest orders and room fruits & extras"
+              ? "BOM recipes · Cost column from ingredient unit prices"
+              : "Choosable extras · Cost column from ingredient unit prices"
           }
         >
+          {(tab === "prepared" ? prepared : addons).length ? (
+            <ListColumnHeader nameLabel={tab === "prepared" ? "Prepared item" : "Add-on"} />
+          ) : null}
           {(tab === "prepared" ? prepared : addons).map((r) => (
             <ListRow
               key={r.id}
@@ -236,27 +290,35 @@ export function KitchenRecipesPage() {
               secondary={
                 r.lines.length
                   ? r.lines
-                      .map((l) => `${l.stock_item_name} ${l.qty_per_serving}${l.stock_item_unit ? ` ${l.stock_item_unit}` : ""}`)
+                      .map(
+                        (l) =>
+                          `${l.stock_item_name} ${l.qty_per_serving}${
+                            l.stock_item_unit ? ` ${l.stock_item_unit}` : ""
+                          }${l.estimated_cost != null ? ` · ${fmtCost(l.estimated_cost)}` : ""}`,
+                      )
                       .join(" · ")
                   : "No ingredients"
               }
               right={
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-action hover:bg-neutral-bg"
-                    onClick={() => setRecipeModal(r)}
-                  >
-                    <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
-                    onClick={() => void removeRecipe(r.id, r.name)}
-                  >
-                    <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                  </button>
+                <div className="flex items-center gap-2">
+                  <CostCell cost={r.estimated_cost} incomplete={r.cost_incomplete} />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-action hover:bg-neutral-bg"
+                      onClick={() => setRecipeModal(r)}
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                      onClick={() => void removeRecipe(r.id, r.name)}
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                    </button>
+                  </div>
                 </div>
               }
             />
@@ -731,7 +793,31 @@ function PreparedForm({
     }
   }
 
-  const itemOpts = items.map((i) => ({ value: i.id, label: `${i.name} (${i.unit})` }));
+  const itemOpts = items.map((i) => ({
+    value: i.id,
+    label:
+      i.last_unit_cost != null
+        ? `${i.name} (${i.unit}) · @ ${fmtCost(i.last_unit_cost)}`
+        : `${i.name} (${i.unit})`,
+  }));
+
+  const draftCosts = lines.map((line) => {
+    const item = items.find((i) => i.id === line.stock_item_id);
+    const qty = Number(line.qty_per_serving);
+    if (!item || !(qty > 0) || item.last_unit_cost == null) {
+      return { cost: null as number | null, incomplete: qty > 0 };
+    }
+    return {
+      cost: Math.round(qty * item.last_unit_cost * 100) / 100,
+      incomplete: false,
+    };
+  });
+  const draftTotal = draftCosts.every((c) => c.cost == null)
+    ? null
+    : Math.round(
+        draftCosts.reduce((s, c) => s + (c.cost ?? 0), 0) * 100,
+      ) / 100;
+  const draftIncomplete = draftCosts.some((c) => c.incomplete || c.cost == null);
 
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
@@ -741,6 +827,15 @@ function PreparedForm({
           ? "Ingredient BOM. When a menu line maps to this recipe, stock is deducted from these lines."
           : "Items choosable as add-ons on guest orders and room extras."}
       </p>
+      <div className="flex items-baseline justify-between gap-3 rounded-[var(--radius)] border border-border px-3 py-2">
+        <p className="text-label">Cost</p>
+        <p className="text-sm font-semibold tabular-nums text-ink">
+          {fmtCost(draftTotal)}
+          {draftIncomplete && draftTotal != null ? (
+            <span className="ml-1 text-caption font-normal">partial</span>
+          ) : null}
+        </p>
+      </div>
       <TextField label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -775,17 +870,25 @@ function PreparedForm({
               }
               options={itemOpts}
             />
-            <TextField
-              label="Qty"
-              type="number"
-              step="any"
-              value={line.qty_per_serving}
-              onChange={(e) =>
-                setLines((prev) =>
-                  prev.map((l, i) => (i === idx ? { ...l, qty_per_serving: e.target.value } : l)),
-                )
-              }
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <TextField
+                label="Qty"
+                type="number"
+                step="any"
+                value={line.qty_per_serving}
+                onChange={(e) =>
+                  setLines((prev) =>
+                    prev.map((l, i) => (i === idx ? { ...l, qty_per_serving: e.target.value } : l)),
+                  )
+                }
+              />
+              <div className="flex flex-col justify-end">
+                <p className="text-label">Cost</p>
+                <p className="min-h-11 flex items-center text-sm font-semibold tabular-nums text-ink">
+                  {fmtCost(draftCosts[idx]?.cost)}
+                </p>
+              </div>
+            </div>
             {mode === "addons" ? (
               <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
                 <input

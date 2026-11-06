@@ -681,6 +681,8 @@ model StockItem {
   unit        String
   kind        StockItemKind @default(kitchen)
   minStock    Decimal       @default(0) @map("min_stock") @db.Decimal(15, 4)
+  /// Latest unit price from a refill — used for meal cost estimates.
+  lastUnitCost Decimal?     @map("last_unit_cost") @db.Decimal(15, 4)
   /// Human-readable Use rules from PDF
   useNotes    String?       @map("use_notes")
   /// Optional pack size info (e.g. 200 portions per pack)

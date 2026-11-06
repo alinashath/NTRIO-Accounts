@@ -653,6 +653,112 @@ export function computeServerSummary(
     });
 }
 
+/** What to put on each table — plated serve names + counts (not stock units). */
+export type TableServiceRow = {
+  room_number: string;
+  serving_time: string;
+  meal_period: MealPeriod;
+  guest_count: number;
+  menu_names: string[];
+  serve_items: Array<{ name: string; quantity: number }>;
+  special_requests: string[];
+  outside_normal_window: boolean;
+};
+
+/**
+ * Per room + serving time: aggregated dishes/sides to serve on the table.
+ * Uses menu display names and portion counts (e.g. Roshi ×10), never BOM units.
+ */
+export function computeTableService(
+  orders: MealOrderLike[],
+  menus: MenuSource[] = [],
+  mealPeriod?: MealPeriod,
+): TableServiceRow[] {
+  const active = activeOrders(orders).filter((o) =>
+    mealPeriod ? o.mealPeriod === mealPeriod : true,
+  );
+
+  type Acc = {
+    room_number: string;
+    serving_time: string;
+    meal_period: MealPeriod;
+    guest_count: number;
+    menus: Map<string, number>;
+    items: Map<string, { name: string; quantity: number }>;
+    special_requests: string[];
+    outside_normal_window: boolean;
+  };
+  const map = new Map<string, Acc>();
+
+  for (const o of active) {
+    const key = `${o.mealPeriod}|${o.roomNumber}|${o.servingTime}`;
+    let row = map.get(key);
+    if (!row) {
+      row = {
+        room_number: o.roomNumber,
+        serving_time: o.servingTime,
+        meal_period: o.mealPeriod,
+        guest_count: 0,
+        menus: new Map(),
+        items: new Map(),
+        special_requests: [],
+        outside_normal_window: false,
+      };
+      map.set(key, row);
+    }
+    row.guest_count += 1;
+
+    const menu =
+      (o.menuId ? menus.find((m) => m.id === o.menuId) : undefined) ??
+      menus.find((m) => m.code === o.breakfastType);
+    const menuName = menu?.name ?? o.breakfastType ?? "Meal";
+    row.menus.set(menuName, (row.menus.get(menuName) ?? 0) + 1);
+
+    const bump = (name: string, qty: number) => {
+      if (!(qty > 0) || !name.trim()) return;
+      const n = name.trim();
+      const cur = row!.items.get(n.toLowerCase());
+      if (cur) cur.quantity += qty;
+      else row!.items.set(n.toLowerCase(), { name: n, quantity: qty });
+    };
+
+    for (const line of resolveOrderMenuLines(o, menus)) {
+      // Skip zero-qty markers; egg stock is represented by the style choice name.
+      const qty = line.qty_per_serving > 0 ? line.qty_per_serving : line.role === "choice" ? 1 : 0;
+      if (!(qty > 0)) continue;
+      let label = line.display_name;
+      if (line.choice_group_key === "egg_style") {
+        label = `${line.display_name} egg`;
+      }
+      bump(label, qty);
+    }
+
+    if (o.specialRequests?.trim()) row.special_requests.push(o.specialRequests.trim());
+    if (o.outsideNormalWindow) row.outside_normal_window = true;
+  }
+
+  return [...map.values()]
+    .map((r) => ({
+      room_number: r.room_number,
+      serving_time: r.serving_time,
+      meal_period: r.meal_period,
+      guest_count: r.guest_count,
+      menu_names: [...r.menus.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name)),
+      serve_items: [...r.items.values()]
+        .filter((i) => i.quantity > 0)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      special_requests: r.special_requests,
+      outside_normal_window: r.outside_normal_window,
+    }))
+    .sort((a, b) => {
+      const t = a.serving_time.localeCompare(b.serving_time);
+      if (t !== 0) return t;
+      return a.room_number.localeCompare(b.room_number, undefined, { numeric: true });
+    });
+}
+
 export function isOutsideNormalWindow(servingTime: string): boolean {
   const m = /^(\d{1,2}):(\d{2})$/.exec(servingTime.trim());
   if (!m) return true;

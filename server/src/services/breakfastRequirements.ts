@@ -22,6 +22,7 @@ export {
   computeIngredientNeeds,
   computeKotExtras,
   computeServerSummary,
+  computeTableService,
   resolveSelectedExtras,
   isOutsideNormalWindow,
   normalServingTimes,

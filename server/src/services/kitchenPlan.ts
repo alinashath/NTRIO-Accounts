@@ -4,6 +4,7 @@
  */
 import { prisma } from "../lib/prisma.js";
 import { dec, parseYmd } from "../lib/dates.js";
+import { toMoney } from "../lib/money.js";
 import { loadMealCatalog } from "./mealCatalog.js";
 import {
   computeIngredientNeeds,
@@ -35,6 +36,9 @@ export type KitchenPlanGroups = {
     menu_code: string | null;
     count: number;
     egg_styles: Array<{ style: string; count: number }>;
+    estimated_cost: number | null;
+    cost_per_serving: number | null;
+    cost_incomplete: boolean;
   }>;
   by_room: Array<{
     room_number: string;
@@ -79,7 +83,32 @@ export type KitchenPlanGroups = {
     to_buy: number;
     reasons: string[];
   }>;
+  estimated_meals_cost: number | null;
+  meals_cost_incomplete: boolean;
 };
+
+function costFromNeeds(
+  needs: Array<{ stock_item_id: string | null; code: string | null; quantity: number }>,
+  priceById: Map<string, number>,
+  priceByCode: Map<string, number>,
+): { cost: number; incomplete: boolean; hasAnyPrice: boolean } {
+  let cost = 0;
+  let incomplete = false;
+  let hasAnyPrice = false;
+  for (const need of needs) {
+    if (!(need.quantity > 0)) continue;
+    const price =
+      (need.stock_item_id ? priceById.get(need.stock_item_id) : undefined) ??
+      (need.code ? priceByCode.get(need.code) : undefined);
+    if (price == null) {
+      incomplete = true;
+      continue;
+    }
+    hasAnyPrice = true;
+    cost += need.quantity * price;
+  }
+  return { cost: toMoney(cost), incomplete, hasAnyPrice };
+}
 
 function optionNamesForOrder(
   order: MealOrderLike,
@@ -137,11 +166,13 @@ export async function buildGroupedKitchenPlan(
   const mealMap = new Map<
     string,
     {
+      key: string;
       meal_period: MealPeriod;
       menu_name: string;
       menu_code: string | null;
       count: number;
       egg_styles: Map<string, number>;
+      orders: MealOrderLike[];
     }
   >();
   for (const o of filteredOrders) {
@@ -154,33 +185,91 @@ export async function buildGroupedKitchenPlan(
     let row = mealMap.get(key);
     if (!row) {
       row = {
+        key,
         meal_period: o.mealPeriod,
         menu_name: menuName,
         menu_code: menuCode,
         count: 0,
         egg_styles: new Map(),
+        orders: [],
       };
       mealMap.set(key, row);
     }
     row.count += 1;
+    row.orders.push(o);
     const style = o.eggStyle || "omelette";
     row.egg_styles.set(style, (row.egg_styles.get(style) ?? 0) + 1);
   }
+
+  // —— Unit prices for meal cost estimates ——
+  const stockItems = await prisma.stockItem.findMany({
+    where: { userId, isActive: true },
+    select: { id: true, code: true, lastUnitCost: true },
+  });
+  const priceById = new Map<string, number>();
+  const priceByCode = new Map<string, number>();
+  for (const s of stockItems) {
+    if (s.lastUnitCost == null) continue;
+    const p = dec(s.lastUnitCost);
+    if (!(p >= 0)) continue;
+    priceById.set(s.id, p);
+    if (s.code) priceByCode.set(s.code, p);
+  }
+
   const main_meals = [...mealMap.values()]
-    .map((r) => ({
-      meal_period: r.meal_period,
-      menu_name: r.menu_name,
-      menu_code: r.menu_code,
-      count: r.count,
-      egg_styles: [...r.egg_styles.entries()]
-        .map(([style, count]) => ({ style, count }))
-        .sort((a, b) => a.style.localeCompare(b.style)),
-    }))
+    .map((r) => {
+      const needs = computeIngredientNeeds(
+        r.orders,
+        [],
+        catalog.menus,
+        catalog.prepared,
+        catalog.addons,
+      );
+      const priced = costFromNeeds(needs, priceById, priceByCode);
+      const estimated =
+        priced.hasAnyPrice || needs.every((n) => !(n.quantity > 0))
+          ? priced.cost
+          : null;
+      return {
+        meal_period: r.meal_period,
+        menu_name: r.menu_name,
+        menu_code: r.menu_code,
+        count: r.count,
+        egg_styles: [...r.egg_styles.entries()]
+          .map(([style, count]) => ({ style, count }))
+          .sort((a, b) => a.style.localeCompare(b.style)),
+        estimated_cost: estimated,
+        cost_per_serving:
+          estimated != null && r.count > 0 ? toMoney(estimated / r.count) : null,
+        cost_incomplete: priced.incomplete && (priced.hasAnyPrice || estimated === 0),
+      };
+    })
     .sort((a, b) =>
       a.meal_period === b.meal_period
         ? a.menu_name.localeCompare(b.menu_name)
         : a.meal_period.localeCompare(b.meal_period),
     );
+
+  const extrasNeeds = computeIngredientNeeds(
+    [],
+    filteredExtras,
+    catalog.menus,
+    catalog.prepared,
+    catalog.addons,
+  );
+  const extrasPriced = costFromNeeds(extrasNeeds, priceById, priceByCode);
+  const mealsCostSum = main_meals.reduce(
+    (sum, m) => sum + (m.estimated_cost ?? 0),
+    0,
+  );
+  const extrasCost = extrasPriced.hasAnyPrice ? extrasPriced.cost : 0;
+  const anyMealCost = main_meals.some((m) => m.estimated_cost != null) || extrasPriced.hasAnyPrice;
+  const estimated_meals_cost = anyMealCost
+    ? toMoney(mealsCostSum + extrasCost)
+    : null;
+  const meals_cost_incomplete =
+    main_meals.some((m) => m.cost_incomplete || m.estimated_cost == null) ||
+    (extrasNeeds.some((n) => n.quantity > 0) && extrasPriced.incomplete);
 
   // —— By room ——
   const roomMap = new Map<string, KitchenPlanGroups["by_room"][number]>();
@@ -391,6 +480,8 @@ export async function buildGroupedKitchenPlan(
       prepared_needed,
       stock_needed,
       stock_alerts,
+      estimated_meals_cost,
+      meals_cost_incomplete,
     },
   };
 }

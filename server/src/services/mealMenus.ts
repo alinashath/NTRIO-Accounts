@@ -4,6 +4,7 @@
  */
 import { prisma } from "../lib/prisma.js";
 import { dec } from "../lib/dates.js";
+import { costMenuLine, costMenuServing } from "./stockCost.js";
 
 const EGG_STYLES = [
   { key: "omelette", label: "Omelette" },
@@ -867,6 +868,7 @@ export async function loadMenusForUser(userId: string, mealPeriod?: "breakfast" 
 export function mapMenuDto(
   m: Awaited<ReturnType<typeof loadMenusForUser>>[number],
 ) {
+  const serving = costMenuServing(m.lines);
   return {
     id: m.id,
     meal_period: m.mealPeriod,
@@ -877,29 +879,36 @@ export function mapMenuDto(
     is_active: m.isActive,
     created_at: m.createdAt.toISOString(),
     updated_at: m.updatedAt.toISOString(),
-    lines: m.lines.map((l) => ({
-      id: l.id,
-      role: l.role,
-      choice_group_key: l.choiceGroupKey,
-      choice_group_label: l.choiceGroupLabel,
-      display_name:
-        l.displayName ??
-        l.stockItem?.name ??
-        l.componentRecipe?.name ??
-        "Item",
-      stock_item_id: l.stockItemId,
-      stock_item_name: l.stockItem?.name ?? null,
-      stock_item_unit: l.stockItem?.unit ?? null,
-      stock_item_code: l.stockItem?.code ?? null,
-      component_recipe_id: l.componentRecipeId,
-      component_recipe_name: l.componentRecipe?.name ?? null,
-      qty_per_serving: dec(l.qtyPerServing),
-      notes: l.notes,
-      show_on_kot: l.showOnKot,
-      sort_order: l.sortOrder,
-      mapping: l.componentRecipeId
-        ? (`Prepared: ${l.componentRecipe?.name ?? "recipe"}` as const)
-        : (`Stock: ${l.stockItem?.name ?? "item"}` as const),
-    })),
+    estimated_cost: serving.estimated_cost,
+    cost_incomplete: serving.cost_incomplete,
+    lines: m.lines.map((l) => {
+      const lineCost = costMenuLine(l);
+      return {
+        id: l.id,
+        role: l.role,
+        choice_group_key: l.choiceGroupKey,
+        choice_group_label: l.choiceGroupLabel,
+        display_name:
+          l.displayName ??
+          l.stockItem?.name ??
+          l.componentRecipe?.name ??
+          "Item",
+        stock_item_id: l.stockItemId,
+        stock_item_name: l.stockItem?.name ?? null,
+        stock_item_unit: l.stockItem?.unit ?? null,
+        stock_item_code: l.stockItem?.code ?? null,
+        component_recipe_id: l.componentRecipeId,
+        component_recipe_name: l.componentRecipe?.name ?? null,
+        qty_per_serving: dec(l.qtyPerServing),
+        notes: l.notes,
+        show_on_kot: l.showOnKot,
+        sort_order: l.sortOrder,
+        mapping: l.componentRecipeId
+          ? (`Prepared: ${l.componentRecipe?.name ?? "recipe"}` as const)
+          : (`Stock: ${l.stockItem?.name ?? "item"}` as const),
+        estimated_cost: lineCost.estimated_cost,
+        cost_incomplete: lineCost.cost_incomplete,
+      };
+    }),
   };
 }

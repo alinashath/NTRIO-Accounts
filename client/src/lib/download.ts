@@ -32,19 +32,21 @@ export function printHtml(
   if (!w) return;
   const receiptCss = opts?.receipt
     ? `
-      body{font-family:"IBM Plex Sans",ui-monospace,Menlo,Consolas,monospace;padding:16px;color:#181a20;font-size:12px;max-width:420px;margin:0 auto}
+      body{font-family:"IBM Plex Sans",ui-monospace,Menlo,Consolas,monospace;padding:16px;color:#181a20;font-size:12px;max-width:480px;margin:0 auto}
       h1{font-size:15px;margin:0;text-align:center;letter-spacing:0.04em;text-transform:uppercase}
       .sub{text-align:center;color:#707a8a;margin:4px 0 12px;font-size:11px}
       .rule{border:0;border-top:1px solid #181a20;margin:10px 0}
       .rule-dashed{border:0;border-top:1px dashed #cdd1d6;margin:8px 0}
       .sec{font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin:0 0 6px;color:#181a20}
       table.rcpt{border-collapse:collapse;width:100%;margin:0 0 4px}
-      table.rcpt th,table.rcpt td{border:0;padding:3px 0;vertical-align:top;font-size:12px}
-      table.rcpt th{color:#707a8a;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #eaecef}
-      table.rcpt .c1{text-align:left;width:54%}
-      table.rcpt .c2{text-align:right;width:22%;font-variant-numeric:tabular-nums;font-family:"IBM Plex Sans",ui-monospace,monospace}
-      table.rcpt .c3{text-align:right;width:24%;color:#374151}
+      table.rcpt th,table.rcpt td{border:0;padding:3px 2px;vertical-align:top;font-size:11px}
+      table.rcpt th{color:#707a8a;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #eaecef}
+      table.rcpt .c1{text-align:left}
+      table.rcpt .c2,table.rcpt .c3,table.rcpt .c4,table.rcpt .c5{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Sans",ui-monospace,monospace}
+      table.rcpt.cols3 .c1{width:54%} table.rcpt.cols3 .c2{width:22%} table.rcpt.cols3 .c3{width:24%;color:#374151}
+      table.rcpt.cols5 .c1{width:34%} table.rcpt.cols5 .c2{width:14%} table.rcpt.cols5 .c3{width:16%} table.rcpt.cols5 .c4{width:14%} table.rcpt.cols5 .c5{width:22%;color:#374151;text-align:right}
       .empty{color:#707a8a;font-size:11px;margin:0 0 4px}
+      .flag{color:#f6465d;font-weight:600}
       @media print{body{padding:0;max-width:none}}
     `
     : `
@@ -194,29 +196,26 @@ export function buildShareCardSvg(opts: {
 
 export type ReceiptSection = {
   heading: string;
-  /** Column headers: Item | Qty | Type */
-  headers?: [string, string, string];
-  rows: Array<[string, string, string]>;
+  /** 3-col: Item | Qty | Type — or 5-col stock: Item | Need | In stock | Buy | Type */
+  headers?: string[];
+  rows: string[][];
 };
 
 /**
- * Compact receipt-style SVG: 3 columns (item / qty / type), clear section rules.
- * Narrower than chat cards so vertical length stays manageable.
+ * Compact receipt-style SVG with clear section rules.
+ * Supports 3-column sections and 5-column stock (Item / Need / In stock / Buy / Type).
  */
 export function buildReceiptSvg(opts: {
   title: string;
   subtitle?: string;
   sections: ReceiptSection[];
 }) {
-  const width = 720;
-  const padX = 28;
-  const col1 = padX;
-  const col2 = width - padX - 150;
-  const col3 = width - padX;
+  const width = 800;
+  const padX = 24;
   const titleSize = 22;
   const subSize = 14;
   const headSize = 13;
-  const cellSize = 15;
+  const cellSize = 14;
   const rowH = 26;
   const font = "IBM Plex Sans,ui-monospace,Menlo,Consolas,monospace";
 
@@ -239,10 +238,28 @@ export function buildReceiptSvg(opts: {
   const dashedRule = (yy: number) =>
     `<line x1="${padX}" y1="${yy}" x2="${width - padX}" y2="${yy}" stroke="#cdd1d6" stroke-width="1" stroke-dasharray="4 3"/>`;
 
+  /** Right-edge x positions for trailing numeric columns (from right). */
+  function colXs(colCount: number): number[] {
+    if (colCount >= 5) {
+      // Item | Need | In stock | Buy | Type
+      return [padX, width - padX - 280, width - padX - 190, width - padX - 100, width - padX];
+    }
+    // Item | Qty | Type
+    return [padX, width - padX - 150, width - padX];
+  }
+
   parts.push(solidRule(y));
   y += 14;
 
   for (const section of opts.sections) {
+    const colCount = Math.max(3, section.headers?.length ?? 3, ...(section.rows.map((r) => r.length) || [3]));
+    const xs = colXs(colCount);
+    const headers =
+      section.headers ??
+      (colCount >= 5
+        ? ["Item", "Need", "In stock", "Buy", "Type"]
+        : ["Item", "Qty", "Type"]);
+
     parts.push(
       `<text x="${padX}" y="${y}" font-family="${font}" font-size="${headSize}" font-weight="700" letter-spacing="0.08em" fill="#181a20">${escapeXml(section.heading.toUpperCase())}</text>`,
     );
@@ -250,37 +267,35 @@ export function buildReceiptSvg(opts: {
     parts.push(dashedRule(y));
     y += 16;
 
-    const headers = section.headers ?? (["Item", "Qty", "Type"] as [string, string, string]);
-    parts.push(
-      `<text x="${col1}" y="${y}" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[0].toUpperCase())}</text>`,
-    );
-    parts.push(
-      `<text x="${col2}" y="${y}" text-anchor="end" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[1].toUpperCase())}</text>`,
-    );
-    parts.push(
-      `<text x="${col3}" y="${y}" text-anchor="end" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[2].toUpperCase())}</text>`,
-    );
+    for (let i = 0; i < headers.length; i++) {
+      const anchor = i === 0 ? "start" : "end";
+      parts.push(
+        `<text x="${xs[i]}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="10" font-weight="600" fill="#707a8a">${escapeXml(headers[i].toUpperCase())}</text>`,
+      );
+    }
     y += 6;
     parts.push(dashedRule(y));
     y += rowH - 4;
 
     if (!section.rows.length) {
       parts.push(
-        `<text x="${col1}" y="${y}" font-family="${font}" font-size="${cellSize}" fill="#707a8a">—</text>`,
+        `<text x="${xs[0]}" y="${y}" font-family="${font}" font-size="${cellSize}" fill="#707a8a">—</text>`,
       );
       y += rowH;
     } else {
-      for (const [item, qty, type] of section.rows) {
-        const itemText = item.length > 34 ? `${item.slice(0, 32)}…` : item;
-        parts.push(
-          `<text x="${col1}" y="${y}" font-family="${font}" font-size="${cellSize}" fill="#181a20">${escapeXml(itemText)}</text>`,
-        );
-        parts.push(
-          `<text x="${col2}" y="${y}" text-anchor="end" font-family="${font}" font-size="${cellSize}" font-weight="600" fill="#181a20">${escapeXml(qty)}</text>`,
-        );
-        parts.push(
-          `<text x="${col3}" y="${y}" text-anchor="end" font-family="${font}" font-size="${cellSize}" fill="#374151">${escapeXml(type || "—")}</text>`,
-        );
+      const maxItem = colCount >= 5 ? 22 : 34;
+      for (const row of section.rows) {
+        const itemText =
+          row[0].length > maxItem ? `${row[0].slice(0, maxItem - 1)}…` : row[0];
+        for (let i = 0; i < headers.length; i++) {
+          const val = row[i] ?? "—";
+          const anchor = i === 0 ? "start" : "end";
+          const weight = i === 0 || i === headers.length - 1 ? "400" : "600";
+          const fill = i === headers.length - 1 ? "#374151" : "#181a20";
+          parts.push(
+            `<text x="${xs[i]}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="${cellSize}" font-weight="${weight}" fill="${fill}">${escapeXml(i === 0 ? itemText : val)}</text>`,
+          );
+        }
         y += rowH;
       }
     }

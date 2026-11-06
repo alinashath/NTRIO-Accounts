@@ -56,6 +56,7 @@ stockRouter.get(
         unit: i.unit,
         kind: i.kind,
         min_stock: dec(i.minStock),
+        last_unit_cost: i.lastUnitCost != null ? dec(i.lastUnitCost) : null,
         use_notes: i.useNotes,
         pack_info: i.packInfo,
         sort_order: i.sortOrder,
@@ -98,6 +99,7 @@ stockRouter.post(
       unit: item.unit,
       kind: item.kind,
       min_stock: dec(item.minStock),
+      last_unit_cost: item.lastUnitCost != null ? dec(item.lastUnitCost) : null,
       use_notes: item.useNotes,
       pack_info: item.packInfo,
       sort_order: item.sortOrder,
@@ -143,6 +145,7 @@ stockRouter.patch(
       unit: item.unit,
       kind: item.kind,
       min_stock: dec(item.minStock),
+      last_unit_cost: item.lastUnitCost != null ? dec(item.lastUnitCost) : null,
       use_notes: item.useNotes,
       pack_info: item.packInfo,
       sort_order: item.sortOrder,
@@ -213,6 +216,7 @@ stockRouter.get(
     const rows = [];
     for (const item of items) {
       let ledger = byItem.get(item.id);
+      const lastUnitCost = item.lastUnitCost != null ? dec(item.lastUnitCost) : null;
       if (!ledger) {
         const opening = await previousBalance(userId, item.id, date);
         rows.push({
@@ -229,7 +233,8 @@ stockRouter.get(
           used: 0,
           waste: 0,
           expenditure: 0,
-          unit_cost: null as number | null,
+          unit_cost: lastUnitCost,
+          last_unit_cost: lastUnitCost,
           balance: opening,
           below_min: dec(item.minStock) > 0 && opening <= dec(item.minStock),
           ledger_id: null as string | null,
@@ -239,6 +244,8 @@ stockRouter.get(
         const received = dec(ledger.received);
         const used = dec(ledger.used);
         const bal = balanceOf(opening, received, used);
+        const dayUnit =
+          ledger.unitCost != null ? dec(ledger.unitCost) : lastUnitCost;
         rows.push({
           stock_item_id: item.id,
           code: item.code,
@@ -253,7 +260,8 @@ stockRouter.get(
           used,
           waste: dec(ledger.waste),
           expenditure: dec(ledger.expenditure),
-          unit_cost: ledger.unitCost != null ? dec(ledger.unitCost) : null,
+          unit_cost: dayUnit,
+          last_unit_cost: lastUnitCost,
           balance: bal,
           below_min: dec(item.minStock) > 0 && bal <= dec(item.minStock),
           ledger_id: ledger.id,
@@ -312,6 +320,43 @@ stockRouter.put(
             ? await previousBalance(userId, body.stock_item_id, date)
             : 0;
 
+    const receivedQty =
+      body.received ?? (existing ? dec(existing.received) : 0);
+    const resolvedUnitCost =
+      body.unit_cost !== undefined
+        ? body.unit_cost
+        : existing?.unitCost != null
+          ? dec(existing.unitCost)
+          : item.lastUnitCost != null
+            ? dec(item.lastUnitCost)
+            : null;
+
+    let expenditure = body.expenditure;
+    if (
+      expenditure === undefined &&
+      resolvedUnitCost != null &&
+      receivedQty > 0 &&
+      (body.received != null || body.unit_cost != null)
+    ) {
+      expenditure = Math.round(receivedQty * resolvedUnitCost * 100) / 100;
+    }
+
+    // If user entered spend + received but no unit price, derive it.
+    let unitCostToStore =
+      body.unit_cost !== undefined ? body.unit_cost : undefined;
+    if (
+      unitCostToStore === undefined &&
+      existing?.unitCost == null &&
+      receivedQty > 0 &&
+      expenditure != null &&
+      expenditure > 0
+    ) {
+      unitCostToStore = Math.round((expenditure / receivedQty) * 10000) / 10000;
+    }
+
+    const createUnitCost =
+      unitCostToStore !== undefined ? unitCostToStore : resolvedUnitCost;
+
     const row = await prisma.stockLedgerDay.upsert({
       where: {
         userId_stockItemId_date: {
@@ -328,8 +373,8 @@ stockRouter.put(
         received: body.received ?? 0,
         used: body.used ?? 0,
         waste: body.waste ?? 0,
-        expenditure: body.expenditure ?? 0,
-        unitCost: body.unit_cost ?? null,
+        expenditure: expenditure ?? 0,
+        unitCost: createUnitCost,
         notes: body.notes ?? null,
       },
       update: {
@@ -337,15 +382,32 @@ stockRouter.put(
         received: body.received,
         used: body.used,
         waste: body.waste,
-        expenditure: body.expenditure,
-        unitCost: body.unit_cost === undefined ? undefined : body.unit_cost,
+        expenditure,
+        unitCost: unitCostToStore,
         notes: body.notes,
       },
     });
 
+    const catalogUnit =
+      body.unit_cost != null
+        ? body.unit_cost
+        : row.unitCost != null
+          ? dec(row.unitCost)
+          : null;
+    if (catalogUnit != null && catalogUnit >= 0) {
+      await prisma.stockItem.update({
+        where: { id: body.stock_item_id },
+        data: { lastUnitCost: catalogUnit },
+      });
+    }
+
     const opening = dec(row.opening);
     const received = dec(row.received);
     const used = dec(row.used);
+    const refreshed = await prisma.stockItem.findUnique({
+      where: { id: body.stock_item_id },
+      select: { lastUnitCost: true },
+    });
     res.json({
       id: row.id,
       stock_item_id: row.stockItemId,
@@ -356,6 +418,8 @@ stockRouter.put(
       waste: dec(row.waste),
       expenditure: dec(row.expenditure),
       unit_cost: row.unitCost != null ? dec(row.unitCost) : null,
+      last_unit_cost:
+        refreshed?.lastUnitCost != null ? dec(refreshed.lastUnitCost) : null,
       balance: balanceOf(opening, received, used),
       notes: row.notes,
     });
