@@ -320,6 +320,8 @@ export async function ensureKitchenStockSeed(userId: string) {
   await ensureDefaultRecipes(userId);
   await ensureRoomExtrasPatches(userId);
   await ensureBreakfastOptionPatches(userId);
+  const { ensureMealMenus } = await import("./mealMenus.js");
+  await ensureMealMenus(userId);
 
   const rooms = await prisma.room.findMany({
     where: { userId },

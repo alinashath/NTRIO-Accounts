@@ -7,12 +7,10 @@ import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
 import { Button, TextField } from "@/components/ui";
 import type {
-  BreakfastOptionDto,
   BreakfastOrderDto,
-  BreakfastType,
-  EggStyle,
   KitchenDayDto,
   KitchenDayRoomDto,
+  MealMenuDto,
   MealPeriod,
   RoomDayExtrasDto,
   RoomExtraOptionDto,
@@ -60,12 +58,9 @@ const fruitOpts = [
   { id: "orange", label: "Orange" },
 ] as const;
 
-const eggOpts: DropdownOption[] = [
-  { value: "omelette", label: "Omelette" },
-  { value: "fried", label: "Fried" },
-  { value: "boiled", label: "Boiled" },
-  { value: "scrambled", label: "Scrambled" },
-];
+function ordersForMeal(room: KitchenDayRoomDto, meal: MealPeriod): BreakfastOrderDto[] {
+  return room.orders_by_meal?.[meal] ?? (meal === "breakfast" ? room.orders : []);
+}
 
 function ActionBtn({
   label,
@@ -209,8 +204,8 @@ export function KitchenOrdersPage() {
         <div>
           <h1 className="text-page-title text-ink">Room orders</h1>
           <p className="mt-1 text-caption">
-            Breakfast guest meals, plus fruits & extras for breakfast, lunch, and dinner — each meal is saved
-            separately. Saving updates stock Used and shopping list.
+            Per-guest meals for breakfast, lunch, and dinner from configurable menus, plus fruits & add-ons.
+            Saving updates stock Used and shopping list.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -219,7 +214,7 @@ export function KitchenOrdersPage() {
             to="/kitchen/recipes"
             className="inline-flex h-input min-h-11 items-center justify-center rounded-sm border border-action px-4 text-sm font-semibold text-action"
           >
-            Configure recipes
+            Configure menus
           </Link>
         </div>
       </div>
@@ -246,70 +241,82 @@ export function KitchenOrdersPage() {
         const extras = extrasForMeal(room, mealPeriod);
         const hasExtras =
           extras.fruits.length > 0 || (extras.selected_lines ?? []).length > 0;
+        const mealOrders = ordersForMeal(room, mealPeriod);
+        const activeGuestCount = mealOrders.filter((o) => o.status !== "cancelled").length;
+        const menusForPeriod = (day?.menus ?? []).filter((m) => m.meal_period === mealPeriod);
         return (
           <PanelCard
             key={room.id}
             title={`Room ${room.number}`}
-            caption={
-              mealPeriod === "breakfast"
-                ? `Occupants ${room.occupant_count} · Breakfast guests ${room.breakfast_participants}`
-                : `Occupants ${room.occupant_count} · ${mealTitle(mealPeriod)} fruits & extras`
-            }
+            caption={`Occupants ${room.occupant_count} · ${mealTitle(mealPeriod)} guests ${activeGuestCount}`}
           >
             <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
-              {mealPeriod === "breakfast" ? (
-                <ActionBtn
-                  label="Add breakfast"
-                  tone="action"
-                  disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
-                  onClick={() => setOrderModal({ room })}
-                >
-                  <Plus className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-                </ActionBtn>
-              ) : null}
+              <ActionBtn
+                label={`Add ${mealTitle(mealPeriod).toLowerCase()}`}
+                tone="action"
+                disabled={activeGuestCount >= 3 || menusForPeriod.length === 0}
+                onClick={() => setOrderModal({ room })}
+              >
+                <Plus className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+              </ActionBtn>
               <ActionBtn label="Occupants" onClick={() => setOccRoom(room)}>
                 <Users className="h-5 w-5" strokeWidth={1.8} aria-hidden />
               </ActionBtn>
               <ActionBtn
-                label={`${mealTitle(mealPeriod)} fruits & extras`}
-                tone={mealPeriod === "breakfast" ? "neutral" : "action"}
+                label="Fruits & extras"
                 onClick={() => setExtrasModal({ room, meal: mealPeriod })}
               >
                 <Apple className="h-5 w-5" strokeWidth={1.8} aria-hidden />
               </ActionBtn>
             </div>
 
-            {mealPeriod === "breakfast" ? (
-              room.orders.length === 0 ? (
-                <div className="border-t border-border px-4 py-3 space-y-2">
-                  <p className="text-caption">
-                    No breakfast orders yet. Tap Add breakfast — occupied rooms are not assumed to need
-                    breakfast.
-                  </p>
+            {mealOrders.length === 0 ? (
+              <div className="border-t border-border px-4 py-3 space-y-2">
+                <p className="text-caption">
+                  {menusForPeriod.length
+                    ? `No ${mealTitle(mealPeriod).toLowerCase()} guest orders yet.`
+                    : `No ${mealTitle(mealPeriod).toLowerCase()} menus configured.`}{" "}
+                  <Link to="/kitchen/recipes" className="font-semibold text-action underline">
+                    Configure menus
+                  </Link>
+                </p>
+                {menusForPeriod.length ? (
                   <Button
                     type="button"
                     className="gap-2"
-                    disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
+                    disabled={activeGuestCount >= 3}
                     onClick={() => setOrderModal({ room })}
                   >
                     <Plus className="h-4 w-4" aria-hidden />
-                    Add breakfast for room {room.number}
+                    Add {mealTitle(mealPeriod).toLowerCase()} for room {room.number}
                   </Button>
-                </div>
-              ) : (
-                room.orders.map((o) => {
-                  const typeOpts = day?.breakfast_options?.[o.breakfast_type] ?? [];
-                  const selectedNames = (o.selected_option_ids ?? [])
-                    .map((id) => typeOpts.find((opt) => opt.stock_item_id === id)?.name)
-                    .filter(Boolean);
-                  return (
+                ) : null}
+              </div>
+            ) : (
+              mealOrders.map((o) => {
+                const menu = (day?.menus ?? []).find((m) => m.id === o.menu_id);
+                const choiceNames = Object.entries(o.selected_choice_ids ?? {})
+                  .map(([key, lineId]) => {
+                    const line = menu?.lines.find((l) => l.id === lineId);
+                    return line?.display_name ?? key;
+                  })
+                  .filter(Boolean);
+                const optionNames = (o.selected_option_ids ?? [])
+                  .map((id) => {
+                    const line = menu?.lines.find((l) => l.id === id || l.stock_item_id === id);
+                    if (line) return line.display_name;
+                    return day?.extra_options?.find((opt) => opt.stock_item_id === id)?.name;
+                  })
+                  .filter(Boolean);
+                return (
                   <ListRow
                     key={o.id}
-                    primary={`Guest ${o.guest_number} · ${o.breakfast_type} · ${o.egg_style}`}
+                    primary={`Guest ${o.guest_number} · ${o.menu_name ?? menu?.name ?? o.breakfast_type}`}
                     secondary={[
                       o.serving_time,
                       o.outside_normal_window ? "Outside window" : null,
-                      selectedNames.length ? selectedNames.join(", ") : null,
+                      choiceNames.length ? choiceNames.join(", ") : null,
+                      optionNames.length ? optionNames.join(", ") : null,
                       o.status,
                       o.special_requests,
                     ]
@@ -325,25 +332,9 @@ export function KitchenOrdersPage() {
                     }
                     onClick={() => setOrderModal({ room, editing: o })}
                   />
-                  );
-                })
-              )
-            ) : !hasExtras ? (
-              <div className="border-t border-border px-4 py-3 space-y-2">
-                <p className="text-caption">
-                  No {mealTitle(mealPeriod).toLowerCase()} fruits or extras yet. Same options as breakfast —
-                  saved only for this meal.
-                </p>
-                <Button
-                  type="button"
-                  className="gap-2"
-                  onClick={() => setExtrasModal({ room, meal: mealPeriod })}
-                >
-                  <Apple className="h-4 w-4" aria-hidden />
-                  Add {mealTitle(mealPeriod).toLowerCase()} fruits & extras
-                </Button>
-              </div>
-            ) : null}
+                );
+              })
+            )}
 
             {hasExtras ? (
               <div className="border-t border-border">
@@ -393,17 +384,23 @@ export function KitchenOrdersPage() {
 
       <Modal
         open={!!orderModal}
-        title={orderModal?.editing ? "Edit breakfast order" : "New breakfast order"}
+        title={
+          orderModal?.editing
+            ? `Edit ${mealTitle(mealPeriod).toLowerCase()} order`
+            : `New ${mealTitle(mealPeriod).toLowerCase()} order`
+        }
         onClose={() => setOrderModal(null)}
       >
         {orderModal ? (
           <OrderForm
             date={date}
+            mealPeriod={mealPeriod}
             room={orderModal.room}
             servingTimes={day?.serving_times ?? []}
-            breakfastOptions={day?.breakfast_options ?? { maldivian: [], continental: [] }}
+            menus={(day?.menus ?? []).filter((m) => m.meal_period === mealPeriod)}
+            extraOptions={day?.extra_options ?? []}
             editing={orderModal.editing}
-            usedGuests={orderModal.room.orders
+            usedGuests={ordersForMeal(orderModal.room, mealPeriod)
               .filter((o) => o.status !== "cancelled" && o.id !== orderModal.editing?.id)
               .map((o) => o.guest_number)}
             onDone={(shopping) => {
@@ -537,40 +534,25 @@ function OccupancyForm({
   );
 }
 
-function initialSelectedOptionIds(
-  editing: BreakfastOrderDto | undefined,
-  options: BreakfastOptionDto[],
-): string[] {
-  if (editing?.selected_option_ids?.length) {
-    const allowed = new Set(options.map((o) => o.stock_item_id));
-    return editing.selected_option_ids.filter((id) => allowed.has(id));
-  }
-  if (!editing || !options.length) return [];
-  // Legacy orders: map boolean flags onto option stock ids.
-  const want = new Set<string>();
-  if (editing.potato) want.add("potatoes");
-  if (editing.juice) want.add("sunquick");
-  if (editing.tea) want.add("tea");
-  if (editing.coffee) want.add("coffee");
-  if (editing.milk) want.add("milk");
-  if (editing.sugar) want.add("portion_sugar");
-  return options.filter((o) => o.code && want.has(o.code)).map((o) => o.stock_item_id);
-}
 
 function OrderForm({
   date,
+  mealPeriod,
   room,
   servingTimes,
-  breakfastOptions,
+  menus,
+  extraOptions,
   editing,
   usedGuests,
   onDone,
   onError,
 }: {
   date: string;
+  mealPeriod: MealPeriod;
   room: KitchenDayRoomDto;
   servingTimes: string[];
-  breakfastOptions: Record<BreakfastType, BreakfastOptionDto[]>;
+  menus: MealMenuDto[];
+  extraOptions: RoomExtraOptionDto[];
   editing?: BreakfastOrderDto;
   usedGuests: number[];
   onDone: (shopping?: ShoppingSummaryDto) => void;
@@ -583,68 +565,116 @@ function OrderForm({
     editing?.outside_normal_window ? editing.serving_time : "",
   );
   const [useCustomTime, setUseCustomTime] = useState(!!editing?.outside_normal_window);
-  const [breakfastType, setBreakfastType] = useState<BreakfastType>(editing?.breakfast_type ?? "maldivian");
-  const [eggStyle, setEggStyle] = useState<EggStyle>(
-    editing?.egg_style ?? (editing?.breakfast_type === "continental" ? "fried" : "omelette"),
+  const [menuId, setMenuId] = useState(
+    editing?.menu_id ?? menus[0]?.id ?? "",
   );
-  const typeOptions = breakfastOptions[breakfastType] ?? [];
-  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(() =>
-    initialSelectedOptionIds(editing, breakfastOptions[editing?.breakfast_type ?? "maldivian"] ?? []),
-  );
+  const menu = menus.find((m) => m.id === menuId) ?? menus[0];
+  const optionLines = (menu?.lines ?? []).filter((l) => l.role === "option");
+  const optionStockIds = new Set(optionLines.map((l) => l.stock_item_id).filter(Boolean) as string[]);
+  const extrasOnly = extraOptions.filter((o) => !optionStockIds.has(o.stock_item_id));
+  const choiceGroups = (() => {
+    const map = new Map<string, { label: string; lines: typeof optionLines }>();
+    for (const line of menu?.lines ?? []) {
+      if (line.role !== "choice" || !line.choice_group_key) continue;
+      const cur = map.get(line.choice_group_key) ?? {
+        label: line.choice_group_label ?? line.choice_group_key,
+        lines: [],
+      };
+      cur.lines.push(line);
+      map.set(line.choice_group_key, cur);
+    }
+    return [...map.entries()];
+  })();
+
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(() => {
+    if (!editing) return [];
+    const allowed = new Set([
+      ...optionLines.map((l) => l.id),
+      ...optionLines.map((l) => l.stock_item_id).filter(Boolean) as string[],
+      ...extraOptions.map((o) => o.stock_item_id),
+    ]);
+    return (editing.selected_option_ids ?? []).filter((id) => allowed.has(id));
+  });
+  const [selectedChoiceIds, setSelectedChoiceIds] = useState<Record<string, string>>(() => {
+    const base = { ...(editing?.selected_choice_ids ?? {}) };
+    for (const [key, group] of choiceGroups) {
+      if (!base[key] && group.lines[0]) base[key] = group.lines[0].id;
+    }
+    return base;
+  });
   const [special, setSpecial] = useState(editing?.special_requests ?? "");
   const [status, setStatus] = useState(editing?.status ?? "pending");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!editing) {
-      setEggStyle(breakfastType === "continental" ? "fried" : "omelette");
-    }
-    const nextOpts = breakfastOptions[breakfastType] ?? [];
-    if (editing && editing.breakfast_type === breakfastType) {
-      setSelectedOptionIds(initialSelectedOptionIds(editing, nextOpts));
-    } else {
-      setSelectedOptionIds((prev) => prev.filter((id) => nextOpts.some((o) => o.stock_item_id === id)));
-    }
-  }, [breakfastType, breakfastOptions, editing]);
+    if (!menus.some((m) => m.id === menuId) && menus[0]) setMenuId(menus[0].id);
+  }, [menus, menuId]);
 
-  function toggleOption(stockItemId: string) {
+  useEffect(() => {
+    const nextMenu = menus.find((m) => m.id === menuId);
+    if (!nextMenu) return;
+    const nextOptions = nextMenu.lines.filter((l) => l.role === "option");
+    const allowed = new Set([
+      ...nextOptions.map((l) => l.id),
+      ...(nextOptions.map((l) => l.stock_item_id).filter(Boolean) as string[]),
+      ...extraOptions.map((o) => o.stock_item_id),
+    ]);
+    setSelectedOptionIds((prev) => prev.filter((id) => allowed.has(id)));
+    setSelectedChoiceIds((prev) => {
+      const next = { ...prev };
+      const groups = new Map<string, string>();
+      for (const line of nextMenu.lines) {
+        if (line.role === "choice" && line.choice_group_key) {
+          if (!groups.has(line.choice_group_key)) groups.set(line.choice_group_key, line.id);
+        }
+      }
+      for (const [key, firstId] of groups) {
+        const stillValid = nextMenu.lines.some(
+          (l) => l.id === next[key] && l.choice_group_key === key,
+        );
+        if (!stillValid) next[key] = firstId;
+      }
+      return next;
+    });
+  }, [menuId, menus, extraOptions]);
+
+  function toggleOption(id: string) {
     setSelectedOptionIds((prev) =>
-      prev.includes(stockItemId) ? prev.filter((id) => id !== stockItemId) : [...prev, stockItemId],
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!menuId) {
+      onError("Select a meal menu");
+      return;
+    }
     setSaving(true);
     try {
       const time = useCustomTime ? customTime : servingTime;
       const payload = {
         breakfast_date: date,
         room_id: room.id,
+        meal_period: mealPeriod,
         guest_number: Number(guestNumber),
         serving_time: time,
-        breakfast_type: breakfastType,
-        egg_style: eggStyle,
+        menu_id: menuId,
         selected_option_ids: selectedOptionIds,
+        selected_choice_ids: selectedChoiceIds,
         special_requests: special.trim() || null,
         status,
       };
       if (editing) {
         const res = await apiFetch<BreakfastOrderDto & { shopping?: ShoppingSummaryDto }>(
           `/api/kitchen/orders/${editing.id}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          },
+          { method: "PATCH", body: JSON.stringify(payload) },
         );
         onDone(res.shopping);
       } else {
         const res = await apiFetch<BreakfastOrderDto & { shopping?: ShoppingSummaryDto }>(
           "/api/kitchen/orders",
-          {
-            method: "POST",
-            body: JSON.stringify(payload),
-          },
+          { method: "POST", body: JSON.stringify(payload) },
         );
         onDone(res.shopping);
       }
@@ -669,10 +699,13 @@ function OrderForm({
   }
 
   const timeOpts: DropdownOption[] = servingTimes.map((t) => ({ value: t, label: t }));
+  const baseLines = (menu?.lines ?? []).filter((l) => l.role === "base");
 
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
-      <p className="text-caption">Room {room.number}</p>
+      <p className="text-caption">
+        Room {room.number} · {mealTitle(mealPeriod)}
+      </p>
       <Dropdown
         label="Guest number"
         value={guestNumber}
@@ -680,40 +713,72 @@ function OrderForm({
         options={availableGuests.map((g) => ({ value: String(g), label: String(g) }))}
       />
       <Dropdown
-        label="Breakfast type"
-        value={breakfastType}
-        onChange={(v) => setBreakfastType(v as BreakfastType)}
-        options={[
-          { value: "maldivian", label: "Maldivian" },
-          { value: "continental", label: "Continental" },
-        ]}
+        label="Menu"
+        value={menuId}
+        onChange={setMenuId}
+        options={menus.map((m) => ({ value: m.id, label: m.name }))}
+        searchable={false}
       />
-
-      <div className="rounded-[var(--radius)] border border-border bg-neutral-bg px-4 py-3 text-sm text-ink">
-        <p className="font-semibold">
-          {breakfastType === "maldivian" ? "Maldivian" : "Continental"} menu
-        </p>
+      {!menus.length ? (
         <p className="text-caption">
-          Base ingredients and optional sides come from Kitchen → Recipes for this breakfast type.
+          No menus for this meal.{" "}
+          <Link to="/kitchen/recipes" className="font-semibold text-action underline">
+            Configure menus
+          </Link>
         </p>
-        <Link
-          to="/kitchen/recipes"
-          className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-action underline"
-        >
-          Edit breakfast recipes & sides
-        </Link>
-      </div>
+      ) : null}
 
-      <Dropdown label="Egg style" value={eggStyle} onChange={(v) => setEggStyle(v as EggStyle)} options={eggOpts} />
+      {baseLines.length ? (
+        <div className="rounded-[var(--radius)] border border-border bg-neutral-bg px-4 py-3 text-sm text-ink">
+          <p className="font-semibold">Includes</p>
+          <p className="text-caption">
+            {baseLines.map((l) => `${l.display_name} ×${l.qty_per_serving}`).join(" · ")}
+          </p>
+        </div>
+      ) : null}
+
+      {choiceGroups.map(([key, group]) => (
+        <Dropdown
+          key={key}
+          label={group.label}
+          value={selectedChoiceIds[key] ?? group.lines[0]?.id ?? ""}
+          onChange={(v) => setSelectedChoiceIds((prev) => ({ ...prev, [key]: v }))}
+          options={group.lines.map((l) => ({ value: l.id, label: l.display_name }))}
+          searchable={false}
+        />
+      ))}
 
       <fieldset className="space-y-1">
         <legend className="text-label">Options & sides</legend>
-        {typeOptions.length ? (
+        {optionLines.length ? (
+          optionLines.map((opt) => (
+            <label key={opt.id} className="flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={
+                  selectedOptionIds.includes(opt.id) ||
+                  (!!opt.stock_item_id && selectedOptionIds.includes(opt.stock_item_id))
+                }
+                onChange={() => toggleOption(opt.id)}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{opt.display_name}</span>
+                <span className="block text-caption">
+                  {opt.qty_per_serving}
+                  {opt.stock_item_unit ? ` ${opt.stock_item_unit}` : ""}
+                  {opt.show_on_kot ? " · on KOT" : ""}
+                  {` · ${opt.mapping}`}
+                </span>
+              </span>
+            </label>
+          ))
+        ) : (
+          <p className="text-caption">No optional sides on this menu.</p>
+        )}
+        {extrasOnly.length ? (
           <>
-            <p className="text-caption">
-              From Recipes for this breakfast type. Selected items count for KOT and kitchen stock.
-            </p>
-            {typeOptions.map((opt) => (
+            <p className="pt-2 text-caption font-medium text-ink">Add-ons</p>
+            {extrasOnly.map((opt) => (
               <label
                 key={opt.stock_item_id}
                 className="flex min-h-11 items-center gap-2 text-sm text-ink"
@@ -728,26 +793,17 @@ function OrderForm({
                   <span className="block text-caption">
                     {opt.qty_per_serving} {opt.unit}
                     {opt.show_on_kot ? " · on KOT" : ""}
-                    {opt.notes ? ` · ${opt.notes}` : ""}
                   </span>
                 </span>
               </label>
             ))}
           </>
-        ) : (
-          <p className="text-caption">
-            No optional sides configured. Add lines marked “Optional side” under{" "}
-            <Link to="/kitchen/recipes" className="font-semibold text-action underline">
-              Recipes → {breakfastType === "maldivian" ? "Maldivian" : "Continental"}
-            </Link>
-            .
-          </p>
-        )}
+        ) : null}
       </fieldset>
 
       <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
         <input type="checkbox" checked={useCustomTime} onChange={(e) => setUseCustomTime(e.target.checked)} />
-        Special time outside 7:00–9:30 (departing guests)
+        Special time outside 7:00–9:30
       </label>
       {useCustomTime ? (
         <TextField
@@ -774,7 +830,7 @@ function OrderForm({
       />
 
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || !menus.length}>
           {saving ? "Saving…" : "Save"}
         </Button>
         {editing ? (
@@ -798,15 +854,13 @@ function EditExtraCountForm({
   onCancel: () => void;
   onError: (s: string) => void;
 }) {
-  const [qty, setQty] = useState(String(line.quantity));
+  const [qty, setQty] = useState(String(line.quantity > 0 ? line.quantity : 1));
   const [saving, setSaving] = useState(false);
-  const unit = line.unit?.trim() || "";
 
   function bump(delta: number) {
     const n = Number(qty);
-    const base = Number.isFinite(n) && n > 0 ? n : 0;
-    const next = Math.max(0.01, Math.round((base + delta) * 100) / 100);
-    setQty(String(next));
+    const next = (Number.isFinite(n) ? n : 0) + delta;
+    setQty(String(next > 0.01 ? Math.round(next * 1000) / 1000 : 0.01));
   }
 
   async function submit(e: React.FormEvent) {
@@ -829,10 +883,10 @@ function EditExtraCountForm({
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
       <p className="text-caption">
-        Change how many {line.name ?? "of this extra"} to prepare for this meal
-        {unit ? ` (${unit})` : ""}.
+        {line.name ?? "Extra"}
+        {line.unit ? ` · ${line.unit}` : ""}
       </p>
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="flex items-end gap-2">
         <button
           type="button"
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-lg font-semibold text-ink hover:bg-neutral-bg"
@@ -843,9 +897,8 @@ function EditExtraCountForm({
         </button>
         <div className="min-w-0 flex-1">
           <TextField
-            label={`Count${unit ? ` (${unit})` : ""}`}
+            label="Count"
             type="number"
-            inputMode="decimal"
             step="any"
             min={0.01}
             value={qty}

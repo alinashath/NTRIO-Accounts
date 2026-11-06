@@ -401,13 +401,17 @@ export interface DebtDetailDto extends DebtDto {
   expense_charges: DebtExpenseChargeDto[];
 }
 
-/** Kitchen / Stock (Isola Alifu breakfast ops) */
+/** Kitchen / Stock (Isola Alifu meal ops) */
 
 export type BreakfastType = "maldivian" | "continental";
 export type EggStyle = "omelette" | "fried" | "boiled" | "scrambled";
 export type BreakfastOrderStatus = "pending" | "served" | "cancelled";
 export type StockItemKind = "kitchen" | "other";
 export type FruitType = "watermelon" | "apple" | "papaya" | "orange";
+export type RecipeKind = "menu_legacy" | "prepared" | "addons";
+export type MealMenuLineRole = "base" | "option" | "choice";
+export type MealPeriod = "breakfast" | "lunch" | "dinner";
+export const MEAL_PERIODS: readonly MealPeriod[] = ["breakfast", "lunch", "dinner"] as const;
 
 export interface RoomDto {
   id: string;
@@ -431,10 +435,16 @@ export interface BreakfastOrderDto {
   room_id: string;
   room_number: string;
   breakfast_date: string;
+  meal_period: MealPeriod;
   guest_number: number;
   serving_time: string;
   outside_normal_window: boolean;
+  /** Configurable meal menu (preferred). */
+  menu_id: string | null;
+  menu_name: string | null;
+  /** @deprecated Prefer menu_id */
   breakfast_type: BreakfastType;
+  /** @deprecated Prefer selected_choice_ids.egg_style */
   egg_style: EggStyle;
   potato: boolean;
   juice: boolean;
@@ -442,12 +452,47 @@ export interface BreakfastOrderDto {
   coffee: boolean;
   milk: boolean;
   sugar: boolean;
-  /** Selected optional side stock-item ids from the breakfast-type recipe. */
+  /** Selected option menu-line ids (and legacy stock ids). */
   selected_option_ids: string[];
+  /** { [choiceGroupKey]: mealMenuLineId } */
+  selected_choice_ids: Record<string, string>;
   special_requests: string | null;
   status: BreakfastOrderStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface MealMenuLineDto {
+  id: string;
+  role: MealMenuLineRole;
+  choice_group_key: string | null;
+  choice_group_label: string | null;
+  display_name: string;
+  stock_item_id: string | null;
+  stock_item_name: string | null;
+  stock_item_unit: string | null;
+  stock_item_code: string | null;
+  component_recipe_id: string | null;
+  component_recipe_name: string | null;
+  qty_per_serving: number;
+  notes: string | null;
+  show_on_kot: boolean;
+  sort_order: number;
+  /** Human mapping label for editors. */
+  mapping: string;
+}
+
+export interface MealMenuDto {
+  id: string;
+  meal_period: MealPeriod;
+  name: string;
+  code: string | null;
+  notes: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  lines: MealMenuLineDto[];
 }
 
 /** Choosable side on a Maldivian / Continental breakfast order. */
@@ -481,10 +526,6 @@ export interface RoomExtraSelectionDto {
   show_on_kot?: boolean;
 }
 
-export type MealPeriod = "breakfast" | "lunch" | "dinner";
-
-export const MEAL_PERIODS: readonly MealPeriod[] = ["breakfast", "lunch", "dinner"] as const;
-
 export interface RoomDayExtrasDto {
   id: string | null;
   meal_period: MealPeriod;
@@ -508,7 +549,10 @@ export interface KitchenDayRoomDto {
   occupant_count: number;
   notes: string | null;
   breakfast_participants: number;
+  /** Guest meal orders for the active meal period filter. */
   orders: BreakfastOrderDto[];
+  /** All meal periods' guest orders for this room/date. */
+  orders_by_meal: Record<MealPeriod, BreakfastOrderDto[]>;
   /** Breakfast extras (compat alias of extras_by_meal.breakfast). */
   extras: RoomDayExtrasDto;
   /** Fruits & extras independently for breakfast, lunch, and dinner. */
@@ -518,9 +562,11 @@ export interface KitchenDayRoomDto {
 export interface KitchenDayDto {
   date: string;
   serving_times: string[];
-  /** Choosable room extras from Recipes → Room extras (configure there). */
+  /** Configurable meal menus (all periods). */
+  menus: MealMenuDto[];
+  /** Choosable room extras / add-ons. */
   extra_options: RoomExtraOptionDto[];
-  /** Optional sides per breakfast menu type (from Recipes → Maldivian / Continental). */
+  /** @deprecated Prefer menus — optional sides per legacy breakfast type. */
   breakfast_options: Record<BreakfastType, BreakfastOptionDto[]>;
   rooms: KitchenDayRoomDto[];
 }
@@ -533,11 +579,16 @@ export interface ServerSummaryOptionSideDto {
 
 export interface ServerSummaryRowDto {
   date: string;
+  meal_period: MealPeriod;
   breakfast_time: string;
   room_number: string;
+  menu_name: string;
+  menu_count: number;
+  /** @deprecated Prefer menu_name / menu_count */
   maldivian: number;
+  /** @deprecated Prefer menu_name / menu_count */
   continental: number;
-  /** Selected optional sides from Recipes for this room/time. */
+  /** Selected optional sides / choices for this room/time. */
   option_sides: ServerSummaryOptionSideDto[];
   /** @deprecated Prefer option_sides — kept for older CSV labels. */
   juice: number;
@@ -580,6 +631,8 @@ export interface KitchenPlanDto {
     room_number: string;
     guest_number: number;
     serving_time: string;
+    meal_period: MealPeriod;
+    menu_name: string;
     breakfast_type: BreakfastType;
     egg_style: EggStyle;
     outside_normal_window: boolean;
@@ -701,6 +754,7 @@ export interface RecipeDto {
   id: string;
   name: string;
   apply_to: RecipeApplyTo;
+  kind: RecipeKind;
   code: string | null;
   notes: string | null;
   is_active: boolean;

@@ -14,14 +14,17 @@ import {
   computeServerSummary,
   isOutsideNormalWindow,
   normalServingTimes,
+  normalizeChoiceIds,
   type ExtrasLike,
-  type OrderLike,
+  type MealOrderLike,
   type RecipeNeedSource,
 } from "../services/breakfastRequirements.js";
 import {
   applyKitchenUsageForDate,
   shoppingSummaryForDate,
 } from "../services/stockPlanning.js";
+import { loadMealCatalog } from "../services/mealCatalog.js";
+import { ensureMealMenus } from "../services/mealMenus.js";
 
 export const kitchenRouter = Router();
 kitchenRouter.use(requireAuth);
@@ -39,6 +42,8 @@ function mapOrder(o: {
   id: string;
   roomId: string;
   breakfastDate: Date;
+  mealPeriod?: MealPeriod;
+  menuId?: string | null;
   guestNumber: number;
   servingTime: string;
   outsideNormalWindow: boolean;
@@ -51,20 +56,25 @@ function mapOrder(o: {
   milk: boolean;
   sugar: boolean;
   selectedOptionIds?: string[];
+  selectedChoiceIds?: unknown;
   specialRequests: string | null;
   status: string;
   createdAt: Date;
   updatedAt: Date;
   room: { number: string };
+  menu?: { name: string } | null;
 }) {
   return {
     id: o.id,
     room_id: o.roomId,
     room_number: o.room.number,
     breakfast_date: ymd(o.breakfastDate),
+    meal_period: o.mealPeriod ?? "breakfast",
     guest_number: o.guestNumber,
     serving_time: o.servingTime,
     outside_normal_window: o.outsideNormalWindow,
+    menu_id: o.menuId ?? null,
+    menu_name: o.menu?.name ?? null,
     breakfast_type: o.breakfastType,
     egg_style: o.eggStyle,
     potato: o.potato,
@@ -74,6 +84,7 @@ function mapOrder(o: {
     milk: o.milk,
     sugar: o.sugar,
     selected_option_ids: o.selectedOptionIds ?? [],
+    selected_choice_ids: normalizeChoiceIds(o.selectedChoiceIds),
     special_requests: o.specialRequests,
     status: o.status,
     created_at: o.createdAt.toISOString(),
@@ -84,8 +95,8 @@ function mapOrder(o: {
 async function loadOrdersForDate(userId: string, date: Date) {
   return prisma.breakfastOrder.findMany({
     where: { userId, breakfastDate: date },
-    include: { room: true },
-    orderBy: [{ servingTime: "asc" }, { guestNumber: "asc" }],
+    include: { room: true, menu: true },
+    orderBy: [{ mealPeriod: "asc" }, { servingTime: "asc" }, { guestNumber: "asc" }],
   });
 }
 
@@ -98,8 +109,10 @@ async function loadExtrasForDate(userId: string, date: Date) {
 
 function toOrderLikes(
   orders: Awaited<ReturnType<typeof loadOrdersForDate>>,
-): OrderLike[] {
+): MealOrderLike[] {
   return orders.map((o) => ({
+    mealPeriod: o.mealPeriod ?? "breakfast",
+    menuId: o.menuId,
     breakfastType: o.breakfastType,
     eggStyle: o.eggStyle,
     potato: o.potato,
@@ -109,6 +122,7 @@ function toOrderLikes(
     milk: o.milk,
     sugar: o.sugar,
     selectedOptionIds: o.selectedOptionIds ?? [],
+    selectedChoiceIds: normalizeChoiceIds(o.selectedChoiceIds),
     status: o.status,
     servingTime: o.servingTime,
     outsideNormalWindow: o.outsideNormalWindow,
@@ -499,11 +513,12 @@ kitchenRouter.get(
     const date = parseYmd(dateStr);
     const rooms = await ensureKitchenStockSeed(userId);
 
-    const [roomDays, orders, extras, extraCatalog] = await Promise.all([
+    const [roomDays, orders, extras, extraCatalog, mealCatalog] = await Promise.all([
       prisma.roomDay.findMany({ where: { userId, date } }),
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
       loadRoomExtraOptions(userId),
+      loadMealCatalog(userId),
     ]);
 
     const dayByRoom = new Map(roomDays.map((d) => [d.roomId, d]));
@@ -512,19 +527,28 @@ kitchenRouter.get(
       date: dateStr,
       serving_times: normalServingTimes(),
       meal_periods: MEAL_PERIODS,
+      menus: mealCatalog.menusDto,
       extra_options: extraCatalog.options,
       breakfast_options: extraCatalog.breakfast_options,
       rooms: rooms.map((r) => {
         const day = dayByRoom.get(r.id);
         const roomOrders = orders.filter((o) => o.roomId === r.id);
+        const mapped = roomOrders.map(mapOrder);
+        const ordersByMeal = {
+          breakfast: mapped.filter((o) => o.meal_period === "breakfast"),
+          lunch: mapped.filter((o) => o.meal_period === "lunch"),
+          dinner: mapped.filter((o) => o.meal_period === "dinner"),
+        };
         const byMeal = extrasByMealDto(extras, r.id, extraCatalog.options);
         return {
           id: r.id,
           number: r.number,
           occupant_count: day?.occupantCount ?? 0,
           notes: day?.notes ?? null,
-          breakfast_participants: roomOrders.filter((o) => o.status !== "cancelled").length,
-          orders: roomOrders.map(mapOrder),
+          breakfast_participants: ordersByMeal.breakfast.filter((o) => o.status !== "cancelled")
+            .length,
+          orders: ordersByMeal.breakfast,
+          orders_by_meal: ordersByMeal,
           extras: byMeal.breakfast,
           extras_by_meal: byMeal,
         };
@@ -881,9 +905,11 @@ kitchenRouter.put(
 const orderCreateSchema = z.object({
   breakfast_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   room_id: z.string().uuid(),
+  meal_period: z.enum(["breakfast", "lunch", "dinner"]).default("breakfast"),
   guest_number: z.number().int().min(1).max(3),
   serving_time: z.string().regex(/^\d{1,2}:\d{2}$/),
-  breakfast_type: z.enum(["maldivian", "continental"]),
+  menu_id: z.string().uuid().optional(),
+  breakfast_type: z.enum(["maldivian", "continental"]).optional(),
   egg_style: z.enum(["omelette", "fried", "boiled", "scrambled"]).optional(),
   potato: z.boolean().optional(),
   juice: z.boolean().optional(),
@@ -892,6 +918,7 @@ const orderCreateSchema = z.object({
   milk: z.boolean().optional(),
   sugar: z.boolean().optional(),
   selected_option_ids: z.array(z.string().uuid()).optional(),
+  selected_choice_ids: z.record(z.string(), z.string().uuid()).optional(),
   special_requests: z.string().max(2000).optional().nullable(),
   status: z.enum(["pending", "served", "cancelled"]).optional(),
 });
@@ -902,6 +929,7 @@ kitchenRouter.post(
     const userId = (req as AuthedRequest).userId;
     const body = orderCreateSchema.parse(req.body);
     await ensureKitchenStockSeed(userId);
+    await ensureMealMenus(userId);
     const room = await prisma.room.findFirst({
       where: { id: body.room_id, userId },
     });
@@ -910,38 +938,86 @@ kitchenRouter.post(
       return;
     }
 
-    const defaultEgg = body.breakfast_type === "maldivian" ? "omelette" : "fried";
-    const eggStyle = body.egg_style ?? defaultEgg;
+    const mealCatalog = await loadMealCatalog(userId);
+    const mealPeriod = body.meal_period;
+    let menu = body.menu_id
+      ? mealCatalog.menus.find((m) => m.id === body.menu_id)
+      : undefined;
+    if (!menu && body.breakfast_type) {
+      menu = mealCatalog.menus.find(
+        (m) => m.code === body.breakfast_type && m.meal_period === "breakfast",
+      );
+    }
+    if (!menu) {
+      menu = mealCatalog.menus.find((m) => m.meal_period === mealPeriod);
+    }
+    if (!menu) {
+      res.status(400).json({ error: "No meal menu configured for this period" });
+      return;
+    }
+
+    const optionLineIds = new Set(
+      menu.lines.filter((l) => l.role === "option").map((l) => l.id),
+    );
+    const optionStockIds = new Set(
+      menu.lines
+        .filter((l) => l.role === "option" && l.stock_item_id)
+        .map((l) => l.stock_item_id!),
+    );
+    const addonIds = new Set(mealCatalog.addons.map((a) => a.stock_item_id));
+    const allowedOptions = new Set([...optionLineIds, ...optionStockIds, ...addonIds]);
+    let selectedOptionIds = (body.selected_option_ids ?? []).filter((id) =>
+      allowedOptions.has(id),
+    );
+
+    const choiceLines = menu.lines.filter((l) => l.role === "choice");
+    const selectedChoiceIds = normalizeChoiceIds(body.selected_choice_ids);
+    for (const line of choiceLines) {
+      if (!line.choice_group_key) continue;
+      const pick = selectedChoiceIds[line.choice_group_key];
+      if (pick && !choiceLines.some((c) => c.id === pick && c.choice_group_key === line.choice_group_key)) {
+        delete selectedChoiceIds[line.choice_group_key];
+      }
+    }
+    // Default missing required choice groups to first option
+    const groups = new Map<string, typeof choiceLines>();
+    for (const line of choiceLines) {
+      if (!line.choice_group_key) continue;
+      const list = groups.get(line.choice_group_key) ?? [];
+      list.push(line);
+      groups.set(line.choice_group_key, list);
+    }
+    for (const [key, lines] of groups) {
+      if (!selectedChoiceIds[key] && lines[0]) selectedChoiceIds[key] = lines[0].id;
+    }
+
+    const eggChoice = choiceLines.find((l) => l.id === selectedChoiceIds.egg_style);
+    const eggStyle =
+      body.egg_style ??
+      ((eggChoice?.notes as "omelette" | "fried" | "boiled" | "scrambled" | undefined) ??
+        (menu.code === "continental" ? "fried" : "omelette"));
+
+    const breakfastType =
+      body.breakfast_type ??
+      (menu.code === "continental" || menu.code === "maldivian"
+        ? menu.code
+        : "maldivian");
+
+    const flagSources = [
+      ...menu.lines
+        .filter((l) => selectedOptionIds.includes(l.id) || (l.stock_item_id && selectedOptionIds.includes(l.stock_item_id)))
+        .map((l) => ({ stock_item_id: l.stock_item_id ?? l.id, code: l.stock_item_code })),
+      ...mealCatalog.addons
+        .filter((a) => selectedOptionIds.includes(a.stock_item_id))
+        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code })),
+    ];
+    const flags = breakfastFlagsFromSelectedOptions(
+      flagSources.map((f) => f.stock_item_id),
+      flagSources,
+    );
+
     const outside = isOutsideNormalWindow(body.serving_time);
     const date = parseYmd(body.breakfast_date);
-    const catalog = await loadRoomExtraOptions(userId);
-    const typeOptions = catalog.breakfast_options[body.breakfast_type] ?? [];
-    const allowed = new Set(typeOptions.map((o) => o.stock_item_id));
-    let selectedOptionIds = (body.selected_option_ids ?? []).filter((id) => allowed.has(id));
-    // Legacy clients: map boolean flags onto option ids when selected_option_ids omitted.
-    if (body.selected_option_ids === undefined && typeOptions.length) {
-      const want = new Set<string>();
-      if (body.potato) want.add("potatoes");
-      if (body.juice) want.add("sunquick");
-      if (body.tea) want.add("tea");
-      if (body.coffee) want.add("coffee");
-      if (body.milk) want.add("milk");
-      if (body.sugar) want.add("portion_sugar");
-      selectedOptionIds = typeOptions
-        .filter((o) => o.code && want.has(o.code))
-        .map((o) => o.stock_item_id);
-    }
-    const flags =
-      typeOptions.length > 0
-        ? breakfastFlagsFromSelectedOptions(selectedOptionIds, typeOptions)
-        : {
-            potato: body.breakfast_type === "maldivian" ? (body.potato ?? false) : false,
-            juice: body.juice ?? false,
-            tea: body.tea ?? false,
-            coffee: body.coffee ?? false,
-            milk: body.milk ?? false,
-            sugar: body.sugar ?? false,
-          };
 
     try {
       const created = await prisma.breakfastOrder.create({
@@ -949,10 +1025,12 @@ kitchenRouter.post(
           userId,
           roomId: body.room_id,
           breakfastDate: date,
+          mealPeriod,
+          menuId: menu.id,
           guestNumber: body.guest_number,
           servingTime: body.serving_time.padStart(5, "0"),
           outsideNormalWindow: outside,
-          breakfastType: body.breakfast_type,
+          breakfastType,
           eggStyle,
           potato: flags.potato,
           juice: flags.juice,
@@ -961,17 +1039,18 @@ kitchenRouter.post(
           milk: flags.milk,
           sugar: flags.sugar,
           selectedOptionIds,
+          selectedChoiceIds,
           specialRequests: body.special_requests ?? null,
           status: body.status ?? "pending",
         },
-        include: { room: true },
+        include: { room: true, menu: true },
       });
       await applyKitchenUsageForDate(userId, body.breakfast_date);
       const shopping = await shoppingSummaryForDate(userId, body.breakfast_date);
       res.status(201).json({ ...mapOrder(created), shopping });
     } catch (e: unknown) {
       const msg = e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002"
-        ? "An order already exists for this room, date, and guest number"
+        ? "An order already exists for this room, date, meal, and guest number"
         : "Failed to create order";
       res.status(400).json({ error: msg });
     }
@@ -999,7 +1078,22 @@ kitchenRouter.patch(
       return;
     }
 
-    const breakfastType = body.breakfast_type ?? existing.breakfastType;
+    await ensureMealMenus(userId);
+    const mealCatalog = await loadMealCatalog(userId);
+    const mealPeriod = body.meal_period ?? existing.mealPeriod;
+    let menu = (body.menu_id ?? existing.menuId)
+      ? mealCatalog.menus.find((m) => m.id === (body.menu_id ?? existing.menuId))
+      : undefined;
+    if (!menu && (body.breakfast_type ?? existing.breakfastType)) {
+      menu = mealCatalog.menus.find(
+        (m) => m.code === (body.breakfast_type ?? existing.breakfastType),
+      );
+    }
+    if (!menu) {
+      res.status(400).json({ error: "Meal menu not found" });
+      return;
+    }
+
     const servingTime = body.serving_time
       ? body.serving_time.padStart(5, "0")
       : existing.servingTime;
@@ -1008,39 +1102,64 @@ kitchenRouter.patch(
         ? isOutsideNormalWindow(servingTime)
         : existing.outsideNormalWindow;
 
-    const catalog = await loadRoomExtraOptions(userId);
-    const typeOptions = catalog.breakfast_options[breakfastType] ?? [];
-    const allowed = new Set(typeOptions.map((o) => o.stock_item_id));
-    let selectedOptionIds =
+    const optionLineIds = new Set(
+      menu.lines.filter((l) => l.role === "option").map((l) => l.id),
+    );
+    const optionStockIds = new Set(
+      menu.lines
+        .filter((l) => l.role === "option" && l.stock_item_id)
+        .map((l) => l.stock_item_id!),
+    );
+    const addonIds = new Set(mealCatalog.addons.map((a) => a.stock_item_id));
+    const allowedOptions = new Set([...optionLineIds, ...optionStockIds, ...addonIds]);
+    const selectedOptionIds =
       body.selected_option_ids !== undefined
-        ? body.selected_option_ids.filter((id) => allowed.has(id))
-        : (existing.selectedOptionIds ?? []).filter((id) => allowed.has(id));
-    if (body.selected_option_ids === undefined && typeOptions.length === 0) {
-      selectedOptionIds = existing.selectedOptionIds ?? [];
-    }
-    const flags =
-      typeOptions.length > 0
-        ? breakfastFlagsFromSelectedOptions(selectedOptionIds, typeOptions)
-        : {
-            potato:
-              breakfastType === "maldivian"
-                ? (body.potato ?? existing.potato)
-                : false,
-            juice: body.juice ?? existing.juice,
-            tea: body.tea ?? existing.tea,
-            coffee: body.coffee ?? existing.coffee,
-            milk: body.milk ?? existing.milk,
-            sugar: body.sugar ?? existing.sugar,
-          };
+        ? body.selected_option_ids.filter((id) => allowedOptions.has(id))
+        : (existing.selectedOptionIds ?? []).filter((id) => allowedOptions.has(id));
+
+    const selectedChoiceIds = normalizeChoiceIds(
+      body.selected_choice_ids ?? existing.selectedChoiceIds,
+    );
+    const choiceLines = menu.lines.filter((l) => l.role === "choice");
+    const eggChoice = choiceLines.find((l) => l.id === selectedChoiceIds.egg_style);
+    const eggStyle =
+      body.egg_style ??
+      existing.eggStyle ??
+      ((eggChoice?.notes as "omelette" | "fried" | "boiled" | "scrambled" | undefined) ??
+        "omelette");
+
+    const breakfastType =
+      body.breakfast_type ??
+      existing.breakfastType ??
+      (menu.code === "continental" || menu.code === "maldivian" ? menu.code : "maldivian");
+
+    const flagSources = [
+      ...menu.lines
+        .filter(
+          (l) =>
+            selectedOptionIds.includes(l.id) ||
+            (l.stock_item_id && selectedOptionIds.includes(l.stock_item_id)),
+        )
+        .map((l) => ({ stock_item_id: l.stock_item_id ?? l.id, code: l.stock_item_code })),
+      ...mealCatalog.addons
+        .filter((a) => selectedOptionIds.includes(a.stock_item_id))
+        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code })),
+    ];
+    const flags = breakfastFlagsFromSelectedOptions(
+      flagSources.map((f) => f.stock_item_id),
+      flagSources,
+    );
 
     const updated = await prisma.breakfastOrder.update({
       where: { id },
       data: {
         guestNumber: body.guest_number,
+        mealPeriod,
+        menuId: menu.id,
         servingTime,
         outsideNormalWindow: outside,
         breakfastType,
-        eggStyle: body.egg_style,
+        eggStyle,
         potato: flags.potato,
         juice: flags.juice,
         tea: flags.tea,
@@ -1048,10 +1167,11 @@ kitchenRouter.patch(
         milk: flags.milk,
         sugar: flags.sugar,
         selectedOptionIds,
+        selectedChoiceIds,
         specialRequests: body.special_requests,
         status: body.status,
       },
-      include: { room: true },
+      include: { room: true, menu: true },
     });
     const dateStr = ymd(existing.breakfastDate);
     await applyKitchenUsageForDate(userId, dateStr);
@@ -1084,51 +1204,53 @@ kitchenRouter.get(
   asyncHandler(async (req, res) => {
     const userId = (req as AuthedRequest).userId;
     const { date: dateStr } = dayQuery.parse(req.query);
+    const mealPeriod = z
+      .enum(["breakfast", "lunch", "dinner"])
+      .optional()
+      .parse(typeof req.query.meal_period === "string" ? req.query.meal_period : undefined);
     const date = parseYmd(dateStr);
     await ensureKitchenStockSeed(userId);
 
-    const [orders, extras, extraCatalog] = await Promise.all([
+    const [orders, extras, mealCatalog] = await Promise.all([
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
-      loadRoomExtraOptions(userId),
+      loadMealCatalog(userId),
     ]);
     const orderLikes = toOrderLikes(orders);
     const extrasLikes = toExtrasLikes(extras);
-    const pancakeIds = new Set(
-      extraCatalog.options
-        .filter(
-          (o) =>
-            o.code === "pancake" ||
-            o.code === "pancake_batch" ||
-            o.code === "pancakes" ||
-            o.name.toLowerCase().includes("pancake"),
-        )
-        .map((o) => o.stock_item_id),
-    );
     const kitchen = computeKitchenPrep(
       orderLikes,
       extrasLikes,
-      pancakeIds,
-      extraCatalog.recipes,
+      mealCatalog.menus,
+      mealCatalog.addons,
     );
-    const kotExtras = computeKotExtras(extrasLikes, extraCatalog.recipes);
-    const server = computeServerSummary(dateStr, orderLikes, extraCatalog.recipes);
+    const kotExtras = computeKotExtras(extrasLikes, mealCatalog.addons);
+    const server = computeServerSummary(dateStr, orderLikes, mealCatalog.menus, mealPeriod);
 
     const schedule = orderLikes
       .filter((o) => o.status !== "cancelled")
-      .map((o) => ({
-        room_number: o.roomNumber,
-        guest_number: o.guestNumber,
-        serving_time: o.servingTime,
-        breakfast_type: o.breakfastType,
-        egg_style: o.eggStyle,
-        outside_normal_window: o.outsideNormalWindow,
-        special_requests: o.specialRequests,
-      }))
+      .filter((o) => (mealPeriod ? o.mealPeriod === mealPeriod : true))
+      .map((o) => {
+        const menu = o.menuId
+          ? mealCatalog.menus.find((m) => m.id === o.menuId)
+          : mealCatalog.menus.find((m) => m.code === o.breakfastType);
+        return {
+          room_number: o.roomNumber,
+          guest_number: o.guestNumber,
+          serving_time: o.servingTime,
+          meal_period: o.mealPeriod,
+          menu_name: menu?.name ?? o.breakfastType ?? "Meal",
+          breakfast_type: o.breakfastType ?? "maldivian",
+          egg_style: o.eggStyle ?? "omelette",
+          outside_normal_window: o.outsideNormalWindow,
+          special_requests: o.specialRequests,
+        };
+      })
       .sort((a, b) => a.serving_time.localeCompare(b.serving_time));
 
     res.json({
       date: dateStr,
+      meal_period: mealPeriod ?? null,
       server_summary: server,
       kitchen_plan: {
         ...kitchen,
@@ -1160,11 +1282,11 @@ kitchenRouter.get(
     const date = parseYmd(dateStr);
     await ensureKitchenStockSeed(userId);
 
-    const [orders, extras, items, extraCatalog] = await Promise.all([
+    const [orders, extras, items, mealCatalog] = await Promise.all([
       loadOrdersForDate(userId, date),
       loadExtrasForDate(userId, date),
       prisma.stockItem.findMany({ where: { userId, isActive: true } }),
-      loadRoomExtraOptions(userId),
+      loadMealCatalog(userId),
     ]);
 
     const byId = new Map(items.map((i) => [i.id, i]));
@@ -1173,7 +1295,9 @@ kitchenRouter.get(
     const needs = computeIngredientNeeds(
       toOrderLikes(orders),
       toExtrasLikes(extras),
-      extraCatalog.recipes,
+      mealCatalog.menus,
+      mealCatalog.prepared,
+      mealCatalog.addons,
     );
 
     const lines = needs

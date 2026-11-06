@@ -110,6 +110,7 @@ model User {
   stockItems          StockItem[]
   stockLedgerDays     StockLedgerDay[]
   recipes             Recipe[]
+  mealMenus           MealMenu[]
 
   @@index([organizationId])
   @@map("users")
@@ -531,6 +532,12 @@ enum BreakfastOrderStatus {
   cancelled
 }
 
+enum MealPeriod {
+  breakfast
+  lunch
+  dinner
+}
+
 enum StockItemKind {
   kitchen
   other
@@ -592,16 +599,22 @@ model RoomDay {
   @@map("room_days")
 }
 
+/// Per-guest meal order (breakfast / lunch / dinner). Table name kept for migration continuity.
 model BreakfastOrder {
   id                   String                @id @default(uuid()) @db.Uuid
   userId               String                @map("user_id") @db.Uuid
   roomId               String                @map("room_id") @db.Uuid
   breakfastDate        DateTime              @map("breakfast_date") @db.Date
+  mealPeriod           MealPeriod            @default(breakfast) @map("meal_period")
   guestNumber          Int                   @map("guest_number")
   /// HH:mm local serving time
   servingTime          String                @map("serving_time")
   outsideNormalWindow  Boolean               @default(false) @map("outside_normal_window")
+  /// Preferred: configurable meal menu. Legacy breakfastType used when null.
+  menuId               String?               @map("menu_id") @db.Uuid
+  /// @deprecated Prefer menuId
   breakfastType        BreakfastType         @map("breakfast_type")
+  /// @deprecated Prefer selectedChoiceIds.egg_style
   eggStyle             EggStyle              @map("egg_style")
   /// Maldivian optional stir-fried potato
   potato               Boolean               @default(false)
@@ -610,25 +623,23 @@ model BreakfastOrder {
   coffee               Boolean               @default(false)
   milk                 Boolean               @default(false)
   sugar                Boolean               @default(false)
-  /// Selected optional side stock-item ids from the breakfast-type recipe.
+  /// Selected optional side / add-on menu-line or stock-item ids.
   selectedOptionIds    String[]              @default([]) @map("selected_option_ids")
+  /// { [choiceGroupKey]: mealMenuLineId } — pick exactly one per group.
+  selectedChoiceIds    Json                  @default("{}") @map("selected_choice_ids")
   specialRequests      String?               @map("special_requests")
   status               BreakfastOrderStatus  @default(pending)
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  menu MealMenu? @relation(fields: [menuId], references: [id], onDelete: SetNull)
 
-  @@unique([userId, roomId, breakfastDate, guestNumber])
+  @@unique([userId, roomId, breakfastDate, mealPeriod, guestNumber])
   @@index([userId, breakfastDate])
+  @@index([userId, breakfastDate, mealPeriod])
   @@map("breakfast_orders")
-}
-
-enum MealPeriod {
-  breakfast
-  lunch
-  dinner
 }
 
 /// Per-room fruits and extras for a date + meal (breakfast / lunch / dinner).
@@ -681,6 +692,7 @@ model StockItem {
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   ledgerDays  StockLedgerDay[]
   recipeLines RecipeLine[]
+  menuLines   MealMenuLine[]
 
   @@unique([userId, code])
   @@index([userId, kind])
@@ -695,11 +707,25 @@ enum RecipeApplyTo {
   custom
 }
 
+/// prepared = BOM for menu lines; addons = shared room extras; menu_legacy = old apply_to menus.
+enum RecipeKind {
+  menu_legacy
+  prepared
+  addons
+}
+
+enum MealMenuLineRole {
+  base
+  option
+  choice
+}
+
 model Recipe {
   id          String         @id @default(uuid()) @db.Uuid
   userId      String         @map("user_id") @db.Uuid
   name        String
   applyTo     RecipeApplyTo  @default(custom) @map("apply_to")
+  kind        RecipeKind     @default(menu_legacy)
   /// Optional stable code for seeded recipes (maldivian, continental, pancake, …)
   code        String?
   notes       String?
@@ -707,11 +733,13 @@ model Recipe {
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lines RecipeLine[]
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines     RecipeLine[]
+  menuLines MealMenuLine[] @relation("MenuLineComponentRecipe")
 
   @@unique([userId, code])
   @@index([userId, applyTo])
+  @@index([userId, kind])
   @@map("recipes")
 }
 
@@ -732,6 +760,52 @@ model RecipeLine {
 
   @@index([recipeId])
   @@map("recipe_lines")
+}
+
+/// Configurable meal menu for a period (e.g. Maldivian breakfast, Lunch set A).
+model MealMenu {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  mealPeriod MealPeriod @map("meal_period")
+  name       String
+  code       String?
+  notes      String?
+  sortOrder  Int        @default(0) @map("sort_order")
+  isActive   Boolean    @default(true) @map("is_active")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines  MealMenuLine[]
+  orders BreakfastOrder[]
+
+  @@unique([userId, code])
+  @@index([userId, mealPeriod])
+  @@map("meal_menus")
+}
+
+model MealMenuLine {
+  id                 String           @id @default(uuid()) @db.Uuid
+  menuId             String           @map("menu_id") @db.Uuid
+  role               MealMenuLineRole @default(base)
+  /// Required when role = choice (e.g. egg_style).
+  choiceGroupKey     String?          @map("choice_group_key")
+  choiceGroupLabel   String?          @map("choice_group_label")
+  /// Display name on order form / KOT (falls back to stock or recipe name).
+  displayName        String?          @map("display_name")
+  stockItemId        String?          @map("stock_item_id") @db.Uuid
+  componentRecipeId  String?          @map("component_recipe_id") @db.Uuid
+  qtyPerServing      Decimal          @default(1) @map("qty_per_serving") @db.Decimal(15, 4)
+  notes              String?
+  showOnKot          Boolean          @default(true) @map("show_on_kot")
+  sortOrder          Int              @default(0) @map("sort_order")
+
+  menu            MealMenu  @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  stockItem       StockItem? @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  componentRecipe Recipe?   @relation("MenuLineComponentRecipe", fields: [componentRecipeId], references: [id], onDelete: Restrict)
+
+  @@index([menuId])
+  @@map("meal_menu_lines")
 }
 
 /// Daily inventory ledger: Opening, Received, Used, Balance, expenditure, waste.

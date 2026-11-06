@@ -1,15 +1,16 @@
 /**
- * Stock planning: apply breakfast usage to the ledger, and build shopping lists
+ * Stock planning: apply meal usage to the ledger, and build shopping lists
  * that cover order requirements and min-stock thresholds.
  */
 import { prisma } from "../lib/prisma.js";
 import { dec, parseYmd, ymd } from "../lib/dates.js";
 import {
   computeIngredientNeeds,
+  normalizeChoiceIds,
   type ExtrasLike,
-  type OrderLike,
-  type RecipeNeedSource,
-} from "./breakfastRequirements.js";
+  type MealOrderLike,
+} from "./mealRequirements.js";
+import { loadMealCatalog } from "./mealCatalog.js";
 
 function balanceOf(opening: number, received: number, used: number) {
   return opening + received - used;
@@ -61,7 +62,9 @@ async function loadOrderExtras(userId: string, date: Date) {
     }),
   ]);
 
-  const orderLikes: OrderLike[] = orders.map((o) => ({
+  const orderLikes: MealOrderLike[] = orders.map((o) => ({
+    mealPeriod: o.mealPeriod,
+    menuId: o.menuId,
     breakfastType: o.breakfastType,
     eggStyle: o.eggStyle,
     potato: o.potato,
@@ -70,6 +73,8 @@ async function loadOrderExtras(userId: string, date: Date) {
     coffee: o.coffee,
     milk: o.milk,
     sugar: o.sugar,
+    selectedOptionIds: o.selectedOptionIds ?? [],
+    selectedChoiceIds: normalizeChoiceIds(o.selectedChoiceIds),
     status: o.status,
     servingTime: o.servingTime,
     outsideNormalWindow: o.outsideNormalWindow,
@@ -96,6 +101,7 @@ async function loadOrderExtras(userId: string, date: Date) {
       : [];
     return {
       roomNumber: e.room.number,
+      mealPeriod: e.mealPeriod,
       fruits: e.fruits,
       selectedLines,
       selectedItemIds: e.selectedItemIds?.length
@@ -112,43 +118,23 @@ async function loadOrderExtras(userId: string, date: Date) {
   return { orderLikes, extrasLikes };
 }
 
-async function loadRecipeSources(userId: string): Promise<RecipeNeedSource[]> {
-  const recipes = await prisma.recipe.findMany({
-    where: { userId, isActive: true },
-    include: {
-      lines: {
-        include: {
-          stockItem: { select: { id: true, code: true, name: true, unit: true, isActive: true } },
-        },
-      },
-    },
-  });
-  return recipes.map((r) => ({
-    apply_to: r.applyTo as RecipeNeedSource["apply_to"],
-    lines: r.lines
-      .filter((l) => l.stockItem.isActive)
-      .map((l) => ({
-        stock_item_id: l.stockItemId,
-        code: l.stockItem.code,
-        name: l.stockItem.name,
-        unit: l.stockItem.unit,
-        qty_per_serving: dec(l.qtyPerServing),
-        show_on_kot: l.showOnKot,
-      })),
-  }));
-}
-
 /**
- * Write computed breakfast ingredient needs into StockLedgerDay.used for the date.
+ * Write computed meal ingredient needs into StockLedgerDay.used for the date.
  * Idempotent: replaces Used with the current requirement total for kitchen items.
  */
 export async function applyKitchenUsageForDate(userId: string, dateStr: string) {
   const date = parseYmd(dateStr);
-  const [{ orderLikes, extrasLikes }, recipes] = await Promise.all([
+  const [{ orderLikes, extrasLikes }, catalog] = await Promise.all([
     loadOrderExtras(userId, date),
-    loadRecipeSources(userId),
+    loadMealCatalog(userId),
   ]);
-  const needs = computeIngredientNeeds(orderLikes, extrasLikes, recipes);
+  const needs = computeIngredientNeeds(
+    orderLikes,
+    extrasLikes,
+    catalog.menus,
+    catalog.prepared,
+    catalog.addons,
+  );
 
   const items = await prisma.stockItem.findMany({
     where: { userId, kind: "kitchen", isActive: true },
@@ -233,11 +219,17 @@ export type ShoppingLine = {
  */
 export async function buildShoppingListForDate(userId: string, dateStr: string) {
   const date = parseYmd(dateStr);
-  const [{ orderLikes, extrasLikes }, recipes] = await Promise.all([
+  const [{ orderLikes, extrasLikes }, catalog] = await Promise.all([
     loadOrderExtras(userId, date),
-    loadRecipeSources(userId),
+    loadMealCatalog(userId),
   ]);
-  const needs = computeIngredientNeeds(orderLikes, extrasLikes, recipes);
+  const needs = computeIngredientNeeds(
+    orderLikes,
+    extrasLikes,
+    catalog.menus,
+    catalog.prepared,
+    catalog.addons,
+  );
 
   const items = await prisma.stockItem.findMany({
     where: { userId, isActive: true },

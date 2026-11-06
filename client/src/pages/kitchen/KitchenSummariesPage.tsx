@@ -11,20 +11,20 @@ import {
   printHtml,
   toCsv,
 } from "@/lib/download";
-import type { KitchenPlanDto, KitchenSummariesDto } from "../../../../shared/types";
+import type { KitchenPlanDto, KitchenSummariesDto, MealPeriod } from "../../../../shared/types";
 
 function todayYmd() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** KOT metrics with quantity > 0 — recipe prep lines + egg styles + pancakes. */
+/** KOT metrics with quantity > 0 — menu prep lines (+ legacy egg/pancake counters if present). */
 function kotNonZeroLines(k: KitchenPlanDto): Array<{ label: string; value: number; unit?: string }> {
   const fromRecipe = (k.prep_lines ?? []).map((line) => ({
     label: line.name,
     value: line.quantity,
     unit: line.unit || undefined,
   }));
-  const eggs = (
+  const legacy = (
     [
       { label: "Eggs omelette", value: k.eggs_omelette },
       { label: "Eggs fried", value: k.eggs_fried },
@@ -33,7 +33,10 @@ function kotNonZeroLines(k: KitchenPlanDto): Array<{ label: string; value: numbe
       { label: "Pancakes", value: k.pancakes },
     ] as const
   ).filter((line) => line.value > 0);
-  return [...fromRecipe.filter((l) => l.value > 0), ...eggs];
+  // Prefer prep_lines; only append legacy counters that aren't already named in prep_lines.
+  const prepNames = new Set(fromRecipe.map((l) => l.label.toLowerCase()));
+  const extra = legacy.filter((l) => !prepNames.has(l.label.toLowerCase()));
+  return [...fromRecipe.filter((l) => l.value > 0), ...extra];
 }
 
 function formatOptionSides(
@@ -67,14 +70,19 @@ function ActionIcon({
 
 export function KitchenSummariesPage() {
   const [date, setDate] = useState(todayYmd);
+  const [mealPeriod, setMealPeriod] = useState<MealPeriod | "all">("all");
   const [data, setData] = useState<KitchenSummariesDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const d = await apiFetch<KitchenSummariesDto>(`/api/kitchen/summaries?date=${date}`);
+    const q =
+      mealPeriod === "all"
+        ? `date=${date}`
+        : `date=${date}&meal_period=${mealPeriod}`;
+    const d = await apiFetch<KitchenSummariesDto>(`/api/kitchen/summaries?${q}`);
     setData(d);
-  }, [date]);
+  }, [date, mealPeriod]);
 
   useEffect(() => {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Failed"));
@@ -87,7 +95,7 @@ export function KitchenSummariesPage() {
       "",
       ...data.server_summary.map((r) => {
         const sides = formatOptionSides(r.option_sides);
-        return `${r.breakfast_time} · Room ${r.room_number} · M:${r.maldivian} C:${r.continental}${
+        return `${r.breakfast_time} · Room ${r.room_number} · ${r.menu_name ?? "Meal"} ×${r.menu_count ?? r.maldivian + r.continental}${
           sides ? ` · ${sides}` : ""
         }${r.outside_normal_window ? " · OUTSIDE WINDOW" : ""}${
           r.special_requests.length ? ` · ${r.special_requests.join("; ")}` : ""
@@ -116,7 +124,7 @@ export function KitchenSummariesPage() {
       "Schedule:",
       ...k.schedule.map(
         (s) =>
-          `${s.serving_time} Room ${s.room_number} G${s.guest_number} ${s.breakfast_type} ${s.egg_style}${
+          `${s.serving_time} Room ${s.room_number} G${s.guest_number} ${s.menu_name ?? s.breakfast_type}${
             s.outside_normal_window ? " [OUTSIDE WINDOW]" : ""
           }${s.special_requests ? ` — ${s.special_requests}` : ""}`,
       ),
@@ -130,20 +138,22 @@ export function KitchenSummariesPage() {
       toCsv(
         [
           "Date",
-          "Breakfast Time",
-          "Room Number",
-          "Maldivian",
-          "Continental",
+          "Meal",
+          "Time",
+          "Room",
+          "Menu",
+          "Guests",
           "Options & sides",
           "Special Requests",
           "Outside Window",
         ],
         data.server_summary.map((r) => [
           r.date,
+          r.meal_period ?? "",
           r.breakfast_time,
           r.room_number,
-          r.maldivian,
-          r.continental,
+          r.menu_name ?? "",
+          r.menu_count ?? r.maldivian + r.continental,
           formatOptionSides(r.option_sides) ?? "",
           r.special_requests.join("; "),
           r.outside_normal_window,
@@ -160,7 +170,7 @@ export function KitchenSummariesPage() {
       subtitle: data.date,
       rows: data.server_summary.map((r) => ({
         label: `${r.breakfast_time}  Room ${r.room_number}`,
-        value: `M${r.maldivian}  C${r.continental}`,
+        value: `${r.menu_name ?? "Meal"} ×${r.menu_count ?? r.maldivian + r.continental}`,
       })),
       sections: [
         {
@@ -194,13 +204,13 @@ export function KitchenSummariesPage() {
       (k.extras ?? []).map((e) => [e.name, e.unit, e.quantity, e.rooms.join("; ")]),
     );
     const schedule = toCsv(
-      ["Serving time", "Room", "Guest", "Type", "Egg", "Outside window", "Special requests"],
+      ["Serving time", "Room", "Guest", "Meal", "Menu", "Outside window", "Special requests"],
       k.schedule.map((s) => [
         s.serving_time,
         s.room_number,
         s.guest_number,
-        s.breakfast_type,
-        s.egg_style,
+        s.meal_period ?? "",
+        s.menu_name ?? s.breakfast_type,
         s.outside_normal_window,
         s.special_requests,
       ]),
@@ -234,8 +244,7 @@ export function KitchenSummariesPage() {
             ? k.schedule.map((s) => {
                 const bits = [
                   `${s.serving_time} Room ${s.room_number} G${s.guest_number}`,
-                  s.breakfast_type,
-                  s.egg_style,
+                  s.menu_name ?? s.breakfast_type,
                   s.outside_normal_window ? "OUTSIDE WINDOW" : null,
                   s.special_requests || null,
                 ].filter(Boolean);
@@ -255,12 +264,12 @@ export function KitchenSummariesPage() {
     const rows = data.server_summary
       .map(
         (r) =>
-          `<tr><td>${r.date}</td><td>${r.breakfast_time}</td><td>${r.room_number}</td><td>${r.maldivian}</td><td>${r.continental}</td><td>${formatOptionSides(r.option_sides) ?? ""}</td><td>${r.special_requests.join("; ")}</td><td>${r.outside_normal_window ? "YES" : ""}</td></tr>`,
+          `<tr><td>${r.date}</td><td>${r.meal_period ?? ""}</td><td>${r.breakfast_time}</td><td>${r.room_number}</td><td>${r.menu_name ?? ""}</td><td>${r.menu_count ?? r.maldivian + r.continental}</td><td>${formatOptionSides(r.option_sides) ?? ""}</td><td>${r.special_requests.join("; ")}</td><td>${r.outside_normal_window ? "YES" : ""}</td></tr>`,
       )
       .join("");
     printHtml(
       `Server summary ${date}`,
-      `<h1>Breakfast summary for servers</h1><p>${date}</p><table><thead><tr><th>Date</th><th>Time</th><th>Room</th><th>Maldivian</th><th>Continental</th><th>Options &amp; sides</th><th>Special requests</th><th>Outside</th></tr></thead><tbody>${rows}</tbody></table>`,
+      `<h1>Meal summary for servers</h1><p>${date}</p><table><thead><tr><th>Date</th><th>Meal</th><th>Time</th><th>Room</th><th>Menu</th><th>Guests</th><th>Options &amp; sides</th><th>Special requests</th><th>Outside</th></tr></thead><tbody>${rows}</tbody></table>`,
     );
   }
 
@@ -274,7 +283,7 @@ export function KitchenSummariesPage() {
     const sched = k.schedule
       .map(
         (s) =>
-          `<tr><td>${s.serving_time}</td><td>${s.room_number}</td><td>${s.guest_number}</td><td>${s.breakfast_type}</td><td>${s.egg_style}</td><td>${s.outside_normal_window ? "FLAG" : ""}</td><td>${s.special_requests ?? ""}</td></tr>`,
+          `<tr><td>${s.serving_time}</td><td>${s.room_number}</td><td>${s.guest_number}</td><td>${s.meal_period ?? ""}</td><td>${s.menu_name ?? s.breakfast_type}</td><td>${s.outside_normal_window ? "FLAG" : ""}</td><td>${s.special_requests ?? ""}</td></tr>`,
       )
       .join("");
     const extrasList = (k.extras ?? []).length
@@ -292,7 +301,7 @@ export function KitchenSummariesPage() {
       <h2>Extras</h2>
       ${extrasList}
       <h2>Preparation schedule</h2>
-      <table><thead><tr><th>Time</th><th>Room</th><th>Guest</th><th>Type</th><th>Egg</th><th>Outside</th><th>Requests</th></tr></thead><tbody>${sched}</tbody></table>`,
+      <table><thead><tr><th>Time</th><th>Room</th><th>Guest</th><th>Meal</th><th>Menu</th><th>Outside</th><th>Requests</th></tr></thead><tbody>${sched}</tbody></table>`,
     );
   }
 
@@ -310,10 +319,34 @@ export function KitchenSummariesPage() {
         <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { value: "all", label: "All meals" },
+            { value: "breakfast", label: "Breakfast" },
+            { value: "lunch", label: "Lunch" },
+            { value: "dinner", label: "Dinner" },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setMealPeriod(opt.value)}
+            className={
+              mealPeriod === opt.value
+                ? "inline-flex min-h-11 items-center rounded-[var(--radius-md)] bg-ink px-3 text-sm font-semibold text-white"
+                : "inline-flex min-h-11 items-center rounded-sm border border-border bg-surface px-3 text-sm font-semibold text-ink"
+            }
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {error ? <p className="text-sm font-medium text-debit">{error}</p> : null}
       {msg ? <p className="text-sm font-medium text-credit">{msg}</p> : null}
 
-      <PanelCard title="Breakfast summary for servers" caption={date}>
+      <PanelCard title="Meal summary for servers" caption={date}>
         <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
           <ActionIcon
             label="Copy summary"
@@ -343,8 +376,8 @@ export function KitchenSummariesPage() {
               key={i}
               primary={`${r.breakfast_time} · Room ${r.room_number}`}
               secondary={[
-                `M ${r.maldivian}`,
-                `C ${r.continental}`,
+                r.meal_period,
+                r.menu_name,
                 formatOptionSides(r.option_sides),
                 r.outside_normal_window ? "Outside window" : null,
                 r.special_requests.join("; ") || null,
@@ -353,7 +386,7 @@ export function KitchenSummariesPage() {
                 .join(" · ")}
               right={
                 <span className="text-sm font-semibold tabular-nums text-ink">
-                  {r.maldivian + r.continental}
+                  {r.menu_count ?? r.maldivian + r.continental}
                 </span>
               }
               rightSecondary="guests"
@@ -424,8 +457,8 @@ export function KitchenSummariesPage() {
             key={i}
             primary={`${s.serving_time} · Room ${s.room_number} · Guest ${s.guest_number}`}
             secondary={[
-              s.breakfast_type,
-              s.egg_style,
+              s.meal_period,
+              s.menu_name ?? s.breakfast_type,
               s.outside_normal_window ? "Outside window" : null,
               s.special_requests,
             ]

@@ -11,10 +11,17 @@ export const recipesRouter = Router();
 recipesRouter.use(requireAuth);
 recipesRouter.use(scopeOrganizationData);
 
+function kindFromApplyTo(applyTo: string): "menu_legacy" | "prepared" | "addons" {
+  if (applyTo === "room_extras") return "addons";
+  if (applyTo === "custom") return "prepared";
+  return "menu_legacy";
+}
+
 function mapRecipe(r: {
   id: string;
   name: string;
   applyTo: string;
+  kind?: string;
   code: string | null;
   notes: string | null;
   isActive: boolean;
@@ -34,6 +41,7 @@ function mapRecipe(r: {
     id: r.id,
     name: r.name,
     apply_to: r.applyTo,
+    kind: (r.kind as "menu_legacy" | "prepared" | "addons") ?? kindFromApplyTo(r.applyTo),
     code: r.code,
     notes: r.notes,
     is_active: r.isActive,
@@ -64,6 +72,7 @@ const lineSchema = z.object({
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   apply_to: z.enum(["maldivian", "continental", "room_extras", "custom"]).default("custom"),
+  kind: z.enum(["menu_legacy", "prepared", "addons"]).optional(),
   notes: z.string().max(2000).optional().nullable(),
   lines: z.array(lineSchema).default([]),
 });
@@ -71,6 +80,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   apply_to: z.enum(["maldivian", "continental", "room_extras", "custom"]).optional(),
+  kind: z.enum(["menu_legacy", "prepared", "addons"]).optional(),
   notes: z.string().max(2000).optional().nullable(),
   is_active: z.boolean().optional(),
   lines: z.array(lineSchema).optional(),
@@ -125,11 +135,13 @@ recipesRouter.post(
       }
     }
 
+    const kind = body.kind ?? kindFromApplyTo(body.apply_to);
     const created = await prisma.recipe.create({
       data: {
         userId,
         name: body.name,
         applyTo: body.apply_to,
+        kind,
         notes: body.notes ?? null,
         lines: {
           create: body.lines.map((l) => ({
@@ -137,7 +149,7 @@ recipesRouter.post(
             qtyPerServing: l.qty_per_serving,
             notes: l.notes ?? null,
             showOnKot: l.show_on_kot ?? true,
-            isOption: body.apply_to === "room_extras" ? false : Boolean(l.is_option),
+            isOption: body.apply_to === "room_extras" || kind === "addons" ? false : Boolean(l.is_option),
           })),
         },
       },
@@ -184,16 +196,19 @@ recipesRouter.put(
       });
     }
 
+    const nextApply = body.apply_to ?? existing.applyTo;
     const updated = await prisma.recipe.update({
       where: { id },
       data: {
         name: body.name,
         applyTo: body.apply_to,
+        kind: body.kind ?? (body.apply_to ? kindFromApplyTo(body.apply_to) : undefined),
         notes: body.notes,
         isActive: body.is_active,
       },
       include: { lines: { include: { stockItem: true } } },
     });
+    void nextApply;
     res.json(mapRecipe(updated));
   }),
 );

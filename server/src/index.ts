@@ -20,6 +20,7 @@ import { adminRouter } from "./routes/admin.js";
 import { kitchenRouter } from "./routes/kitchen.js";
 import { stockRouter } from "./routes/stock.js";
 import { recipesRouter } from "./routes/recipes.js";
+import { menusRouter } from "./routes/menus.js";
 import { OrgAccessError } from "./lib/organization.js";
 import { notFound } from "./utils/http.js";
 
@@ -71,6 +72,7 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/kitchen", kitchenRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/recipes", recipesRouter);
+app.use("/api/menus", menusRouter);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
