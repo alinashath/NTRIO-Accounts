@@ -100,6 +100,7 @@ const EMPTY_ORG_TAX: OrganizationTaxInfoDto & { organization_title: string | nul
   gst_return_currency: "MVR",
   taxable_activities: [],
   green_tax_enabled: false,
+  green_tax_collect_guests: false,
 };
 
 /** Resolve org GST fields for the active workspace (preferred header, else data owner's active org). */
@@ -504,7 +505,7 @@ function addNotesSheet(
     "Official templates: https://www.mira.gov.mv — download the current Input/Output Tax Statement workbooks and copy rows if MIRA requires an exact template version.",
   ]);
   ws.addRow([
-    "Maldives Green Tax (if captured on income invoices) is excluded from GST taxable subtotal — GST is not charged on Green Tax. Monthly MIRA 501 Green Tax filing / Information Sheet export is a separate follow-up.",
+    "Maldives Green Tax (if captured on income invoices) is excluded from GST taxable subtotal — GST is not charged on Green Tax. Use Reports → Green Tax for Information Sheet guest rows and CSV export.",
   ]);
   ws.getColumn(1).width = 120;
 }

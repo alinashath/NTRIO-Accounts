@@ -24,6 +24,7 @@ import { ReportsPnlTab } from "./pages/reports/ReportsPnlTab";
 import { ReportsCashflowTab } from "./pages/reports/ReportsCashflowTab";
 import { ReportsBalanceSheetTab } from "./pages/reports/ReportsBalanceSheetTab";
 import { ReportsMiraGstTab } from "./pages/reports/ReportsMiraGstTab";
+import { ReportsGreenTaxTab } from "./pages/reports/ReportsGreenTaxTab";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SettingsAccountPage } from "./pages/settings/SettingsAccountPage";
 import { SettingsUsersPage } from "./pages/settings/SettingsUsersPage";
@@ -174,6 +175,7 @@ export default function App() {
             <Route path="cashflow" element={<ReportsCashflowTab />} />
             <Route path="balance-sheet" element={<ReportsBalanceSheetTab />} />
             <Route path="mira-gst" element={<ReportsMiraGstTab />} />
+            <Route path="mira-green-tax" element={<ReportsGreenTaxTab />} />
           </Route>
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/account" element={<SettingsAccountPage />} />

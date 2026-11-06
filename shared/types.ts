@@ -36,7 +36,26 @@ export interface SettingsDto {
   taxable_activities: TaxableActivityDto[];
   /** When true, GST wizards can optionally capture Maldives Green Tax. */
   green_tax_enabled: boolean;
+  /**
+   * When true (and green tax enabled), income Green Tax step collects guest
+   * name / nationality / category for the MIRA Information Sheet.
+   */
+  green_tax_collect_guests: boolean;
   fx_rates: FxDailyRateDto[];
+}
+
+/** MIRA Information Sheet guest category: 1 taxable, 2 Maldivian, 3 other exempt. */
+export type GreenTaxGuestCategory = "1" | "2" | "3";
+
+/** One guest row for Maldives Green Tax Information Sheet (per stay / invoice). */
+export interface GreenTaxGuestDto {
+  guest_reg_no: string | null;
+  name: string;
+  category: GreenTaxGuestCategory;
+  identification_no: string | null;
+  /** Country of nationality as filed with MIRA (e.g. Finland, Maldives, USA). */
+  nationality: string;
+  booking_method: string | null;
 }
 
 /** GET /api/projects */
@@ -248,6 +267,8 @@ export interface IncomeEntryDto {
   green_tax_check_in: string | null;
   green_tax_check_out: string | null;
   green_tax_form_url: string | null;
+  /** Guest rows for MIRA Information Sheet (empty when not collected). */
+  green_tax_guests: GreenTaxGuestDto[];
   voided_at: string | null;
   void_reason: string | null;
   recurring_id: string | null;

@@ -21,6 +21,7 @@ export function SettingsOrganizationPage() {
   const [gstRegisteredName, setGstRegisteredName] = useState("");
   const [gstReturnCurrency, setGstReturnCurrency] = useState("MVR");
   const [greenTaxEnabled, setGreenTaxEnabled] = useState(false);
+  const [greenTaxCollectGuests, setGreenTaxCollectGuests] = useState(false);
   const [activities, setActivities] = useState<ActivityDraft[]>([{ number: "", name: "" }]);
   const [loading, setLoading] = useState(true);
   const [orgBusy, setOrgBusy] = useState(false);
@@ -43,6 +44,7 @@ export function SettingsOrganizationPage() {
         setGstRegisteredName(s.gst_registered_name ?? "");
         setGstReturnCurrency(s.gst_return_currency?.trim() || "MVR");
         setGreenTaxEnabled(Boolean(s.green_tax_enabled));
+        setGreenTaxCollectGuests(Boolean(s.green_tax_collect_guests));
         setActivities(toDrafts(s.taxable_activities));
       })
       .catch((err) => {
@@ -149,6 +151,7 @@ export function SettingsOrganizationPage() {
                   gst_return_currency: currency,
                   taxable_activities: cleaned,
                   green_tax_enabled: greenTaxEnabled,
+                  green_tax_collect_guests: greenTaxEnabled ? greenTaxCollectGuests : false,
                 }),
               })
                 .then((s) => {
@@ -156,6 +159,7 @@ export function SettingsOrganizationPage() {
                   setGstRegisteredName(s.gst_registered_name ?? "");
                   setGstReturnCurrency(s.gst_return_currency?.trim() || "MVR");
                   setGreenTaxEnabled(Boolean(s.green_tax_enabled));
+                  setGreenTaxCollectGuests(Boolean(s.green_tax_collect_guests));
                   setActivities(toDrafts(s.taxable_activities));
                   setSavedTax(true);
                 })
@@ -195,7 +199,11 @@ export function SettingsOrganizationPage() {
                 type="checkbox"
                 className="mt-1 h-4 w-4 shrink-0 accent-ink"
                 checked={greenTaxEnabled}
-                onChange={(e) => setGreenTaxEnabled(e.target.checked)}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setGreenTaxEnabled(on);
+                  if (!on) setGreenTaxCollectGuests(false);
+                }}
               />
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-ink">Enable Green Tax</span>
@@ -205,6 +213,26 @@ export function SettingsOrganizationPage() {
                 </span>
               </span>
             </label>
+
+            {greenTaxEnabled ? (
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-[var(--radius)] border border-border px-3 py-3 sm:ml-6">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 shrink-0 accent-ink"
+                  checked={greenTaxCollectGuests}
+                  onChange={(e) => setGreenTaxCollectGuests(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink">
+                    Collect guest details for Information Sheet
+                  </span>
+                  <span className="mt-0.5 block text-caption">
+                    Capture guest name, nationality / country, category, and optional ID / reg. no. on
+                    each Green Tax income — matching the MIRA Green Tax Information Sheet template.
+                  </span>
+                </span>
+              </label>
+            ) : null}
 
             <div className="space-y-3">
               <div>

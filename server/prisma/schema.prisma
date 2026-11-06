@@ -24,6 +24,8 @@ model Organization {
   taxableActivities Json @default("[]") @map("taxable_activities")
   /// When true, GST invoice wizards can optionally capture Maldives Green Tax.
   greenTaxEnabled Boolean @default(false) @map("green_tax_enabled")
+  /// When true (and green tax enabled), income Green Tax step collects guest rows for the MIRA Information Sheet.
+  greenTaxCollectGuests Boolean @default(false) @map("green_tax_collect_guests")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -328,6 +330,8 @@ model IncomeEntry {
   greenTaxCheckOut DateTime? @map("green_tax_check_out")
   /// Uploaded MIRA 501 / Information Sheet (or paste URL).
   greenTaxFormUrl String? @map("green_tax_form_url") @db.VarChar(2048)
+  /// Guest rows for MIRA Green Tax Information Sheet: [{ guest_reg_no, name, category, identification_no, nationality, booking_method }].
+  greenTaxGuests Json @default("[]") @map("green_tax_guests")
   voidedAt       DateTime? @map("voided_at")
   voidReason     String?   @map("void_reason")
   recurringId    String?   @map("recurring_id") @db.Uuid

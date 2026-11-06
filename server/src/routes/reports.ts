@@ -13,6 +13,10 @@ import {
   type DateBasis,
 } from "../services/statementService.js";
 import { buildMiraGstPreview, buildMiraGstWorkbook } from "../services/miraGstExport.js";
+import {
+  buildMiraGreenTaxPreview,
+  miraGreenTaxPreviewToCsv,
+} from "../services/miraGreenTaxReport.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
@@ -746,6 +750,38 @@ reportsRouter.get(
     );
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(Buffer.from(buffer));
+  }),
+);
+
+reportsRouter.get(
+  "/mira-green-tax",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const q = miraGstQuery.parse(req.query);
+    const preview = await buildMiraGreenTaxPreview(userId, q.from, q.to, req);
+    if (!preview.enabled) {
+      res.status(404).json({ error: "Green Tax is not enabled for this organization." });
+      return;
+    }
+    res.json(preview);
+  }),
+);
+
+reportsRouter.get(
+  "/mira-green-tax/export",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const q = miraGstQuery.parse(req.query);
+    const preview = await buildMiraGreenTaxPreview(userId, q.from, q.to, req);
+    if (!preview.enabled) {
+      res.status(404).json({ error: "Green Tax is not enabled for this organization." });
+      return;
+    }
+    const csv = miraGreenTaxPreviewToCsv(preview);
+    const filename = `mira-green-tax-${q.from}_${q.to}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csv);
   }),
 );
 

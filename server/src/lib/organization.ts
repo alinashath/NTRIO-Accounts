@@ -318,6 +318,7 @@ export type OrganizationTaxInfoDto = {
   gst_return_currency: string;
   taxable_activities: TaxableActivityDto[];
   green_tax_enabled: boolean;
+  green_tax_collect_guests: boolean;
 };
 
 export function parseTaxableActivities(raw: unknown): TaxableActivityDto[] {
@@ -341,6 +342,7 @@ export function mapOrganizationTaxInfo(org: {
   gstReturnCurrency: string;
   taxableActivities: unknown;
   greenTaxEnabled?: boolean;
+  greenTaxCollectGuests?: boolean;
 }): OrganizationTaxInfoDto {
   return {
     gst_tin: org.gstTin?.trim() || null,
@@ -348,6 +350,7 @@ export function mapOrganizationTaxInfo(org: {
     gst_return_currency: (org.gstReturnCurrency || "MVR").trim().toUpperCase() || "MVR",
     taxable_activities: parseTaxableActivities(org.taxableActivities),
     green_tax_enabled: Boolean(org.greenTaxEnabled),
+    green_tax_collect_guests: Boolean(org.greenTaxCollectGuests),
   };
 }
 
@@ -367,6 +370,7 @@ export async function getOrganizationTaxInfo(
       gstReturnCurrency: true,
       taxableActivities: true,
       greenTaxEnabled: true,
+      greenTaxCollectGuests: true,
     },
   });
   return {
@@ -384,6 +388,7 @@ export async function setOrganizationTaxInfo(
     gst_return_currency?: string;
     taxable_activities?: TaxableActivityDto[];
     green_tax_enabled?: boolean;
+    green_tax_collect_guests?: boolean;
   },
   preferredOrgId?: string | null,
   userEmail?: string | null,
@@ -395,6 +400,7 @@ export async function setOrganizationTaxInfo(
     gstReturnCurrency?: string;
     taxableActivities?: TaxableActivityDto[];
     greenTaxEnabled?: boolean;
+    greenTaxCollectGuests?: boolean;
   } = {};
 
   if (patch.gst_tin !== undefined) {
@@ -412,6 +418,13 @@ export async function setOrganizationTaxInfo(
   if (patch.green_tax_enabled !== undefined) {
     data.greenTaxEnabled = Boolean(patch.green_tax_enabled);
   }
+  if (patch.green_tax_collect_guests !== undefined) {
+    data.greenTaxCollectGuests = Boolean(patch.green_tax_collect_guests);
+  }
+  // Collecting guests only applies when Green Tax itself is on.
+  if (data.greenTaxEnabled === false) {
+    data.greenTaxCollectGuests = false;
+  }
 
   const updated = await prisma.organization.update({
     where: { id: summary.id },
@@ -424,6 +437,7 @@ export async function setOrganizationTaxInfo(
       gstReturnCurrency: true,
       taxableActivities: true,
       greenTaxEnabled: true,
+      greenTaxCollectGuests: true,
     },
   });
 

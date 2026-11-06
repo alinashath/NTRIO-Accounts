@@ -291,8 +291,11 @@ export function ReportsMiraGstTab() {
                 .
               </li>
               <li>
-                Green Tax on invoices (when enabled) is excluded from GST taxable value. Monthly MIRA
-                501 Green Tax return export is planned separately.
+                Green Tax on invoices (when enabled) is excluded from GST taxable value. Use the{" "}
+                <Link className="font-medium text-ink underline" to="/accounts/reports/mira-green-tax">
+                  Green Tax
+                </Link>{" "}
+                report for Information Sheet guest rows and CSV export.
               </li>
               <li>
                 Excel download includes both Input and Output sheets plus Notes. Prefer the

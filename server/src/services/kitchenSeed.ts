@@ -433,21 +433,49 @@ async function ensureDefaultRecipes(userId: string) {
 /**
  * Patch older pancake/potato extras without overwriting other user recipe edits.
  * Safe to call on every ensureKitchenStockSeed.
+ *
+ * Pancakes stay as an extra — we only drop the forced ×20 piece batch from KOT qty.
+ * Soft-deleted pancake_batch is reactivated so inventory Delete cannot hide the extra.
  */
 export async function ensureRoomExtrasPatches(userId: string) {
-  const pancake = await prisma.stockItem.findUnique({
+  let pancake = await prisma.stockItem.findUnique({
     where: { userId_code: { userId, code: "pancake_batch" } },
   });
-  if (pancake && (pancake.name.includes("20-piece") || pancake.unit === "Batch")) {
-    await prisma.stockItem.update({
-      where: { id: pancake.id },
+  if (!pancake) {
+    pancake = await prisma.stockItem.create({
       data: {
+        userId,
+        code: "pancake_batch",
         name: "Pancakes",
         unit: "Number",
+        kind: "kitchen",
+        minStock: 0,
         useNotes:
           "Room extra counted in pieces (Qty when selected). Batter ingredients scale at 20 pieces = 1 batch.",
+        sortOrder: 285,
+        isActive: true,
       },
     });
+  } else {
+    const patch: {
+      isActive?: boolean;
+      name?: string;
+      unit?: string;
+      useNotes?: string;
+    } = {};
+    if (!pancake.isActive) patch.isActive = true;
+    if (pancake.name.includes("20-piece") || pancake.unit === "Batch") {
+      patch.name = "Pancakes";
+      patch.unit = "Number";
+      patch.useNotes =
+        "Room extra counted in pieces (Qty when selected). Batter ingredients scale at 20 pieces = 1 batch.";
+    }
+    if (Object.keys(patch).length) {
+      pancake = await prisma.stockItem.update({
+        where: { id: pancake.id },
+        data: patch,
+      });
+    }
   }
 
   let potatoPortion = await prisma.stockItem.findUnique({
@@ -474,7 +502,20 @@ export async function ensureRoomExtrasPatches(userId: string) {
   });
   if (!recipe) return;
 
-  if (pancake) {
+  const hasPancake = recipe.lines.some(
+    (l) => l.stockItem?.code === "pancake_batch" || l.stockItemId === pancake!.id,
+  );
+  if (!hasPancake) {
+    await prisma.recipeLine.create({
+      data: {
+        recipeId: recipe.id,
+        stockItemId: pancake.id,
+        qtyPerServing: 1,
+        notes: "Counted in pieces on KOT; set Qty when selected for each Add",
+        showOnKot: true,
+      },
+    });
+  } else {
     for (const line of recipe.lines) {
       if (
         line.stockItemId === pancake.id &&
@@ -485,6 +526,7 @@ export async function ensureRoomExtrasPatches(userId: string) {
           data: {
             notes: "Counted in pieces on KOT; set Qty when selected for each Add",
             qtyPerServing: 1,
+            showOnKot: true,
           },
         });
       }

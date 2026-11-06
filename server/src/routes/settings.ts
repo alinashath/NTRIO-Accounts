@@ -82,6 +82,7 @@ settingsRouter.get(
       gst_return_currency: tax.gst_return_currency,
       taxable_activities: tax.taxable_activities,
       green_tax_enabled: tax.green_tax_enabled,
+      green_tax_collect_guests: tax.green_tax_collect_guests,
       fx_rates,
     });
   }),
@@ -155,6 +156,7 @@ const patchSchema = z
     gst_return_currency: z.string().trim().min(1).max(8).optional(),
     taxable_activities: z.array(taxableActivitySchema).max(50).optional(),
     green_tax_enabled: z.boolean().optional(),
+    green_tax_collect_guests: z.boolean().optional(),
   })
   .refine(
     (b) =>
@@ -165,7 +167,8 @@ const patchSchema = z
       b.gst_registered_name !== undefined ||
       b.gst_return_currency !== undefined ||
       b.taxable_activities !== undefined ||
-      b.green_tax_enabled !== undefined,
+      b.green_tax_enabled !== undefined ||
+      b.green_tax_collect_guests !== undefined,
     {
       message:
         "Provide global_usd_mvr_rate, organization_title, projects_enabled, and/or GST tax fields",
@@ -193,7 +196,8 @@ settingsRouter.patch(
       body.gst_registered_name !== undefined ||
       body.gst_return_currency !== undefined ||
       body.taxable_activities !== undefined ||
-      body.green_tax_enabled !== undefined
+      body.green_tax_enabled !== undefined ||
+      body.green_tax_collect_guests !== undefined
     ) {
       await setOrganizationTaxInfo(
         actorId,
@@ -206,6 +210,7 @@ settingsRouter.patch(
               ? parseTaxableActivities(body.taxable_activities)
               : undefined,
           green_tax_enabled: body.green_tax_enabled,
+          green_tax_collect_guests: body.green_tax_collect_guests,
         },
         preferred,
         (req as AuthedRequest).userEmail,
@@ -277,6 +282,7 @@ settingsRouter.patch(
       gst_return_currency: tax.gst_return_currency,
       taxable_activities: tax.taxable_activities,
       green_tax_enabled: tax.green_tax_enabled,
+      green_tax_collect_guests: tax.green_tax_collect_guests,
       fx_rates,
     });
   }),

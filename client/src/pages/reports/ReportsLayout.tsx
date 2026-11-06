@@ -1,7 +1,10 @@
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { NavLink, Outlet } from "react-router-dom";
+import { apiFetch } from "@/api/http";
+import type { SettingsDto } from "../../../../shared/types";
 
-const tabs = [
+const baseTabs = [
   { to: "/accounts/reports/pnl", label: "P&L" },
   { to: "/accounts/reports/cashflow", label: "Cash flow" },
   { to: "/accounts/reports/balance-sheet", label: "Balance sheet" },
@@ -9,6 +12,30 @@ const tabs = [
 ] as const;
 
 export default function ReportsLayout() {
+  const [greenTaxEnabled, setGreenTaxEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiFetch<SettingsDto>("/api/settings")
+      .then((s) => {
+        if (!cancelled) setGreenTaxEnabled(Boolean(s.green_tax_enabled));
+      })
+      .catch(() => {
+        if (!cancelled) setGreenTaxEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const tabs = useMemo(() => {
+    if (!greenTaxEnabled) return [...baseTabs];
+    return [
+      ...baseTabs,
+      { to: "/accounts/reports/mira-green-tax", label: "Green Tax" },
+    ];
+  }, [greenTaxEnabled]);
+
   return (
     <div className="space-y-3">
       <div

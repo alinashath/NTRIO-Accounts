@@ -94,6 +94,7 @@ function mapIncomeListRow(r: {
   greenTaxCheckIn: Date | null;
   greenTaxCheckOut: Date | null;
   greenTaxFormUrl: string | null;
+  greenTaxGuests: unknown;
   voidedAt: Date | null;
   voidReason: string | null;
   recurringId: string | null;
@@ -131,6 +132,7 @@ function mapIncomeListRow(r: {
     green_tax_check_in: r.greenTaxCheckIn ? r.greenTaxCheckIn.toISOString() : null,
     green_tax_check_out: r.greenTaxCheckOut ? r.greenTaxCheckOut.toISOString() : null,
     green_tax_form_url: r.greenTaxFormUrl,
+    green_tax_guests: parseGreenTaxGuests(r.greenTaxGuests),
     voided_at: r.voidedAt,
     void_reason: r.voidReason,
     recurring_id: r.recurringId,
@@ -229,6 +231,15 @@ incomeRouter.get(
   }),
 );
 
+const greenTaxGuestSchema = z.object({
+  guest_reg_no: z.string().max(64).optional().nullable(),
+  name: z.string().trim().min(1).max(160),
+  category: z.enum(["1", "2", "3"]).default("1"),
+  identification_no: z.string().max(64).optional().nullable(),
+  nationality: z.string().trim().min(1).max(80),
+  booking_method: z.string().max(64).optional().nullable(),
+});
+
 const gstInvoiceFields = {
   invoice_number: z.string().max(64).optional().nullable(),
   gst_rate: z.number().min(0).max(100).optional().nullable(),
@@ -239,12 +250,52 @@ const gstInvoiceFields = {
   green_tax_check_in: z.string().max(64).optional().nullable(),
   green_tax_check_out: z.string().max(64).optional().nullable(),
   green_tax_form_url: z.string().max(2048).optional().nullable(),
+  green_tax_guests: z.array(greenTaxGuestSchema).max(100).optional().nullable(),
+};
+
+type GreenTaxGuestRow = {
+  guest_reg_no: string | null;
+  name: string;
+  category: "1" | "2" | "3";
+  identification_no: string | null;
+  nationality: string;
+  booking_method: string | null;
 };
 
 function parseOptionalDateTime(raw: string | null | undefined): Date | null {
   if (raw == null || !String(raw).trim()) return null;
   const d = new Date(String(raw).trim());
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseGreenTaxGuests(raw: unknown): GreenTaxGuestRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GreenTaxGuestRow[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const name = String(row.name ?? "").trim();
+    const nationality = String(row.nationality ?? "").trim();
+    if (!name || !nationality) continue;
+    const cat = String(row.category ?? "1");
+    const category = cat === "2" || cat === "3" ? cat : "1";
+    out.push({
+      guest_reg_no: String(row.guest_reg_no ?? "").trim() || null,
+      name,
+      category,
+      identification_no: String(row.identification_no ?? "").trim() || null,
+      nationality,
+      booking_method: String(row.booking_method ?? "").trim() || null,
+    });
+  }
+  return out;
+}
+
+function normalizeGreenTaxGuests(
+  raw: GreenTaxGuestRow[] | null | undefined,
+): GreenTaxGuestRow[] {
+  if (raw == null) return [];
+  return parseGreenTaxGuests(raw);
 }
 
 function gstCreateData(body: {
@@ -257,6 +308,7 @@ function gstCreateData(body: {
   green_tax_check_in?: string | null;
   green_tax_check_out?: string | null;
   green_tax_form_url?: string | null;
+  green_tax_guests?: GreenTaxGuestRow[] | null;
 }) {
   return {
     invoiceNumber: body.invoice_number?.trim() || null,
@@ -268,6 +320,7 @@ function gstCreateData(body: {
     greenTaxCheckIn: parseOptionalDateTime(body.green_tax_check_in),
     greenTaxCheckOut: parseOptionalDateTime(body.green_tax_check_out),
     greenTaxFormUrl: body.green_tax_form_url?.trim() || null,
+    greenTaxGuests: normalizeGreenTaxGuests(body.green_tax_guests),
   };
 }
 
@@ -281,6 +334,7 @@ function gstUpdateData(body: {
   green_tax_check_in?: string | null;
   green_tax_check_out?: string | null;
   green_tax_form_url?: string | null;
+  green_tax_guests?: GreenTaxGuestRow[] | null;
 }) {
   return {
     invoiceNumber:
@@ -318,6 +372,10 @@ function gstUpdateData(body: {
       body.green_tax_form_url === undefined
         ? undefined
         : body.green_tax_form_url?.trim() || null,
+    greenTaxGuests:
+      body.green_tax_guests === undefined
+        ? undefined
+        : normalizeGreenTaxGuests(body.green_tax_guests),
   };
 }
 

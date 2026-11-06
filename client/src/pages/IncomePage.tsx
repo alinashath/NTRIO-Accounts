@@ -701,13 +701,22 @@ function IncomeForm({
   const [gst, setGst] = useState<GstInvoiceState>(() => emptyGstInvoiceState());
   const [greenTax, setGreenTax] = useState<GreenTaxState>(() => emptyGreenTaxState());
   const [greenTaxOrgEnabled, setGreenTaxOrgEnabled] = useState(false);
+  const [greenTaxCollectGuests, setGreenTaxCollectGuests] = useState(false);
   const [amountFollowsGst, setAmountFollowsGst] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void apiFetch<SettingsDto>("/api/settings")
-      .then((s) => setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled)))
-      .catch(() => setGreenTaxOrgEnabled(false));
+      .then((s) => {
+        setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled));
+        setGreenTaxCollectGuests(
+          Boolean(s.green_tax_enabled) && Boolean(s.green_tax_collect_guests),
+        );
+      })
+      .catch(() => {
+        setGreenTaxOrgEnabled(false);
+        setGreenTaxCollectGuests(false);
+      });
   }, []);
 
   const selectedAcc = accounts.find((a) => a.id === accountId);
@@ -780,7 +789,7 @@ function IncomeForm({
       syncAmountFromTax(gst, greenTax);
     }
     if (step === greenTaxStep) {
-      const err = validateGreenTax(greenTax);
+      const err = validateGreenTax(greenTax, { collectGuests: greenTaxCollectGuests });
       if (err) {
         onError(err);
         return;
@@ -990,6 +999,7 @@ function IncomeForm({
               onChange={applyGreenTax}
               userId={userId}
               currencyLabel={amountCcy === "…" ? undefined : amountCcy}
+              collectGuests={greenTaxCollectGuests}
             />
             <Button
               type="button"
@@ -1132,6 +1142,7 @@ function IncomeDetailForm({
   const [gst, setGst] = useState<GstInvoiceState>(() => initialGst);
   const [greenTax, setGreenTax] = useState<GreenTaxState>(() => initialGreen);
   const [greenTaxOrgEnabled, setGreenTaxOrgEnabled] = useState(false);
+  const [greenTaxCollectGuests, setGreenTaxCollectGuests] = useState(false);
   const [amountFollowsGst, setAmountFollowsGst] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1140,8 +1151,16 @@ function IncomeDetailForm({
 
   useEffect(() => {
     void apiFetch<SettingsDto>("/api/settings")
-      .then((s) => setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled)))
-      .catch(() => setGreenTaxOrgEnabled(false));
+      .then((s) => {
+        setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled));
+        setGreenTaxCollectGuests(
+          Boolean(s.green_tax_enabled) && Boolean(s.green_tax_collect_guests),
+        );
+      })
+      .catch(() => {
+        setGreenTaxOrgEnabled(false);
+        setGreenTaxCollectGuests(false);
+      });
   }, []);
 
   const stepTitles = useMemo(
@@ -1211,7 +1230,7 @@ function IncomeDetailForm({
       syncAmountFromTax(gst, greenTax);
     }
     if (step === greenTaxStep) {
-      const err = validateGreenTax(greenTax);
+      const err = validateGreenTax(greenTax, { collectGuests: greenTaxCollectGuests });
       if (err) {
         onError(err);
         return;
@@ -1249,7 +1268,7 @@ function IncomeDetailForm({
         return;
       }
       if (greenTaxOrgEnabled) {
-        const gErr = validateGreenTax(greenTax);
+        const gErr = validateGreenTax(greenTax, { collectGuests: greenTaxCollectGuests });
         if (gErr) {
           onError(gErr);
           setStep(greenTaxStep);
@@ -1512,6 +1531,7 @@ function IncomeDetailForm({
               onChange={applyGreenTax}
               userId={userId}
               currencyLabel={amountCcy}
+              collectGuests={greenTaxCollectGuests}
               disabled={voided}
             />
             {!voided ? (
