@@ -1,8 +1,9 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { PackagePlus, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
 import { ChangeTag, ListRow, PanelCard, SegmentedControl } from "@/components/design";
+import { Dropdown } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
 import { Button, TextField } from "@/components/ui";
 import { downloadText, toCsv } from "@/lib/download";
@@ -27,6 +28,7 @@ export function StockInventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [edit, setEdit] = useState<StockInventoryRowDto | null>(null);
+  const [refill, setRefill] = useState<StockInventoryRowDto | null | "pick">(null);
   const [addOpen, setAddOpen] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -170,7 +172,11 @@ export function StockInventoryPage() {
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" className="gap-2" onClick={() => setAddOpen(true)}>
+        <Button type="button" className="gap-2" onClick={() => setRefill("pick")}>
+          <PackagePlus className="h-4 w-4" aria-hidden />
+          Refill stock
+        </Button>
+        <Button type="button" variant="secondary" className="gap-2" onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" aria-hidden />
           Add stock item
         </Button>
@@ -189,7 +195,7 @@ export function StockInventoryPage() {
         title="Stock items"
         caption={`${visibleRows.length} shown · A–Z · ${date}${
           levelFilter === "low" ? " · low stock only" : ""
-        } · Edit name, quantities, or delete`}
+        } · Refill for unit price · Edit for details`}
         headerRight={
           <Link to="/kitchen/recipes" className="inline-flex min-h-11 items-center text-sm font-semibold text-action">
             Recipes
@@ -217,6 +223,15 @@ export function StockInventoryPage() {
                   <button
                     type="button"
                     className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-action hover:bg-neutral-bg"
+                    aria-label={`Refill ${r.name}`}
+                    onClick={() => setRefill(r)}
+                  >
+                    <PackagePlus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                    Refill
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-2 text-sm font-semibold text-ink hover:bg-neutral-bg"
                     aria-label={`Edit ${r.name}`}
                     onClick={() => setEdit(r)}
                   >
@@ -263,6 +278,32 @@ export function StockInventoryPage() {
         ) : null}
       </PanelCard>
 
+      <Modal
+        open={refill != null}
+        title={
+          refill && refill !== "pick" ? `Refill — ${refill.name}` : "Refill stock"
+        }
+        onClose={() => setRefill(null)}
+      >
+        {refill != null ? (
+          <RefillForm
+            date={date}
+            rows={rows}
+            initial={refill === "pick" ? null : refill}
+            onDone={(name, qty) => {
+              setRefill(null);
+              setMsg(
+                name
+                  ? `Refilled “${name}” (+${fmt(qty)})`
+                  : "Refill saved",
+              );
+              void load().catch(() => {});
+            }}
+            onError={setError}
+          />
+        ) : null}
+      </Modal>
+
       <Modal open={!!edit} title={edit ? `Edit — ${edit.name}` : ""} onClose={() => setEdit(null)} size="lg">
         {edit ? (
           <ItemEditForm
@@ -293,6 +334,158 @@ export function StockInventoryPage() {
   );
 }
 
+function RefillForm({
+  date,
+  rows,
+  initial,
+  onDone,
+  onError,
+}: {
+  date: string;
+  rows: StockInventoryRowDto[];
+  initial: StockInventoryRowDto | null;
+  onDone: (name: string, qty: number) => void;
+  onError: (s: string) => void;
+}) {
+  const [stockItemId, setStockItemId] = useState(initial?.stock_item_id ?? rows[0]?.stock_item_id ?? "");
+  const selected = rows.find((r) => r.stock_item_id === stockItemId) ?? null;
+  const [qty, setQty] = useState("");
+  const [unitCost, setUnitCost] = useState(
+    initial?.unit_cost != null
+      ? String(initial.unit_cost)
+      : initial?.last_unit_cost != null
+        ? String(initial.last_unit_cost)
+        : "",
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!selected) return;
+    setUnitCost((prev) => {
+      if (prev.trim() !== "") return prev;
+      if (selected.unit_cost != null) return String(selected.unit_cost);
+      if (selected.last_unit_cost != null) return String(selected.last_unit_cost);
+      return "";
+    });
+  }, [selected]);
+
+  const qtyN = Number(qty);
+  const priceN = Number(unitCost);
+  const total =
+    qtyN > 0 && priceN >= 0 && Number.isFinite(qtyN) && Number.isFinite(priceN)
+      ? Math.round(qtyN * priceN * 100) / 100
+      : null;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) {
+      onError("Choose a stock item");
+      return;
+    }
+    if (!(qtyN > 0) || !Number.isFinite(qtyN)) {
+      onError("Enter a quantity greater than 0");
+      return;
+    }
+    if (!(priceN >= 0) || !Number.isFinite(priceN) || unitCost.trim() === "") {
+      onError("Enter a unit price");
+      return;
+    }
+    setSaving(true);
+    try {
+      const nextReceived = selected.received + qtyN;
+      const nextExpenditure =
+        Math.round((selected.expenditure + qtyN * priceN) * 100) / 100;
+      await apiFetch("/api/stock/ledger", {
+        method: "PUT",
+        body: JSON.stringify({
+          date,
+          stock_item_id: selected.stock_item_id,
+          received: nextReceived,
+          unit_cost: priceN,
+          expenditure: nextExpenditure,
+          carry_opening: true,
+        }),
+      });
+      onDone(selected.name, qtyN);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const itemOpts = rows.map((r) => ({
+    value: r.stock_item_id,
+    label:
+      r.last_unit_cost != null || r.unit_cost != null
+        ? `${r.name} (${r.unit}) · last @ ${fmt(r.unit_cost ?? r.last_unit_cost!)}`
+        : `${r.name} (${r.unit})`,
+  }));
+
+  return (
+    <form className="space-y-3" onSubmit={(e) => void submit(e)}>
+      <p className="text-caption">
+        Simple refill for {date}. Enter qty received and unit price — total spend is calculated. Price is
+        saved for meal cost estimates.
+      </p>
+      {initial ? (
+        <div className="rounded-[var(--radius)] border border-border bg-surface-elevated px-3 py-2">
+          <p className="text-sm font-medium text-ink">{initial.name}</p>
+          <p className="text-caption">
+            Unit: {initial.unit} · On hand {fmt(initial.balance)}
+            {initial.unit_cost != null || initial.last_unit_cost != null
+              ? ` · Last @ ${fmt(initial.unit_cost ?? initial.last_unit_cost!)}`
+              : ""}
+          </p>
+        </div>
+      ) : (
+        <Dropdown
+          label="Stock item"
+          value={stockItemId}
+          onChange={setStockItemId}
+          options={
+            itemOpts.length
+              ? itemOpts
+              : [{ value: "", label: "No stock items yet" }]
+          }
+        />
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <TextField
+          label={selected ? `Qty (${selected.unit})` : "Qty"}
+          type="number"
+          step="any"
+          min="0"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder="0"
+          required
+          autoFocus
+        />
+        <TextField
+          label={selected ? `Unit price / ${selected.unit}` : "Unit price"}
+          type="number"
+          step="any"
+          min="0"
+          value={unitCost}
+          onChange={(e) => setUnitCost(e.target.value)}
+          placeholder="0.00"
+          required
+        />
+      </div>
+      <div className="flex items-baseline justify-between gap-3 rounded-[var(--radius)] border border-border px-3 py-2">
+        <p className="text-label">Total</p>
+        <p className="text-sm font-semibold tabular-nums text-ink">
+          {total != null ? total.toFixed(2) : "—"}
+        </p>
+      </div>
+      <Button type="submit" disabled={saving || !rows.length}>
+        {saving ? "Saving…" : "Save refill"}
+      </Button>
+    </form>
+  );
+}
+
 function ItemEditForm({
   date,
   row,
@@ -314,21 +507,8 @@ function ItemEditForm({
   const [received, setReceived] = useState(String(row.received));
   const [used, setUsed] = useState(String(row.used));
   const [waste, setWaste] = useState(String(row.waste));
-  const [unitCost, setUnitCost] = useState(
-    row.unit_cost != null ? String(row.unit_cost) : row.last_unit_cost != null ? String(row.last_unit_cost) : "",
-  );
-  const [expenditure, setExpenditure] = useState(String(row.expenditure));
-  const [expTouched, setExpTouched] = useState(row.expenditure > 0);
   const [minStock, setMinStock] = useState(String(row.min_stock));
   const [saving, setSaving] = useState(false);
-
-  function syncExpenditureFromPrice(nextReceived: string, nextUnitCost: string) {
-    if (expTouched) return;
-    const qty = Number(nextReceived);
-    const price = Number(nextUnitCost);
-    if (!(qty > 0) || !(price >= 0) || !Number.isFinite(qty) || !Number.isFinite(price)) return;
-    setExpenditure(String(Math.round(qty * price * 100) / 100));
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -348,7 +528,6 @@ function ItemEditForm({
           pack_info: packInfo.trim() || null,
         }),
       });
-      const unitPrice = unitCost.trim() === "" ? null : Number(unitCost);
       await apiFetch("/api/stock/ledger", {
         method: "PUT",
         body: JSON.stringify({
@@ -358,8 +537,6 @@ function ItemEditForm({
           received: Number(received),
           used: Number(used),
           waste: Number(waste),
-          expenditure: Number(expenditure) || 0,
-          unit_cost: unitPrice != null && Number.isFinite(unitPrice) ? unitPrice : null,
         }),
       });
       onDone(name.trim());
@@ -373,7 +550,7 @@ function ItemEditForm({
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
       <p className="text-caption">
-        Kind: {row.kind}. Balance = Opening + Received − Used. Unit price is saved on refill and used for meal cost estimates.
+        Kind: {row.kind}. Balance = Opening + Received − Used. Use Refill for qty + unit price (meal costing).
         {row.code ? ` Catalog code: ${row.code}.` : ""}
       </p>
       <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -387,42 +564,9 @@ function ItemEditForm({
       <TextField label="Pack info" value={packInfo} onChange={(e) => setPackInfo(e.target.value)} />
       <div className="grid grid-cols-2 gap-3">
         <TextField label="Opening" type="number" step="any" value={opening} onChange={(e) => setOpening(e.target.value)} />
-        <TextField
-          label="Received (refill)"
-          type="number"
-          step="any"
-          value={received}
-          onChange={(e) => {
-            const v = e.target.value;
-            setReceived(v);
-            syncExpenditureFromPrice(v, unitCost);
-          }}
-        />
+        <TextField label="Received" type="number" step="any" value={received} onChange={(e) => setReceived(e.target.value)} />
         <TextField label="Used" type="number" step="any" value={used} onChange={(e) => setUsed(e.target.value)} />
         <TextField label="Waste" type="number" step="any" value={waste} onChange={(e) => setWaste(e.target.value)} />
-        <TextField
-          label={`Unit price / ${unit || "unit"}`}
-          type="number"
-          step="any"
-          min="0"
-          value={unitCost}
-          onChange={(e) => {
-            const v = e.target.value;
-            setUnitCost(v);
-            syncExpenditureFromPrice(received, v);
-          }}
-          placeholder="Price paid per unit"
-        />
-        <TextField
-          label="Expenditure (total)"
-          type="number"
-          step="any"
-          value={expenditure}
-          onChange={(e) => {
-            setExpTouched(true);
-            setExpenditure(e.target.value);
-          }}
-        />
         <TextField label="Min stock" type="number" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
       </div>
       <div className="flex flex-wrap gap-2 pt-1">

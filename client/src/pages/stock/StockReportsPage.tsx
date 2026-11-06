@@ -57,22 +57,31 @@ export function StockReportsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-4">
+        <div className="min-w-0 md:flex-1">
           <h1 className="text-page-title text-ink">Cost &amp; waste</h1>
           <p className="mt-1 text-caption">
             Ingredient consumption, expenditure, cost per guest, food waste.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <TextField label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <TextField label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3 md:flex md:shrink-0 md:items-end">
+          <div className="min-w-0 md:w-44">
+            <TextField label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div className="min-w-0 md:w-44">
+            <TextField label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
         </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full shrink-0 md:w-auto"
+          onClick={downloadReport}
+          disabled={!data}
+        >
+          Download report
+        </Button>
       </div>
-
-      <Button type="button" variant="secondary" onClick={downloadReport} disabled={!data}>
-        Download report
-      </Button>
 
       {error ? <p className="text-sm font-medium text-debit">{error}</p> : null}
 
