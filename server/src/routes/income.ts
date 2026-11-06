@@ -90,6 +90,10 @@ function mapIncomeListRow(r: {
   gstSubtotal: unknown | null;
   gstAmount: unknown | null;
   zeroRatedAmount: unknown | null;
+  greenTaxAmount: unknown | null;
+  greenTaxCheckIn: Date | null;
+  greenTaxCheckOut: Date | null;
+  greenTaxFormUrl: string | null;
   voidedAt: Date | null;
   voidReason: string | null;
   recurringId: string | null;
@@ -123,6 +127,10 @@ function mapIncomeListRow(r: {
     gst_subtotal: r.gstSubtotal != null ? toMoney(Number(r.gstSubtotal)) : null,
     gst_amount: r.gstAmount != null ? toMoney(Number(r.gstAmount)) : null,
     zero_rated_amount: r.zeroRatedAmount != null ? toMoney(Number(r.zeroRatedAmount)) : null,
+    green_tax_amount: r.greenTaxAmount != null ? toMoney(Number(r.greenTaxAmount)) : null,
+    green_tax_check_in: r.greenTaxCheckIn ? r.greenTaxCheckIn.toISOString() : null,
+    green_tax_check_out: r.greenTaxCheckOut ? r.greenTaxCheckOut.toISOString() : null,
+    green_tax_form_url: r.greenTaxFormUrl,
     voided_at: r.voidedAt,
     void_reason: r.voidReason,
     recurring_id: r.recurringId,
@@ -227,7 +235,17 @@ const gstInvoiceFields = {
   gst_subtotal: z.number().min(0).optional().nullable(),
   gst_amount: z.number().min(0).optional().nullable(),
   zero_rated_amount: z.number().min(0).optional().nullable(),
+  green_tax_amount: z.number().min(0).optional().nullable(),
+  green_tax_check_in: z.string().max(64).optional().nullable(),
+  green_tax_check_out: z.string().max(64).optional().nullable(),
+  green_tax_form_url: z.string().max(2048).optional().nullable(),
 };
+
+function parseOptionalDateTime(raw: string | null | undefined): Date | null {
+  if (raw == null || !String(raw).trim()) return null;
+  const d = new Date(String(raw).trim());
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 function gstCreateData(body: {
   invoice_number?: string | null;
@@ -235,6 +253,10 @@ function gstCreateData(body: {
   gst_subtotal?: number | null;
   gst_amount?: number | null;
   zero_rated_amount?: number | null;
+  green_tax_amount?: number | null;
+  green_tax_check_in?: string | null;
+  green_tax_check_out?: string | null;
+  green_tax_form_url?: string | null;
 }) {
   return {
     invoiceNumber: body.invoice_number?.trim() || null,
@@ -242,6 +264,10 @@ function gstCreateData(body: {
     gstSubtotal: body.gst_subtotal != null ? toMoney(body.gst_subtotal) : null,
     gstAmount: body.gst_amount != null ? toMoney(body.gst_amount) : null,
     zeroRatedAmount: body.zero_rated_amount != null ? toMoney(body.zero_rated_amount) : null,
+    greenTaxAmount: body.green_tax_amount != null ? toMoney(body.green_tax_amount) : null,
+    greenTaxCheckIn: parseOptionalDateTime(body.green_tax_check_in),
+    greenTaxCheckOut: parseOptionalDateTime(body.green_tax_check_out),
+    greenTaxFormUrl: body.green_tax_form_url?.trim() || null,
   };
 }
 
@@ -251,6 +277,10 @@ function gstUpdateData(body: {
   gst_subtotal?: number | null;
   gst_amount?: number | null;
   zero_rated_amount?: number | null;
+  green_tax_amount?: number | null;
+  green_tax_check_in?: string | null;
+  green_tax_check_out?: string | null;
+  green_tax_form_url?: string | null;
 }) {
   return {
     invoiceNumber:
@@ -270,6 +300,24 @@ function gstUpdateData(body: {
         : body.zero_rated_amount == null
           ? null
           : toMoney(body.zero_rated_amount),
+    greenTaxAmount:
+      body.green_tax_amount === undefined
+        ? undefined
+        : body.green_tax_amount == null
+          ? null
+          : toMoney(body.green_tax_amount),
+    greenTaxCheckIn:
+      body.green_tax_check_in === undefined
+        ? undefined
+        : parseOptionalDateTime(body.green_tax_check_in),
+    greenTaxCheckOut:
+      body.green_tax_check_out === undefined
+        ? undefined
+        : parseOptionalDateTime(body.green_tax_check_out),
+    greenTaxFormUrl:
+      body.green_tax_form_url === undefined
+        ? undefined
+        : body.green_tax_form_url?.trim() || null,
   };
 }
 

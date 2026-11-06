@@ -317,6 +317,7 @@ export type OrganizationTaxInfoDto = {
   gst_registered_name: string | null;
   gst_return_currency: string;
   taxable_activities: TaxableActivityDto[];
+  green_tax_enabled: boolean;
 };
 
 export function parseTaxableActivities(raw: unknown): TaxableActivityDto[] {
@@ -339,12 +340,14 @@ export function mapOrganizationTaxInfo(org: {
   gstRegisteredName: string | null;
   gstReturnCurrency: string;
   taxableActivities: unknown;
+  greenTaxEnabled?: boolean;
 }): OrganizationTaxInfoDto {
   return {
     gst_tin: org.gstTin?.trim() || null,
     gst_registered_name: org.gstRegisteredName?.trim() || null,
     gst_return_currency: (org.gstReturnCurrency || "MVR").trim().toUpperCase() || "MVR",
     taxable_activities: parseTaxableActivities(org.taxableActivities),
+    green_tax_enabled: Boolean(org.greenTaxEnabled),
   };
 }
 
@@ -363,6 +366,7 @@ export async function getOrganizationTaxInfo(
       gstRegisteredName: true,
       gstReturnCurrency: true,
       taxableActivities: true,
+      greenTaxEnabled: true,
     },
   });
   return {
@@ -379,6 +383,7 @@ export async function setOrganizationTaxInfo(
     gst_registered_name?: string | null;
     gst_return_currency?: string;
     taxable_activities?: TaxableActivityDto[];
+    green_tax_enabled?: boolean;
   },
   preferredOrgId?: string | null,
   userEmail?: string | null,
@@ -389,6 +394,7 @@ export async function setOrganizationTaxInfo(
     gstRegisteredName?: string | null;
     gstReturnCurrency?: string;
     taxableActivities?: TaxableActivityDto[];
+    greenTaxEnabled?: boolean;
   } = {};
 
   if (patch.gst_tin !== undefined) {
@@ -403,6 +409,9 @@ export async function setOrganizationTaxInfo(
   if (patch.taxable_activities !== undefined) {
     data.taxableActivities = parseTaxableActivities(patch.taxable_activities);
   }
+  if (patch.green_tax_enabled !== undefined) {
+    data.greenTaxEnabled = Boolean(patch.green_tax_enabled);
+  }
 
   const updated = await prisma.organization.update({
     where: { id: summary.id },
@@ -414,6 +423,7 @@ export async function setOrganizationTaxInfo(
       gstRegisteredName: true,
       gstReturnCurrency: true,
       taxableActivities: true,
+      greenTaxEnabled: true,
     },
   });
 

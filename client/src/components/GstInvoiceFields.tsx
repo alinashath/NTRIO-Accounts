@@ -69,7 +69,7 @@ export function calcGstAmount(subtotal: number, ratePercent: number): number {
   return Math.round(subtotal * (ratePercent / 100) * 100) / 100;
 }
 
-/** Subtotal + GST + zero-rated; null when breakdown is empty. */
+/** Subtotal + GST + zero-rated (excludes Green Tax); null when breakdown is empty. */
 export function gstBreakdownTotal(state: GstInvoiceState): number | null {
   const hasAny =
     state.gstSubtotal.trim() !== "" ||
@@ -80,6 +80,32 @@ export function gstBreakdownTotal(state: GstInvoiceState): number | null {
   const gst = parseOptionalMoney(state.gstAmount) ?? 0;
   const zero = parseOptionalMoney(state.zeroRatedAmount) ?? 0;
   return Math.round((sub + gst + zero) * 100) / 100;
+}
+
+/** Parse optional money string; exported for Green Tax helpers. */
+export function parseMoneyInput(raw: string): number | null {
+  return parseOptionalMoney(raw);
+}
+
+/**
+ * Invoice Total = GST breakdown + optional Green Tax.
+ * GST taxable subtotal must exclude green tax (MIRA: no GST on Green Tax).
+ */
+export function invoiceBreakdownTotal(
+  gst: GstInvoiceState,
+  greenTaxAmount: string | number | null | undefined,
+): number | null {
+  const base = gstBreakdownTotal(gst);
+  const green =
+    typeof greenTaxAmount === "number"
+      ? Number.isFinite(greenTaxAmount) && greenTaxAmount >= 0
+        ? greenTaxAmount
+        : null
+      : typeof greenTaxAmount === "string"
+        ? parseOptionalMoney(greenTaxAmount)
+        : null;
+  if (base == null && (green == null || green === 0)) return base;
+  return Math.round(((base ?? 0) + (green ?? 0)) * 100) / 100;
 }
 
 export function validateGstBreakdown(state: GstInvoiceState): string | null {
@@ -265,7 +291,7 @@ export function GstInvoiceFields({
           patch({ gstSubtotal: e.target.value }, { keepGstManual: false });
         }}
         className="font-num"
-        hint="Excluding tax — MIRA taxable supplies"
+        hint="Excluding GST and Green Tax — MIRA taxable supplies only"
       />
 
       <TextField

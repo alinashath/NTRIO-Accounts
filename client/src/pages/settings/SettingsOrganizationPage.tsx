@@ -20,6 +20,7 @@ export function SettingsOrganizationPage() {
   const [gstTin, setGstTin] = useState("");
   const [gstRegisteredName, setGstRegisteredName] = useState("");
   const [gstReturnCurrency, setGstReturnCurrency] = useState("MVR");
+  const [greenTaxEnabled, setGreenTaxEnabled] = useState(false);
   const [activities, setActivities] = useState<ActivityDraft[]>([{ number: "", name: "" }]);
   const [loading, setLoading] = useState(true);
   const [orgBusy, setOrgBusy] = useState(false);
@@ -41,6 +42,7 @@ export function SettingsOrganizationPage() {
         setGstTin(s.gst_tin ?? "");
         setGstRegisteredName(s.gst_registered_name ?? "");
         setGstReturnCurrency(s.gst_return_currency?.trim() || "MVR");
+        setGreenTaxEnabled(Boolean(s.green_tax_enabled));
         setActivities(toDrafts(s.taxable_activities));
       })
       .catch((err) => {
@@ -146,12 +148,14 @@ export function SettingsOrganizationPage() {
                   gst_registered_name: gstRegisteredName.trim() || null,
                   gst_return_currency: currency,
                   taxable_activities: cleaned,
+                  green_tax_enabled: greenTaxEnabled,
                 }),
               })
                 .then((s) => {
                   setGstTin(s.gst_tin ?? "");
                   setGstRegisteredName(s.gst_registered_name ?? "");
                   setGstReturnCurrency(s.gst_return_currency?.trim() || "MVR");
+                  setGreenTaxEnabled(Boolean(s.green_tax_enabled));
                   setActivities(toDrafts(s.taxable_activities));
                   setSavedTax(true);
                 })
@@ -185,6 +189,22 @@ export function SettingsOrganizationPage() {
               autoComplete="off"
               hint="Usually MVR for Maldives GST returns."
             />
+
+            <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-[var(--radius)] border border-border px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 accent-ink"
+                checked={greenTaxEnabled}
+                onChange={(e) => setGreenTaxEnabled(e.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-ink">Enable Green Tax</span>
+                <span className="mt-0.5 block text-caption">
+                  When on, GST income wizards can optionally add Green Tax (check-in/out, amount, MIRA
+                  form). Green Tax is excluded from the GST taxable subtotal.
+                </span>
+              </span>
+            </label>
 
             <div className="space-y-3">
               <div>

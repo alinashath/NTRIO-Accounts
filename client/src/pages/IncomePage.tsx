@@ -8,13 +8,21 @@ import {
   emptyGstInvoiceState,
   emptyGstWithDefaultRate,
   GstInvoiceFields,
-  gstBreakdownTotal,
   gstStateFromEntry,
   gstStateToPayload,
   hasGstData,
+  invoiceBreakdownTotal,
   validateGstBreakdown,
   type GstInvoiceState,
 } from "@/components/GstInvoiceFields";
+import {
+  emptyGreenTaxState,
+  GreenTaxFields,
+  greenTaxStateFromEntry,
+  greenTaxStateToPayload,
+  validateGreenTax,
+  type GreenTaxState,
+} from "@/components/GreenTaxFields";
 import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
@@ -30,7 +38,62 @@ import type {
   ContactDto,
   IncomeEntryDto,
   PagedIncomeListDto,
+  SettingsDto,
 } from "../../../shared/types";
+
+function incomeGstStepTitles(taxMode: "total" | "gst", greenTaxOrg: boolean) {
+  if (taxMode !== "gst") {
+    return ["Account", "Customer & category", "Tax", "Total & dates", "Details", "Receipt & save"] as const;
+  }
+  if (greenTaxOrg) {
+    return [
+      "Account",
+      "Customer & category",
+      "Tax",
+      "GST breakdown",
+      "Green Tax",
+      "Total & dates",
+      "Details",
+      "Receipt & save",
+    ] as const;
+  }
+  return [
+    "Account",
+    "Customer & category",
+    "Tax",
+    "GST breakdown",
+    "Total & dates",
+    "Details",
+    "Receipt & save",
+  ] as const;
+}
+
+function incomeEditStepTitles(taxMode: "total" | "gst", greenTaxOrg: boolean) {
+  if (taxMode !== "gst") {
+    return ["Account", "Customer & category", "Tax", "Total & dates", "Details", "Receipt & manage"] as const;
+  }
+  if (greenTaxOrg) {
+    return [
+      "Account",
+      "Customer & category",
+      "Tax",
+      "GST breakdown",
+      "Green Tax",
+      "Total & dates",
+      "Details",
+      "Receipt & manage",
+    ] as const;
+  }
+  return [
+    "Account",
+    "Customer & category",
+    "Tax",
+    "GST breakdown",
+    "Total & dates",
+    "Details",
+    "Receipt & manage",
+  ] as const;
+}
 
 const PAGE_SIZE = 25;
 const PENDING_ACCOUNT_FILTER = "__pending__";
@@ -636,8 +699,16 @@ function IncomeForm({
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [taxMode, setTaxMode] = useState<"total" | "gst">("total");
   const [gst, setGst] = useState<GstInvoiceState>(() => emptyGstInvoiceState());
+  const [greenTax, setGreenTax] = useState<GreenTaxState>(() => emptyGreenTaxState());
+  const [greenTaxOrgEnabled, setGreenTaxOrgEnabled] = useState(false);
   const [amountFollowsGst, setAmountFollowsGst] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void apiFetch<SettingsDto>("/api/settings")
+      .then((s) => setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled)))
+      .catch(() => setGreenTaxOrgEnabled(false));
+  }, []);
 
   const selectedAcc = accounts.find((a) => a.id === accountId);
   const amountCcy = receivable ? incomeCurrency : selectedAcc?.currency ?? "…";
@@ -647,34 +718,26 @@ function IncomeForm({
   );
 
   const stepTitles = useMemo(
-    () =>
-      taxMode === "gst"
-        ? ([
-            "Account",
-            "Customer & category",
-            "Tax",
-            "GST breakdown",
-            "Total & dates",
-            "Details",
-            "Receipt & save",
-          ] as const)
-        : ([
-            "Account",
-            "Customer & category",
-            "Tax",
-            "Total & dates",
-            "Details",
-            "Receipt & save",
-          ] as const),
-    [taxMode],
+    () => incomeGstStepTitles(taxMode, greenTaxOrgEnabled),
+    [taxMode, greenTaxOrgEnabled],
   );
   const lastStep = stepTitles.length - 1;
   const classifyStep = 1;
   const taxStep = 2;
   const gstStep = taxMode === "gst" ? 3 : -1;
-  const amountStep = taxMode === "gst" ? 4 : 3;
-  const detailsStep = taxMode === "gst" ? 5 : 4;
-  const receiptStep = taxMode === "gst" ? 6 : 5;
+  const greenTaxStep = taxMode === "gst" && greenTaxOrgEnabled ? 4 : -1;
+  const amountStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 5 : 4) : 3;
+  const detailsStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 6 : 5) : 4;
+  const receiptStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 7 : 6) : 5;
+
+  function syncAmountFromTax(nextGst: GstInvoiceState, nextGreen: GreenTaxState) {
+    if (!amountFollowsGst) return;
+    const total = invoiceBreakdownTotal(
+      nextGst,
+      nextGreen.include ? nextGreen.amount : null,
+    );
+    if (total != null && total > 0) setAmount(String(total));
+  }
 
   function validateAccount(): string | null {
     if (!receivable && !accountId) return "Select an account.";
@@ -691,9 +754,12 @@ function IncomeForm({
 
   function applyGst(next: GstInvoiceState) {
     setGst(next);
-    if (!amountFollowsGst) return;
-    const total = gstBreakdownTotal(next);
-    if (total != null && total > 0) setAmount(String(total));
+    syncAmountFromTax(next, greenTax);
+  }
+
+  function applyGreenTax(next: GreenTaxState) {
+    setGreenTax(next);
+    syncAmountFromTax(gst, next);
   }
 
   function goNext() {
@@ -711,10 +777,15 @@ function IncomeForm({
         onError(err);
         return;
       }
-      if (amountFollowsGst) {
-        const total = gstBreakdownTotal(gst);
-        if (total != null && total > 0) setAmount(String(total));
+      syncAmountFromTax(gst, greenTax);
+    }
+    if (step === greenTaxStep) {
+      const err = validateGreenTax(greenTax);
+      if (err) {
+        onError(err);
+        return;
       }
+      syncAmountFromTax(gst, greenTax);
     }
     if (step === amountStep) {
       const err = validateAmountDates();
@@ -763,6 +834,9 @@ function IncomeForm({
           contact_id: contactId || undefined,
           attachment_url: attachmentUrl.trim() || undefined,
           ...gstStateToPayload(taxMode === "gst" ? gst : emptyGstInvoiceState()),
+          ...(taxMode === "gst" && greenTaxOrgEnabled
+            ? greenTaxStateToPayload(greenTax)
+            : greenTaxStateToPayload(emptyGreenTaxState())),
         }),
       });
       setAmount("");
@@ -774,6 +848,7 @@ function IncomeForm({
       setAttachmentUrl("");
       setTaxMode("total");
       setGst(emptyGstInvoiceState());
+      setGreenTax(emptyGreenTaxState());
       setAmountFollowsGst(true);
       setReceivable(false);
       setIncomeCurrency("USD");
@@ -888,6 +963,7 @@ function IncomeForm({
                 setAmountFollowsGst(true);
               } else {
                 setGst(emptyGstInvoiceState());
+                setGreenTax(emptyGreenTaxState());
               }
             }}
             options={[
@@ -907,6 +983,28 @@ function IncomeForm({
           />
         ) : null}
 
+        {step === greenTaxStep ? (
+          <div className="space-y-3">
+            <GreenTaxFields
+              value={greenTax}
+              onChange={applyGreenTax}
+              userId={userId}
+              currencyLabel={amountCcy === "…" ? undefined : amountCcy}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                applyGreenTax(emptyGreenTaxState());
+                setStep((s) => Math.min(s + 1, lastStep));
+              }}
+            >
+              Skip Green Tax
+            </Button>
+          </div>
+        ) : null}
+
         {step === amountStep ? (
           <>
             <TextField
@@ -921,7 +1019,13 @@ function IncomeForm({
                 setAmount(e.target.value);
               }}
               required
-              hint={taxMode === "gst" ? "Prefilled from GST breakdown — you can change it" : undefined}
+              hint={
+                taxMode === "gst"
+                  ? greenTax.include
+                    ? "Prefilled from GST + Green Tax — you can change it"
+                    : "Prefilled from GST breakdown — you can change it"
+                  : undefined
+              }
             />
             <div className="grid gap-form sm:grid-cols-2">
               <TextField label="Earned date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -1021,44 +1125,48 @@ function IncomeDetailForm({
   const [notes, setNotes] = useState(row.notes ?? "");
   const [attachmentUrl, setAttachmentUrl] = useState(row.attachment_url ?? "");
   const initialGst = gstStateFromEntry(row);
-  const [taxMode, setTaxMode] = useState<"total" | "gst">(hasGstData(initialGst) ? "gst" : "total");
+  const initialGreen = greenTaxStateFromEntry(row);
+  const [taxMode, setTaxMode] = useState<"total" | "gst">(
+    hasGstData(initialGst) || initialGreen.include ? "gst" : "total",
+  );
   const [gst, setGst] = useState<GstInvoiceState>(() => initialGst);
+  const [greenTax, setGreenTax] = useState<GreenTaxState>(() => initialGreen);
+  const [greenTaxOrgEnabled, setGreenTaxOrgEnabled] = useState(false);
   const [amountFollowsGst, setAmountFollowsGst] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const voided = Boolean(row.voided_at);
+
+  useEffect(() => {
+    void apiFetch<SettingsDto>("/api/settings")
+      .then((s) => setGreenTaxOrgEnabled(Boolean(s.green_tax_enabled)))
+      .catch(() => setGreenTaxOrgEnabled(false));
+  }, []);
+
   const stepTitles = useMemo(
-    () =>
-      taxMode === "gst"
-        ? ([
-            "Account",
-            "Customer & category",
-            "Tax",
-            "GST breakdown",
-            "Total & dates",
-            "Details",
-            "Receipt & manage",
-          ] as const)
-        : ([
-            "Account",
-            "Customer & category",
-            "Tax",
-            "Total & dates",
-            "Details",
-            "Receipt & manage",
-          ] as const),
-    [taxMode],
+    () => incomeEditStepTitles(taxMode, greenTaxOrgEnabled),
+    [taxMode, greenTaxOrgEnabled],
   );
   const lastStep = stepTitles.length - 1;
   const classifyStep = 1;
   const taxStep = 2;
   const gstStep = taxMode === "gst" ? 3 : -1;
-  const amountStep = taxMode === "gst" ? 4 : 3;
-  const detailsStep = taxMode === "gst" ? 5 : 4;
-  const receiptStep = taxMode === "gst" ? 6 : 5;
+  const greenTaxStep = taxMode === "gst" && greenTaxOrgEnabled ? 4 : -1;
+  const amountStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 5 : 4) : 3;
+  const detailsStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 6 : 5) : 4;
+  const receiptStep = taxMode === "gst" ? (greenTaxOrgEnabled ? 7 : 6) : 5;
   const selectedAcc = accounts.find((a) => a.id === accountId);
   const amountCcy = pending ? row.currency : selectedAcc?.currency ?? row.currency ?? "USD";
+
+  function syncAmountFromTax(nextGst: GstInvoiceState, nextGreen: GreenTaxState) {
+    if (!amountFollowsGst) return;
+    const total = invoiceBreakdownTotal(
+      nextGst,
+      nextGreen.include ? nextGreen.amount : null,
+    );
+    if (total != null && total > 0) setAmount(String(total));
+  }
 
   function validateAccount(): string | null {
     if (voided) return null;
@@ -1077,9 +1185,12 @@ function IncomeDetailForm({
 
   function applyGst(next: GstInvoiceState) {
     setGst(next);
-    if (!amountFollowsGst) return;
-    const total = gstBreakdownTotal(next);
-    if (total != null && total > 0) setAmount(String(total));
+    syncAmountFromTax(next, greenTax);
+  }
+
+  function applyGreenTax(next: GreenTaxState) {
+    setGreenTax(next);
+    syncAmountFromTax(gst, next);
   }
 
   function goNext() {
@@ -1097,10 +1208,15 @@ function IncomeDetailForm({
         onError(err);
         return;
       }
-      if (amountFollowsGst) {
-        const total = gstBreakdownTotal(gst);
-        if (total != null && total > 0) setAmount(String(total));
+      syncAmountFromTax(gst, greenTax);
+    }
+    if (step === greenTaxStep) {
+      const err = validateGreenTax(greenTax);
+      if (err) {
+        onError(err);
+        return;
       }
+      syncAmountFromTax(gst, greenTax);
     }
     if (step === amountStep) {
       const err = validateAmountDates();
@@ -1132,6 +1248,14 @@ function IncomeDetailForm({
         setStep(gstStep);
         return;
       }
+      if (greenTaxOrgEnabled) {
+        const gErr = validateGreenTax(greenTax);
+        if (gErr) {
+          onError(gErr);
+          setStep(greenTaxStep);
+          return;
+        }
+      }
     }
     const amtErr = validateAmountDates();
     if (amtErr) {
@@ -1154,6 +1278,9 @@ function IncomeDetailForm({
         notes: notes.trim() || undefined,
         attachment_url: attachmentUrl.trim() || null,
         ...gstStateToPayload(taxMode === "gst" ? gst : emptyGstInvoiceState()),
+        ...(taxMode === "gst" && greenTaxOrgEnabled
+          ? greenTaxStateToPayload(greenTax)
+          : greenTaxStateToPayload(emptyGreenTaxState())),
       };
       if (!pending) {
         body.account_id = accountId;
@@ -1356,6 +1483,7 @@ function IncomeDetailForm({
                   setAmountFollowsGst(true);
                 } else {
                   setGst(emptyGstInvoiceState());
+                  setGreenTax(emptyGreenTaxState());
                 }
               }}
               options={[
@@ -1377,6 +1505,31 @@ function IncomeDetailForm({
           />
         ) : null}
 
+        {step === greenTaxStep ? (
+          <div className="space-y-3">
+            <GreenTaxFields
+              value={greenTax}
+              onChange={applyGreenTax}
+              userId={userId}
+              currencyLabel={amountCcy}
+              disabled={voided}
+            />
+            {!voided ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => {
+                  applyGreenTax(emptyGreenTaxState());
+                  setStep((s) => Math.min(s + 1, lastStep));
+                }}
+              >
+                Skip Green Tax
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         {step === amountStep ? (
           <>
             <TextField
@@ -1391,7 +1544,13 @@ function IncomeDetailForm({
                 setAmount(e.target.value);
               }}
               disabled={voided}
-              hint={taxMode === "gst" ? "Prefilled from GST breakdown — you can change it" : undefined}
+              hint={
+                taxMode === "gst"
+                  ? greenTax.include
+                    ? "Prefilled from GST + Green Tax — you can change it"
+                    : "Prefilled from GST breakdown — you can change it"
+                  : undefined
+              }
             />
             <div className="grid gap-form sm:grid-cols-2">
               <TextField

@@ -421,15 +421,17 @@ accountsRouter.get(
 
     rows.sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
 
+    // Running balance must be computed oldest → newest, then present newest first.
     let running = toMoney(Number(account.openingBalance));
     const ascWithRunning = rows.map((r) => {
       running = toMoney(running + r.signed_amount);
       return { ...r, running_balance: running };
     });
+    const descWithRunning = [...ascWithRunning].reverse();
 
-    const total = ascWithRunning.length;
+    const total = descWithRunning.length;
     const start = (q.page - 1) * q.page_size;
-    const slice = ascWithRunning.slice(start, start + q.page_size);
+    const slice = descWithRunning.slice(start, start + q.page_size);
 
     const fmt = (d: Date) => d.toISOString().slice(0, 10);
 

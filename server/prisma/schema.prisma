@@ -22,6 +22,8 @@ model Organization {
   gstReturnCurrency String @default("MVR") @map("gst_return_currency") @db.VarChar(8)
   /// Taxable activities from the GST registration certificate: [{ number, name? }].
   taxableActivities Json @default("[]") @map("taxable_activities")
+  /// When true, GST invoice wizards can optionally capture Maldives Green Tax.
+  greenTaxEnabled Boolean @default(false) @map("green_tax_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -320,6 +322,12 @@ model IncomeEntry {
   gstAmount      Decimal?  @map("gst_amount") @db.Decimal(15, 2)
   /// Value of zero-rated supplies.
   zeroRatedAmount Decimal? @map("zero_rated_amount") @db.Decimal(15, 2)
+  /// Maldives Green Tax amount (excluded from GST taxable subtotal).
+  greenTaxAmount Decimal? @map("green_tax_amount") @db.Decimal(15, 2)
+  greenTaxCheckIn DateTime? @map("green_tax_check_in")
+  greenTaxCheckOut DateTime? @map("green_tax_check_out")
+  /// Uploaded MIRA 501 / Information Sheet (or paste URL).
+  greenTaxFormUrl String? @map("green_tax_form_url") @db.VarChar(2048)
   voidedAt       DateTime? @map("voided_at")
   voidReason     String?   @map("void_reason")
   recurringId    String?   @map("recurring_id") @db.Uuid
@@ -372,6 +380,11 @@ model ExpenseEntry {
   gstAmount      Decimal?  @map("gst_amount") @db.Decimal(15, 2)
   /// Value of zero-rated supplies.
   zeroRatedAmount Decimal? @map("zero_rated_amount") @db.Decimal(15, 2)
+  /// Maldives Green Tax amount (excluded from GST taxable subtotal).
+  greenTaxAmount Decimal? @map("green_tax_amount") @db.Decimal(15, 2)
+  greenTaxCheckIn DateTime? @map("green_tax_check_in")
+  greenTaxCheckOut DateTime? @map("green_tax_check_out")
+  greenTaxFormUrl String? @map("green_tax_form_url") @db.VarChar(2048)
   voidedAt       DateTime? @map("voided_at")
   voidReason     String?   @map("void_reason")
   recurringId    String?   @map("recurring_id") @db.Uuid

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { apiFetch } from "@/api/http";
 import { Button, Card, TextField } from "@/components/ui";
+import { downloadText, toCsv } from "@/lib/download";
 import { formatMoney } from "@/lib/money";
 import type { AccountLedgerPageDto, LedgerLineDto, LedgerKind } from "../../../shared/types";
 
@@ -39,6 +40,7 @@ export function AccountStatementPage() {
   const [adjAmount, setAdjAmount] = useState("");
   const [adjNote, setAdjNote] = useState("");
   const [adjBusy, setAdjBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
 
   const loadPage = useCallback(
     async (p: number, append: boolean) => {
@@ -106,6 +108,66 @@ export function AccountStatementPage() {
   const ccy = data?.currency ?? "USD";
   const hasMore = data != null && items.length < data.total;
 
+  async function exportCsv() {
+    if (!id || !data) return;
+    setExportBusy(true);
+    setError(null);
+    try {
+      const all: LedgerLineDto[] = [];
+      let p = 1;
+      let total = Infinity;
+      const pageSize = 200;
+      while (all.length < total) {
+        const res = await apiFetch<AccountLedgerPageDto>(
+          `/api/accounts/${encodeURIComponent(id)}/ledger?page=${p}&page_size=${pageSize}`,
+        );
+        total = res.total;
+        all.push(...res.items);
+        if (res.items.length === 0) break;
+        p += 1;
+        if (p > 500) break;
+      }
+      // Screen is newest-first; CSV is oldest → newest for spreadsheet use.
+      const chronological = [...all].reverse();
+      const slug = data.account.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "account";
+      downloadText(
+        `statement-${slug}-${format(new Date(), "yyyy-MM-dd")}.csv`,
+        toCsv(
+          ["Date", "Type", "Description", "Money in", "Money out", "Balance", "Currency"],
+          [
+            [
+              "",
+              "Opening",
+              "Opening balance",
+              "",
+              "",
+              data.opening_balance,
+              ccy,
+            ],
+            ...chronological.map((r) => [
+              r.date,
+              kindLabel(r.kind),
+              r.description ?? "",
+              r.money_in ?? "",
+              r.money_out ?? "",
+              r.running_balance,
+              ccy,
+            ]),
+          ],
+        ),
+        "text/csv;charset=utf-8",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
   if (!id) {
     return <p className="text-sm text-muted-label">Missing account.</p>;
   }
@@ -126,19 +188,31 @@ export function AccountStatementPage() {
                 {data.account.type.toUpperCase()} · {ccy} · Opening{" "}
                 <span className="tabular-nums">{formatMoney(data.opening_balance, ccy)}</span> · Current{" "}
                 <span className="tabular-nums">{formatMoney(data.account.balance, ccy)}</span>
+                {" · "}Latest first
               </p>
             </>
           ) : null}
         </div>
-        <Button type="button" onClick={() => setAdjOpen(true)}>
-          Balance adjustment
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!data || exportBusy || loading}
+            onClick={() => void exportCsv()}
+          >
+            {exportBusy ? "Exporting…" : "Export CSV"}
+          </Button>
+          <Button type="button" onClick={() => setAdjOpen(true)}>
+            Balance adjustment
+          </Button>
+        </div>
       </div>
 
       {error ? <p className="text-sm text-debit">{error}</p> : null}
 
       <Card>
         <h3 className="text-sm font-semibold text-ink">Activity</h3>
+        <p className="mt-0.5 text-caption">Newest transactions first. Balance is after each line.</p>
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
@@ -197,7 +271,7 @@ export function AccountStatementPage() {
               disabled={loadingMore}
               onClick={() => void loadPage(page + 1, true)}
             >
-              {loadingMore ? "Loading…" : "More (newer dates)"}
+              {loadingMore ? "Loading…" : "Load older"}
             </Button>
           </div>
         ) : null}

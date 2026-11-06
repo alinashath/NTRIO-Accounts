@@ -20,11 +20,15 @@ export function ReceiptAttachmentField({
   onAttachmentUrlChange,
   userId,
   disabled,
+  label = "Receipt (optional)",
+  urlLabel = "Receipt URL (optional — paste if not uploading)",
 }: {
   attachmentUrl: string;
   onAttachmentUrlChange: (url: string) => void;
   userId: string;
   disabled?: boolean;
+  label?: string;
+  urlLabel?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -70,7 +74,7 @@ export function ReceiptAttachmentField({
 
   return (
     <div className="space-y-3">
-      <span className="block text-sm font-medium text-ink">Receipt (optional)</span>
+      <span className="block text-sm font-medium text-ink">{label}</span>
       <div className="relative">
         <div className="pointer-events-none flex min-h-11 w-full flex-col justify-center rounded-sm border border-dashed border-[var(--control-border)] bg-neutral-bg/50 px-3 py-3">
           <span className="text-sm font-medium text-ink">{busy ? "Uploading…" : "Choose photo or PDF"}</span>
@@ -79,7 +83,7 @@ export function ReceiptAttachmentField({
         <input
           ref={inputRef}
           type="file"
-          aria-label="Upload receipt file"
+          aria-label={label}
           accept="image/*,.pdf,application/pdf"
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
           onClick={() => {
@@ -93,7 +97,7 @@ export function ReceiptAttachmentField({
         />
       </div>
       <TextField
-        label="Receipt URL (optional — paste if not uploading)"
+        label={urlLabel}
         value={attachmentUrl}
         onChange={(e) => onAttachmentUrlChange(e.target.value)}
         disabled={disabled}

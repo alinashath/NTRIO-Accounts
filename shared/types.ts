@@ -34,6 +34,8 @@ export interface SettingsDto {
   gst_return_currency: string;
   /** Taxable activity numbers from the GST registration certificate. */
   taxable_activities: TaxableActivityDto[];
+  /** When true, GST wizards can optionally capture Maldives Green Tax. */
+  green_tax_enabled: boolean;
   fx_rates: FxDailyRateDto[];
 }
 
@@ -241,6 +243,11 @@ export interface IncomeEntryDto {
   gst_amount: number | null;
   /** Value of zero-rated supplies. */
   zero_rated_amount: number | null;
+  /** Maldives Green Tax (excluded from GST taxable subtotal). */
+  green_tax_amount: number | null;
+  green_tax_check_in: string | null;
+  green_tax_check_out: string | null;
+  green_tax_form_url: string | null;
   voided_at: string | null;
   void_reason: string | null;
   recurring_id: string | null;
@@ -293,6 +300,10 @@ export interface ExpenseEntryDto {
   gst_amount: number | null;
   /** Value of zero-rated supplies. */
   zero_rated_amount: number | null;
+  green_tax_amount: number | null;
+  green_tax_check_in: string | null;
+  green_tax_check_out: string | null;
+  green_tax_form_url: string | null;
   voided_at: string | null;
   void_reason: string | null;
   recurring_id: string | null;
