@@ -32,7 +32,7 @@ const sections = [
   {
     to: "/accounts/settings/organization",
     title: "Organization",
-    caption: "Wordmark title (e.g. NTRIO)",
+    caption: "Wordmark, GST TIN, and taxable activities",
   },
   {
     to: "/accounts/settings/exchange-rate",

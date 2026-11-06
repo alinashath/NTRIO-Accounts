@@ -14,6 +14,14 @@ model Organization {
   title     String   @default("NTRIO") @db.VarChar(64)
   /// Enabled workspace modules for this tenant (accounts | occupancy | kitchen | stock).
   enabledModules String[] @default(["accounts", "occupancy", "kitchen", "stock"]) @map("enabled_modules")
+  /// Maldives GST TIN (taxpayer identification number).
+  gstTin String? @map("gst_tin") @db.VarChar(64)
+  /// Legal / registered name on the GST certificate (if different from title).
+  gstRegisteredName String? @map("gst_registered_name") @db.VarChar(160)
+  /// Currency used when preparing the GST return (typically MVR).
+  gstReturnCurrency String @default("MVR") @map("gst_return_currency") @db.VarChar(8)
+  /// Taxable activities from the GST registration certificate: [{ number, name? }].
+  taxableActivities Json @default("[]") @map("taxable_activities")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

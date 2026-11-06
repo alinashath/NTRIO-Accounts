@@ -5,6 +5,7 @@ const tabs = [
   { to: "/accounts/reports/pnl", label: "P&L" },
   { to: "/accounts/reports/cashflow", label: "Cash flow" },
   { to: "/accounts/reports/balance-sheet", label: "Balance sheet" },
+  { to: "/accounts/reports/mira-gst", label: "MIRA GST" },
 ] as const;
 
 export default function ReportsLayout() {

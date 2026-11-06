@@ -13,6 +13,12 @@ export interface FxDailyRateDto {
   usd_mvr_rate: number;
 }
 
+/** GST taxable activity from the Maldives registration certificate. */
+export interface TaxableActivityDto {
+  number: string;
+  name: string | null;
+}
+
 export interface SettingsDto {
   global_usd_mvr_rate: number;
   organization_id: string;
@@ -20,6 +26,14 @@ export interface SettingsDto {
   organization_title: string;
   /** When true, project tagging and filters are available. */
   projects_enabled: boolean;
+  /** Maldives GST TIN (taxpayer identification number). */
+  gst_tin: string | null;
+  /** Legal / registered name on the GST certificate. */
+  gst_registered_name: string | null;
+  /** Currency used when preparing the GST return (typically MVR). */
+  gst_return_currency: string;
+  /** Taxable activity numbers from the GST registration certificate. */
+  taxable_activities: TaxableActivityDto[];
   fx_rates: FxDailyRateDto[];
 }
 

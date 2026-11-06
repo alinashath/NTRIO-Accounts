@@ -59,3 +59,37 @@ export async function apiFetch<T>(
 
   return data as T;
 }
+
+/** Binary download (e.g. Excel). Uses the same auth / org headers as apiFetch. */
+export async function apiFetchBlob(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const token = useAuthStore.getState().session?.access_token;
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const orgId = getStoredActiveOrganizationId();
+  if (orgId && !headers.has("X-Organization-Id")) {
+    headers.set("X-Organization-Id", orgId);
+  }
+
+  const res = await fetch(resolveApiUrl(path), { ...init, headers });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = `Request failed (${res.status})`;
+    try {
+      const data = JSON.parse(text) as { error?: string; hint?: string };
+      if (typeof data.error === "string") msg = data.error;
+      if (typeof data.hint === "string" && data.hint) msg = `${msg}\n\n${data.hint}`;
+    } catch {
+      /* keep status message */
+    }
+    throw new Error(msg);
+  }
+
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(cd);
+  const filename = match ? decodeURIComponent(match[1].replace(/"/g, "")) : null;
+  const blob = await res.blob();
+  return { blob, filename };
+}

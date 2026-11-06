@@ -307,6 +307,123 @@ export async function setOrganizationTitle(
   return updated;
 }
 
+export type TaxableActivityDto = {
+  number: string;
+  name: string | null;
+};
+
+export type OrganizationTaxInfoDto = {
+  gst_tin: string | null;
+  gst_registered_name: string | null;
+  gst_return_currency: string;
+  taxable_activities: TaxableActivityDto[];
+};
+
+export function parseTaxableActivities(raw: unknown): TaxableActivityDto[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaxableActivityDto[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const number = String((item as { number?: unknown }).number ?? "").trim();
+    if (!number) continue;
+    const nameRaw = (item as { name?: unknown }).name;
+    const name =
+      typeof nameRaw === "string" && nameRaw.trim() ? nameRaw.trim() : null;
+    out.push({ number, name });
+  }
+  return out;
+}
+
+export function mapOrganizationTaxInfo(org: {
+  gstTin: string | null;
+  gstRegisteredName: string | null;
+  gstReturnCurrency: string;
+  taxableActivities: unknown;
+}): OrganizationTaxInfoDto {
+  return {
+    gst_tin: org.gstTin?.trim() || null,
+    gst_registered_name: org.gstRegisteredName?.trim() || null,
+    gst_return_currency: (org.gstReturnCurrency || "MVR").trim().toUpperCase() || "MVR",
+    taxable_activities: parseTaxableActivities(org.taxableActivities),
+  };
+}
+
+export async function getOrganizationTaxInfo(
+  userId: string,
+  preferredOrgId?: string | null,
+  userEmail?: string | null,
+): Promise<OrganizationTaxInfoDto & { organization_id: string; organization_title: string }> {
+  const summary = await ensureUserOrganization(userId, preferredOrgId, userEmail);
+  const org = await prisma.organization.findUniqueOrThrow({
+    where: { id: summary.id },
+    select: {
+      id: true,
+      title: true,
+      gstTin: true,
+      gstRegisteredName: true,
+      gstReturnCurrency: true,
+      taxableActivities: true,
+    },
+  });
+  return {
+    organization_id: org.id,
+    organization_title: org.title?.trim() || DEFAULT_TITLE,
+    ...mapOrganizationTaxInfo(org),
+  };
+}
+
+export async function setOrganizationTaxInfo(
+  userId: string,
+  patch: {
+    gst_tin?: string | null;
+    gst_registered_name?: string | null;
+    gst_return_currency?: string;
+    taxable_activities?: TaxableActivityDto[];
+  },
+  preferredOrgId?: string | null,
+  userEmail?: string | null,
+) {
+  const summary = await ensureUserOrganization(userId, preferredOrgId, userEmail);
+  const data: {
+    gstTin?: string | null;
+    gstRegisteredName?: string | null;
+    gstReturnCurrency?: string;
+    taxableActivities?: TaxableActivityDto[];
+  } = {};
+
+  if (patch.gst_tin !== undefined) {
+    data.gstTin = patch.gst_tin?.trim() || null;
+  }
+  if (patch.gst_registered_name !== undefined) {
+    data.gstRegisteredName = patch.gst_registered_name?.trim() || null;
+  }
+  if (patch.gst_return_currency !== undefined) {
+    data.gstReturnCurrency = patch.gst_return_currency.trim().toUpperCase() || "MVR";
+  }
+  if (patch.taxable_activities !== undefined) {
+    data.taxableActivities = parseTaxableActivities(patch.taxable_activities);
+  }
+
+  const updated = await prisma.organization.update({
+    where: { id: summary.id },
+    data,
+    select: {
+      id: true,
+      title: true,
+      gstTin: true,
+      gstRegisteredName: true,
+      gstReturnCurrency: true,
+      taxableActivities: true,
+    },
+  });
+
+  return {
+    organization_id: updated.id,
+    organization_title: updated.title?.trim() || DEFAULT_TITLE,
+    ...mapOrganizationTaxInfo(updated),
+  };
+}
+
 /** Add membership without removing other orgs. Idempotent. */
 export async function attachUserToOrganization(
   userId: string,

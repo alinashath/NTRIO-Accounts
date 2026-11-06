@@ -12,6 +12,7 @@ import {
   buildIncomeStatement,
   type DateBasis,
 } from "../services/statementService.js";
+import { buildMiraGstPreview, buildMiraGstWorkbook } from "../services/miraGstExport.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { scopeOrganizationData } from "../middleware/orgScope.js";
 import { asyncHandler } from "../utils/http.js";
@@ -714,6 +715,37 @@ reportsRouter.get(
               : 0,
       })),
     });
+  }),
+);
+
+const miraGstQuery = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+reportsRouter.get(
+  "/mira-gst",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const q = miraGstQuery.parse(req.query);
+    const preview = await buildMiraGstPreview(userId, q.from, q.to, req);
+    res.json(preview);
+  }),
+);
+
+reportsRouter.get(
+  "/mira-gst/export",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const q = miraGstQuery.parse(req.query);
+    const buffer = await buildMiraGstWorkbook(userId, q.from, q.to, req);
+    const filename = `mira-gst-statements-${q.from}_${q.to}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(Buffer.from(buffer));
   }),
 );
 

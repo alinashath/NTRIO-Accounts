@@ -23,6 +23,7 @@ import { ReportsCategoryDetailPage } from "./pages/reports/ReportsCategoryDetail
 import { ReportsPnlTab } from "./pages/reports/ReportsPnlTab";
 import { ReportsCashflowTab } from "./pages/reports/ReportsCashflowTab";
 import { ReportsBalanceSheetTab } from "./pages/reports/ReportsBalanceSheetTab";
+import { ReportsMiraGstTab } from "./pages/reports/ReportsMiraGstTab";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SettingsAccountPage } from "./pages/settings/SettingsAccountPage";
 import { SettingsUsersPage } from "./pages/settings/SettingsUsersPage";
@@ -172,6 +173,7 @@ export default function App() {
             <Route path="categories/:categoryId" element={<ReportsCategoryDetailPage />} />
             <Route path="cashflow" element={<ReportsCashflowTab />} />
             <Route path="balance-sheet" element={<ReportsBalanceSheetTab />} />
+            <Route path="mira-gst" element={<ReportsMiraGstTab />} />
           </Route>
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/account" element={<SettingsAccountPage />} />

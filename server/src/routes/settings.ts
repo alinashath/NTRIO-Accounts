@@ -11,10 +11,13 @@ import {
   dataOwnerForOrganization,
   ensureUserOrganization,
   ensureUserOrganizations,
+  getOrganizationTaxInfo,
   listOrganizationMembers,
+  parseTaxableActivities,
   readPreferredOrgId,
   resolveOrganizationDataUserId,
   setActiveOrganization,
+  setOrganizationTaxInfo,
   setOrganizationTitle,
 } from "../lib/organization.js";
 import { createServiceRoleSupabase } from "../lib/supabaseService.js";
@@ -64,11 +67,20 @@ settingsRouter.get(
     });
     await ensureFxBaseline(userId);
     const fx_rates = await listFxDailyRates(userId);
+    const tax = await getOrganizationTaxInfo(
+      actorId,
+      preferred,
+      (req as AuthedRequest).userEmail,
+    );
     res.json({
       global_usd_mvr_rate: Number(row.globalUsdMvrRate),
       organization_id: org.id,
       organization_title: org.title?.trim() || "NTRIO",
       projects_enabled: row.projectsEnabled,
+      gst_tin: tax.gst_tin,
+      gst_registered_name: tax.gst_registered_name,
+      gst_return_currency: tax.gst_return_currency,
+      taxable_activities: tax.taxable_activities,
       fx_rates,
     });
   }),
@@ -122,6 +134,11 @@ settingsRouter.post(
   }),
 );
 
+const taxableActivitySchema = z.object({
+  number: z.string().trim().min(1).max(32),
+  name: z.string().trim().max(120).optional().nullable(),
+});
+
 const patchSchema = z
   .object({
     global_usd_mvr_rate: z.number().positive().max(1_000_000).optional(),
@@ -132,13 +149,24 @@ const patchSchema = z
       .optional(),
     organization_title: z.string().trim().min(1).max(64).optional(),
     projects_enabled: z.boolean().optional(),
+    gst_tin: z.string().trim().max(64).optional().nullable(),
+    gst_registered_name: z.string().trim().max(160).optional().nullable(),
+    gst_return_currency: z.string().trim().min(1).max(8).optional(),
+    taxable_activities: z.array(taxableActivitySchema).max(50).optional(),
   })
   .refine(
     (b) =>
       b.global_usd_mvr_rate !== undefined ||
       b.organization_title !== undefined ||
-      b.projects_enabled !== undefined,
-    { message: "Provide global_usd_mvr_rate, organization_title, and/or projects_enabled" },
+      b.projects_enabled !== undefined ||
+      b.gst_tin !== undefined ||
+      b.gst_registered_name !== undefined ||
+      b.gst_return_currency !== undefined ||
+      b.taxable_activities !== undefined,
+    {
+      message:
+        "Provide global_usd_mvr_rate, organization_title, projects_enabled, and/or GST tax fields",
+    },
   );
 
 settingsRouter.patch(
@@ -152,6 +180,28 @@ settingsRouter.patch(
       await setOrganizationTitle(
         actorId,
         body.organization_title,
+        preferred,
+        (req as AuthedRequest).userEmail,
+      );
+    }
+
+    if (
+      body.gst_tin !== undefined ||
+      body.gst_registered_name !== undefined ||
+      body.gst_return_currency !== undefined ||
+      body.taxable_activities !== undefined
+    ) {
+      await setOrganizationTaxInfo(
+        actorId,
+        {
+          gst_tin: body.gst_tin,
+          gst_registered_name: body.gst_registered_name,
+          gst_return_currency: body.gst_return_currency,
+          taxable_activities:
+            body.taxable_activities !== undefined
+              ? parseTaxableActivities(body.taxable_activities)
+              : undefined,
+        },
         preferred,
         (req as AuthedRequest).userEmail,
       );
@@ -207,11 +257,20 @@ settingsRouter.patch(
       (req as AuthedRequest).userEmail,
     );
     const fx_rates = await listFxDailyRates(userId);
+    const tax = await getOrganizationTaxInfo(
+      actorId,
+      preferred,
+      (req as AuthedRequest).userEmail,
+    );
     res.json({
       global_usd_mvr_rate: Number(refreshed.globalUsdMvrRate),
       organization_id: org.id,
       organization_title: org.title?.trim() || "NTRIO",
       projects_enabled: refreshed.projectsEnabled,
+      gst_tin: tax.gst_tin,
+      gst_registered_name: tax.gst_registered_name,
+      gst_return_currency: tax.gst_return_currency,
+      taxable_activities: tax.taxable_activities,
       fx_rates,
     });
   }),
