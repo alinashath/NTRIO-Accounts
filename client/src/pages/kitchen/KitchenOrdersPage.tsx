@@ -2,7 +2,7 @@ import { Apple, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
-import { ListRow, PanelCard } from "@/components/design";
+import { ListRow, PanelCard, SegmentedControl } from "@/components/design";
 import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
 import { Button, TextField } from "@/components/ui";
@@ -12,10 +12,41 @@ import type {
   EggStyle,
   KitchenDayDto,
   KitchenDayRoomDto,
+  MealPeriod,
+  RoomDayExtrasDto,
   RoomExtraOptionDto,
   RoomExtraSelectionDto,
   ShoppingSummaryDto,
 } from "../../../../shared/types";
+
+const MEAL_TABS: { value: MealPeriod; label: string }[] = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+];
+
+function emptyExtras(meal: MealPeriod): RoomDayExtrasDto {
+  return {
+    id: null,
+    meal_period: meal,
+    fruits: [],
+    selected_item_ids: [],
+    selected_lines: [],
+    pancake: false,
+    honey: false,
+    nutella: false,
+    cereal: false,
+    water_bottle: false,
+  };
+}
+
+function extrasForMeal(room: KitchenDayRoomDto, meal: MealPeriod): RoomDayExtrasDto {
+  return room.extras_by_meal?.[meal] ?? (meal === "breakfast" ? room.extras : emptyExtras(meal));
+}
+
+function mealTitle(meal: MealPeriod) {
+  return meal === "breakfast" ? "Breakfast" : meal === "lunch" ? "Lunch" : "Dinner";
+}
 
 function todayYmd() {
   return new Date().toISOString().slice(0, 10);
@@ -69,6 +100,7 @@ function ActionBtn({
 
 export function KitchenOrdersPage() {
   const [date, setDate] = useState(todayYmd);
+  const [mealPeriod, setMealPeriod] = useState<MealPeriod>("breakfast");
   const [day, setDay] = useState<KitchenDayDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -76,7 +108,10 @@ export function KitchenOrdersPage() {
     room: KitchenDayRoomDto;
     editing?: BreakfastOrderDto;
   } | null>(null);
-  const [extrasRoom, setExtrasRoom] = useState<KitchenDayRoomDto | null>(null);
+  const [extrasModal, setExtrasModal] = useState<{
+    room: KitchenDayRoomDto;
+    meal: MealPeriod;
+  } | null>(null);
   const [occRoom, setOccRoom] = useState<KitchenDayRoomDto | null>(null);
 
   const load = useCallback(async () => {
@@ -101,15 +136,21 @@ export function KitchenOrdersPage() {
     }
   }
 
-  async function removeExtraLine(room: KitchenDayRoomDto, stockItemId: string) {
-    const lines = (room.extras.selected_lines ?? []).filter((l) => l.stock_item_id !== stockItemId);
+  async function removeExtraLine(
+    room: KitchenDayRoomDto,
+    meal: MealPeriod,
+    stockItemId: string,
+  ) {
+    const extras = extrasForMeal(room, meal);
+    const lines = (extras.selected_lines ?? []).filter((l) => l.stock_item_id !== stockItemId);
     try {
       const res = await apiFetch<{ shopping?: ShoppingSummaryDto }>("/api/kitchen/extras", {
         method: "PUT",
         body: JSON.stringify({
           date,
           room_id: room.id,
-          fruits: room.extras.fruits,
+          meal_period: meal,
+          fruits: extras.fruits,
           selected_lines: lines.map((l) => ({
             stock_item_id: l.stock_item_id,
             quantity: l.quantity,
@@ -117,7 +158,7 @@ export function KitchenOrdersPage() {
         }),
       });
       noteShopping(res.shopping);
-      setMsg("Extra removed");
+      setMsg(`${mealTitle(meal)} extra removed`);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
@@ -128,10 +169,10 @@ export function KitchenOrdersPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-page-title text-ink">Breakfast orders</h1>
+          <h1 className="text-page-title text-ink">Room orders</h1>
           <p className="mt-1 text-caption">
-            Pick a date · use Add breakfast on each room. Configure ingredients under Recipes. Saving updates stock
-            Used and shopping list.
+            Breakfast guest meals, plus fruits & extras for breakfast, lunch, and dinner — each meal is saved
+            separately. Saving updates stock Used and shopping list.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -145,6 +186,14 @@ export function KitchenOrdersPage() {
         </div>
       </div>
 
+      <SegmentedControl
+        aria-label="Meal period"
+        className="w-full sm:w-auto"
+        value={mealPeriod}
+        onChange={setMealPeriod}
+        options={MEAL_TABS}
+      />
+
       {error ? <p className="text-sm font-medium text-debit">{error}</p> : null}
       {msg ? (
         <p className="text-sm font-medium text-credit">
@@ -155,105 +204,141 @@ export function KitchenOrdersPage() {
         </p>
       ) : null}
 
-      {(day?.rooms ?? []).map((room) => (
-        <PanelCard
-          key={room.id}
-          title={`Room ${room.number}`}
-          caption={`Occupants ${room.occupant_count} · Breakfast guests ${room.breakfast_participants}`}
-        >
-          <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
-            <ActionBtn
-              label="Add breakfast"
-              tone="action"
-              disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
-              onClick={() => setOrderModal({ room })}
-            >
-              <Plus className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </ActionBtn>
-            <ActionBtn label="Occupants" onClick={() => setOccRoom(room)}>
-              <Users className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </ActionBtn>
-            <ActionBtn label="Fruits & extras" onClick={() => setExtrasRoom(room)}>
-              <Apple className="h-5 w-5" strokeWidth={1.8} aria-hidden />
-            </ActionBtn>
-          </div>
-
-          {room.orders.length === 0 ? (
-            <div className="border-t border-border px-4 py-3 space-y-2">
-              <p className="text-caption">
-                No breakfast orders yet. Tap Add breakfast — occupied rooms are not assumed to need breakfast.
-              </p>
-              <Button
-                type="button"
-                className="gap-2"
-                disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
-                onClick={() => setOrderModal({ room })}
-              >
-                <Plus className="h-4 w-4" aria-hidden />
-                Add breakfast for room {room.number}
-              </Button>
-            </div>
-          ) : (
-            room.orders.map((o) => (
-              <ListRow
-                key={o.id}
-                primary={`Guest ${o.guest_number} · ${o.breakfast_type} · ${o.egg_style}`}
-                secondary={[
-                  o.serving_time,
-                  o.outside_normal_window ? "Outside window" : null,
-                  o.potato ? "potato" : null,
-                  o.juice ? "juice" : null,
-                  o.tea ? "tea" : null,
-                  o.coffee ? "coffee" : null,
-                  o.milk ? "milk" : null,
-                  o.sugar ? "sugar" : null,
-                  o.status,
-                  o.special_requests,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-                right={
-                  <span className="inline-flex min-h-11 min-w-11 items-center justify-center text-action" aria-hidden>
-                    <Pencil className="h-4 w-4" strokeWidth={1.8} />
-                  </span>
-                }
-                onClick={() => setOrderModal({ room, editing: o })}
-              />
-            ))
-          )}
-
-          {(room.extras.fruits.length > 0 || (room.extras.selected_lines ?? []).length > 0) && (
-            <div className="border-t border-border">
-              {room.extras.fruits.length > 0 ? (
-                <p className="px-4 py-2 text-caption">Fruits: {room.extras.fruits.join(", ")}</p>
+      {(day?.rooms ?? []).map((room) => {
+        const extras = extrasForMeal(room, mealPeriod);
+        const hasExtras =
+          extras.fruits.length > 0 || (extras.selected_lines ?? []).length > 0;
+        return (
+          <PanelCard
+            key={room.id}
+            title={`Room ${room.number}`}
+            caption={
+              mealPeriod === "breakfast"
+                ? `Occupants ${room.occupant_count} · Breakfast guests ${room.breakfast_participants}`
+                : `Occupants ${room.occupant_count} · ${mealTitle(mealPeriod)} fruits & extras`
+            }
+          >
+            <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
+              {mealPeriod === "breakfast" ? (
+                <ActionBtn
+                  label="Add breakfast"
+                  tone="action"
+                  disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
+                  onClick={() => setOrderModal({ room })}
+                >
+                  <Plus className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+                </ActionBtn>
               ) : null}
-              {(room.extras.selected_lines ?? []).map((line) => (
-                <ListRow
-                  key={line.stock_item_id}
-                  primary={line.name ?? "Extra"}
-                  secondary={[
-                    `${line.quantity} ${line.unit ?? ""}`.trim(),
-                    line.show_on_kot ? "on KOT" : null,
-                    isPancakeOption(line) ? `${line.quantity * 20} pieces` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  right={
-                    <button
-                      type="button"
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
-                      aria-label={`Remove ${line.name ?? "extra"}`}
-                      onClick={() => void removeExtraLine(room, line.stock_item_id)}
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                    </button>
-                  }
-                />
-              ))}
+              <ActionBtn label="Occupants" onClick={() => setOccRoom(room)}>
+                <Users className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+              </ActionBtn>
+              <ActionBtn
+                label={`${mealTitle(mealPeriod)} fruits & extras`}
+                tone={mealPeriod === "breakfast" ? "neutral" : "action"}
+                onClick={() => setExtrasModal({ room, meal: mealPeriod })}
+              >
+                <Apple className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+              </ActionBtn>
             </div>
-          )}
-        </PanelCard>
-      ))}
+
+            {mealPeriod === "breakfast" ? (
+              room.orders.length === 0 ? (
+                <div className="border-t border-border px-4 py-3 space-y-2">
+                  <p className="text-caption">
+                    No breakfast orders yet. Tap Add breakfast — occupied rooms are not assumed to need
+                    breakfast.
+                  </p>
+                  <Button
+                    type="button"
+                    className="gap-2"
+                    disabled={room.orders.filter((o) => o.status !== "cancelled").length >= 3}
+                    onClick={() => setOrderModal({ room })}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    Add breakfast for room {room.number}
+                  </Button>
+                </div>
+              ) : (
+                room.orders.map((o) => (
+                  <ListRow
+                    key={o.id}
+                    primary={`Guest ${o.guest_number} · ${o.breakfast_type} · ${o.egg_style}`}
+                    secondary={[
+                      o.serving_time,
+                      o.outside_normal_window ? "Outside window" : null,
+                      o.potato ? "potato" : null,
+                      o.juice ? "juice" : null,
+                      o.tea ? "tea" : null,
+                      o.coffee ? "coffee" : null,
+                      o.milk ? "milk" : null,
+                      o.sugar ? "sugar" : null,
+                      o.status,
+                      o.special_requests,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    right={
+                      <span
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center text-action"
+                        aria-hidden
+                      >
+                        <Pencil className="h-4 w-4" strokeWidth={1.8} />
+                      </span>
+                    }
+                    onClick={() => setOrderModal({ room, editing: o })}
+                  />
+                ))
+              )
+            ) : !hasExtras ? (
+              <div className="border-t border-border px-4 py-3 space-y-2">
+                <p className="text-caption">
+                  No {mealTitle(mealPeriod).toLowerCase()} fruits or extras yet. Same options as breakfast —
+                  saved only for this meal.
+                </p>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setExtrasModal({ room, meal: mealPeriod })}
+                >
+                  <Apple className="h-4 w-4" aria-hidden />
+                  Add {mealTitle(mealPeriod).toLowerCase()} fruits & extras
+                </Button>
+              </div>
+            ) : null}
+
+            {hasExtras ? (
+              <div className="border-t border-border">
+                <p className="px-4 py-2 text-label">{mealTitle(mealPeriod)} fruits & extras</p>
+                {extras.fruits.length > 0 ? (
+                  <p className="px-4 pb-2 text-caption">Fruits: {extras.fruits.join(", ")}</p>
+                ) : null}
+                {(extras.selected_lines ?? []).map((line) => (
+                  <ListRow
+                    key={line.stock_item_id}
+                    primary={line.name ?? "Extra"}
+                    secondary={[
+                      `${line.quantity} ${line.unit ?? ""}`.trim(),
+                      line.show_on_kot ? "on KOT" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    right={
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                        aria-label={`Remove ${line.name ?? "extra"}`}
+                        onClick={() => void removeExtraLine(room, mealPeriod, line.stock_item_id)}
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            ) : null}
+          </PanelCard>
+        );
+      })}
 
       <Modal
         open={!!orderModal}
@@ -280,17 +365,20 @@ export function KitchenOrdersPage() {
       </Modal>
 
       <Modal
-        open={!!extrasRoom}
-        title={`Room ${extrasRoom?.number ?? ""} fruits & extras`}
-        onClose={() => setExtrasRoom(null)}
+        open={!!extrasModal}
+        title={`Room ${extrasModal?.room.number ?? ""} · ${mealTitle(
+          extrasModal?.meal ?? "breakfast",
+        )} fruits & extras`}
+        onClose={() => setExtrasModal(null)}
       >
-        {extrasRoom ? (
+        {extrasModal ? (
           <ExtrasForm
             date={date}
-            room={extrasRoom}
+            room={extrasModal.room}
+            mealPeriod={extrasModal.meal}
             options={day?.extra_options ?? []}
             onDone={(shopping) => {
-              setExtrasRoom(null);
+              setExtrasModal(null);
               noteShopping(shopping);
               void load().catch(() => {});
             }}
@@ -592,18 +680,12 @@ function defaultQty(opt: RoomExtraOptionDto) {
   return n > 0 ? n : 1;
 }
 
-function isPancakeOption(opt: { code?: string | null; name?: string }) {
-  const code = (opt.code ?? "").toLowerCase();
-  if (code === "pancake" || code === "pancake_batch" || code === "pancakes") return true;
-  return (opt.name ?? "").toLowerCase().includes("pancake");
-}
-
 function initialSelectedLines(
-  room: KitchenDayRoomDto,
+  extras: RoomDayExtrasDto,
   options: RoomExtraOptionDto[],
 ): RoomExtraSelectionDto[] {
-  if ((room.extras.selected_lines ?? []).length) {
-    return room.extras.selected_lines.map((l) => {
+  if ((extras.selected_lines ?? []).length) {
+    return extras.selected_lines.map((l) => {
       const opt = options.find((o) => o.stock_item_id === l.stock_item_id);
       return {
         ...l,
@@ -629,11 +711,11 @@ function initialSelectedLines(
       show_on_kot: opt.show_on_kot,
     });
   };
-  if (room.extras.honey) push("honey");
-  if (room.extras.nutella) push("nutella");
-  if (room.extras.cereal) push("cornflakes");
-  if (room.extras.water_bottle) push("water_bottle");
-  if (room.extras.pancake) {
+  if (extras.honey) push("honey");
+  if (extras.nutella) push("nutella");
+  if (extras.cereal) push("cornflakes");
+  if (extras.water_bottle) push("water_bottle");
+  if (extras.pancake) {
     for (const code of ["pancake_batch", "pancake", "pancakes"]) {
       if (byCode.has(code)) {
         push(code);
@@ -647,18 +729,23 @@ function initialSelectedLines(
 function ExtrasForm({
   date,
   room,
+  mealPeriod,
   options,
   onDone,
   onError,
 }: {
   date: string;
   room: KitchenDayRoomDto;
+  mealPeriod: MealPeriod;
   options: RoomExtraOptionDto[];
   onDone: (shopping?: ShoppingSummaryDto) => void;
   onError: (s: string) => void;
 }) {
-  const [fruits, setFruits] = useState<string[]>(room.extras.fruits);
-  const [lines, setLines] = useState<RoomExtraSelectionDto[]>(() => initialSelectedLines(room, options));
+  const extras = extrasForMeal(room, mealPeriod);
+  const [fruits, setFruits] = useState<string[]>(extras.fruits);
+  const [lines, setLines] = useState<RoomExtraSelectionDto[]>(() =>
+    initialSelectedLines(extras, options),
+  );
   const [saving, setSaving] = useState(false);
   const available = options.filter((o) => !lines.some((l) => l.stock_item_id === o.stock_item_id));
 
@@ -670,12 +757,14 @@ function ExtrasForm({
     });
   }
 
-  /** Add with recipe default qty (usually 1); count stays editable on the list. */
+  /** Add recipe default qty (Qty when selected); further Adds increment by that amount. */
   function addWithDefault(opt: RoomExtraOptionDto) {
     const qty = defaultQty(opt);
     setLines((prev) => {
       if (prev.some((l) => l.stock_item_id === opt.stock_item_id)) {
-        return prev.map((l) => (l.stock_item_id === opt.stock_item_id ? { ...l, quantity: qty } : l));
+        return prev.map((l) =>
+          l.stock_item_id === opt.stock_item_id ? { ...l, quantity: l.quantity + qty } : l,
+        );
       }
       return [
         ...prev,
@@ -718,6 +807,7 @@ function ExtrasForm({
         body: JSON.stringify({
           date,
           room_id: room.id,
+          meal_period: mealPeriod,
           fruits,
           selected_lines: lines.map((l) => ({
             stock_item_id: l.stock_item_id,
@@ -735,7 +825,10 @@ function ExtrasForm({
 
   return (
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
-      <p className="text-caption">Every room may take 2–3 fruit types.</p>
+      <p className="text-caption">
+        {mealTitle(mealPeriod)} only — fruits and extras for this meal do not copy to other meals. Every room
+        may take 2–3 fruit types.
+      </p>
       <div className="grid grid-cols-2 gap-1">
         {fruitOpts.map((f) => (
           <label key={f.id} className="flex min-h-11 items-center gap-2 text-sm text-ink">
@@ -748,7 +841,8 @@ function ExtrasForm({
       <div className="space-y-2">
         <p className="text-label">Added extras</p>
         <p className="text-caption">
-          Qty starts from the recipe default (e.g. 1 batch). Edit the count, then Save.
+          Qty starts from Recipes → Qty when selected. Tap Add again to add that amount, or edit Count,
+          then Save.
         </p>
         {lines.length ? (
           lines.map((line) => (
@@ -761,7 +855,6 @@ function ExtrasForm({
                 <p className="text-caption">
                   {line.unit ?? ""}
                   {line.show_on_kot ? " · on KOT" : " · stock only"}
-                  {isPancakeOption(line) ? " · each = 20 pieces on KOT" : ""}
                 </p>
               </div>
               <div className="w-28">
@@ -803,7 +896,6 @@ function ExtrasForm({
                   <p className="text-caption">
                     Default {defaultQty(opt)} {opt.unit}
                     {opt.show_on_kot ? " · on KOT" : ""}
-                    {isPancakeOption(opt) ? " · 20 pcs / batch" : ""}
                   </p>
                 </div>
                 <Button
@@ -838,7 +930,7 @@ function ExtrasForm({
       )}
 
       <Button type="submit" disabled={saving}>
-        {saving ? "Saving…" : "Save extras"}
+        {saving ? "Saving…" : `Save ${mealTitle(mealPeriod).toLowerCase()} extras`}
       </Button>
     </form>
   );

@@ -231,7 +231,7 @@ stockRouter.get(
           expenditure: 0,
           unit_cost: null as number | null,
           balance: opening,
-          below_min: opening < dec(item.minStock),
+          below_min: dec(item.minStock) > 0 && opening <= dec(item.minStock),
           ledger_id: null as string | null,
         });
       } else {
@@ -255,7 +255,7 @@ stockRouter.get(
           expenditure: dec(ledger.expenditure),
           unit_cost: ledger.unitCost != null ? dec(ledger.unitCost) : null,
           balance: bal,
-          below_min: bal < dec(item.minStock),
+          below_min: dec(item.minStock) > 0 && bal <= dec(item.minStock),
           ledger_id: ledger.id,
         });
       }

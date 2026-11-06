@@ -606,12 +606,20 @@ model BreakfastOrder {
   @@map("breakfast_orders")
 }
 
-/// Per-room fruits and extras for a breakfast date (PDF: every room gets fruits/extras).
+enum MealPeriod {
+  breakfast
+  lunch
+  dinner
+}
+
+/// Per-room fruits and extras for a date + meal (breakfast / lunch / dinner).
 model RoomDayExtras {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @map("user_id") @db.Uuid
   roomId       String   @map("room_id") @db.Uuid
   date         DateTime @db.Date
+  /// Independent fruits/extras bag for this meal period.
+  mealPeriod   MealPeriod @default(breakfast) @map("meal_period")
   /// Subset of: watermelon, apple, papaya, orange (2–3 types)
   fruits       String[] @default([])
   /// Stock item ids selected from room_extras recipe lines (legacy; prefer selectedLines).
@@ -629,7 +637,7 @@ model RoomDayExtras {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, roomId, date])
+  @@unique([userId, roomId, date, mealPeriod])
   @@index([userId, date])
   @@map("room_day_extras")
 }

@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
 import { ChangeTag, ListRow, PanelCard, SegmentedControl } from "@/components/design";
@@ -16,9 +16,13 @@ function fmt(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, "");
 }
 
+type StockLevelFilter = "all" | "low";
+
 export function StockInventoryPage() {
   const [date, setDate] = useState(todayYmd);
   const [kind, setKind] = useState<"all" | "kitchen" | "other">("all");
+  const [levelFilter, setLevelFilter] = useState<StockLevelFilter>("all");
+  const [search, setSearch] = useState("");
   const [rows, setRows] = useState<StockInventoryRowDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -38,12 +42,29 @@ export function StockInventoryPage() {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Failed"));
   }, [load]);
 
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...rows]
+      .filter((r) => {
+        if (levelFilter === "low" && !r.below_min) return false;
+        if (!q) return true;
+        return (
+          r.name.toLowerCase().includes(q) ||
+          (r.code ?? "").toLowerCase().includes(q) ||
+          (r.use_notes ?? "").toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [rows, search, levelFilter]);
+
+  const lowCount = useMemo(() => rows.filter((r) => r.below_min).length, [rows]);
+
   function downloadInventory() {
     downloadText(
       `inventory-${date}.csv`,
       toCsv(
         ["Item", "Unit", "Opening", "Received", "Used", "Balance", "Min Stock", "Waste", "Expenditure", "Use", "Kind"],
-        rows.map((r) => [
+        visibleRows.map((r) => [
           r.name,
           r.unit,
           r.opening,
@@ -113,6 +134,27 @@ export function StockInventoryPage() {
         ]}
       />
 
+      <SegmentedControl
+        aria-label="Stock level"
+        value={levelFilter}
+        onChange={setLevelFilter}
+        options={[
+          { value: "all", label: "All levels" },
+          {
+            value: "low",
+            label: lowCount > 0 ? `At / below min (${lowCount})` : "At / below min",
+          },
+        ]}
+      />
+
+      <TextField
+        label="Search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search by name, code, or notes"
+        autoComplete="off"
+      />
+
       <div className="flex flex-wrap gap-2">
         <Button type="button" className="gap-2" onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" aria-hidden />
@@ -131,20 +173,28 @@ export function StockInventoryPage() {
 
       <PanelCard
         title="Stock items"
-        caption={`${rows.length} items · ${date} · Edit name, quantities, or delete`}
+        caption={`${visibleRows.length} shown · A–Z · ${date}${
+          levelFilter === "low" ? " · low stock only" : ""
+        } · Edit name, quantities, or delete`}
         headerRight={
           <Link to="/kitchen/recipes" className="inline-flex min-h-11 items-center text-sm font-semibold text-action">
             Recipes
           </Link>
         }
       >
-        {rows.map((r) => (
+        {visibleRows.map((r) => (
           <ListRow
             key={r.stock_item_id}
-            primary={r.name}
+            className={r.below_min ? "bg-debit-bg/60" : undefined}
+            primary={
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span>{r.name}</span>
+                {r.below_min ? <ChangeTag variant="negative">Low</ChangeTag> : null}
+              </span>
+            }
             secondary={`${r.unit} · Open ${fmt(r.opening)} · Rec ${fmt(r.received)} · Used ${fmt(r.used)}${
               r.use_notes ? ` · ${r.use_notes}` : ""
-            }`}
+            }${r.below_min ? ` · Min ${fmt(r.min_stock)}` : ""}`}
             right={
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1">
@@ -166,8 +216,16 @@ export function StockInventoryPage() {
                     <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
                   </button>
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-ink">Bal {fmt(r.balance)}</span>
-                {r.below_min ? <ChangeTag variant="negative">Low</ChangeTag> : (
+                <span
+                  className={`text-sm font-semibold tabular-nums ${
+                    r.below_min ? "text-debit" : "text-ink"
+                  }`}
+                >
+                  Bal {fmt(r.balance)}
+                </span>
+                {r.below_min ? (
+                  <span className="text-caption text-debit">At / below min {fmt(r.min_stock)}</span>
+                ) : (
                   <span className="text-caption">Min {fmt(r.min_stock)}</span>
                 )}
               </div>
@@ -182,6 +240,10 @@ export function StockInventoryPage() {
               Add first stock item
             </Button>
           </div>
+        ) : !visibleRows.length ? (
+          <p className="border-t border-border px-4 py-3 text-caption">
+            No items match this search or filter.
+          </p>
         ) : null}
       </PanelCard>
 

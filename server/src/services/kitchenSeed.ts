@@ -94,8 +94,15 @@ export const PDF_STOCK_CATALOG: Array<{
     code: "potatoes",
     name: "Potatoes",
     unit: "Kg",
-    useNotes: "200 g (0.2 kg) per Maldivian meal with potato.",
+    useNotes: "200 g (0.2 kg) per Maldivian meal or potato-portion extra.",
     sortOrder: 120,
+  },
+  {
+    code: "potato_portion",
+    name: "Potato portion",
+    unit: "Number",
+    useNotes: "Room extra: 1 portion uses 0.2 kg potatoes.",
+    sortOrder: 125,
   },
   {
     code: "sunquick",
@@ -225,9 +232,10 @@ export const PDF_STOCK_CATALOG: Array<{
   },
   {
     code: "pancake_batch",
-    name: "Pancakes (20-piece batch)",
-    unit: "Batch",
-    useNotes: "When selected as a room extra: flour 0.25 kg, 4 eggs, baking powder, sugar, banana essence.",
+    name: "Pancakes",
+    unit: "Number",
+    useNotes:
+      "Room extra counted in pieces (Qty when selected). Batter ingredients scale at 20 pieces = 1 batch (0.25 kg flour, 4 eggs, etc.).",
     sortOrder: 285,
   },
   {
@@ -303,6 +311,7 @@ export async function ensureKitchenStockSeed(userId: string) {
   }
 
   await ensureDefaultRecipes(userId);
+  await ensureRoomExtrasPatches(userId);
 
   const rooms = await prisma.room.findMany({
     where: { userId },
@@ -404,7 +413,13 @@ async function ensureDefaultRecipes(userId: string) {
       {
         stockCode: "pancake_batch",
         qty: 1,
-        notes: "Triggers 20-piece pancake prep on KOT",
+        notes: "Counted in pieces on KOT; set Qty when selected for each Add",
+        showOnKot: true,
+      },
+      {
+        stockCode: "potato_portion",
+        qty: 1,
+        notes: "Stir-fried potato portion (uses 0.2 kg potatoes)",
         showOnKot: true,
       },
       { stockCode: "honey", qty: 1, notes: "When honey selected", showOnKot: true },
@@ -413,4 +428,81 @@ async function ensureDefaultRecipes(userId: string) {
       { stockCode: "water_bottle", qty: 1, notes: "When water bottle selected", showOnKot: true },
     ],
   });
+}
+
+/**
+ * Patch older pancake/potato extras without overwriting other user recipe edits.
+ * Safe to call on every ensureKitchenStockSeed.
+ */
+export async function ensureRoomExtrasPatches(userId: string) {
+  const pancake = await prisma.stockItem.findUnique({
+    where: { userId_code: { userId, code: "pancake_batch" } },
+  });
+  if (pancake && (pancake.name.includes("20-piece") || pancake.unit === "Batch")) {
+    await prisma.stockItem.update({
+      where: { id: pancake.id },
+      data: {
+        name: "Pancakes",
+        unit: "Number",
+        useNotes:
+          "Room extra counted in pieces (Qty when selected). Batter ingredients scale at 20 pieces = 1 batch.",
+      },
+    });
+  }
+
+  let potatoPortion = await prisma.stockItem.findUnique({
+    where: { userId_code: { userId, code: "potato_portion" } },
+  });
+  if (!potatoPortion) {
+    potatoPortion = await prisma.stockItem.create({
+      data: {
+        userId,
+        code: "potato_portion",
+        name: "Potato portion",
+        unit: "Number",
+        kind: "kitchen",
+        minStock: 0,
+        useNotes: "Room extra: 1 portion uses 0.2 kg potatoes.",
+        sortOrder: 125,
+      },
+    });
+  }
+
+  const recipe = await prisma.recipe.findUnique({
+    where: { userId_code: { userId, code: "room_extras" } },
+    include: { lines: { include: { stockItem: true } } },
+  });
+  if (!recipe) return;
+
+  if (pancake) {
+    for (const line of recipe.lines) {
+      if (
+        line.stockItemId === pancake.id &&
+        (line.notes ?? "").toLowerCase().includes("20-piece")
+      ) {
+        await prisma.recipeLine.update({
+          where: { id: line.id },
+          data: {
+            notes: "Counted in pieces on KOT; set Qty when selected for each Add",
+            qtyPerServing: 1,
+          },
+        });
+      }
+    }
+  }
+
+  const hasPotatoPortion = recipe.lines.some(
+    (l) => l.stockItem?.code === "potato_portion" || l.stockItemId === potatoPortion!.id,
+  );
+  if (!hasPotatoPortion) {
+    await prisma.recipeLine.create({
+      data: {
+        recipeId: recipe.id,
+        stockItemId: potatoPortion.id,
+        qtyPerServing: 1,
+        notes: "Stir-fried potato portion (uses 0.2 kg potatoes)",
+        showOnKot: true,
+      },
+    });
+  }
 }

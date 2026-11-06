@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { MealPeriod } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { dec, parseYmd, ymd } from "../lib/dates.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -27,6 +28,12 @@ kitchenRouter.use(requireAuth);
 kitchenRouter.use(scopeOrganizationData);
 
 const fruitEnum = z.enum(["watermelon", "apple", "papaya", "orange"]);
+const mealPeriodEnum = z.enum(["breakfast", "lunch", "dinner"]);
+const MEAL_PERIODS = ["breakfast", "lunch", "dinner"] as const satisfies readonly MealPeriod[];
+
+function mealLabel(period: MealPeriod) {
+  return period === "breakfast" ? "Breakfast" : period === "lunch" ? "Lunch" : "Dinner";
+}
 
 function mapOrder(o: {
   id: string;
@@ -132,8 +139,11 @@ function toExtrasLikes(
 ): ExtrasLike[] {
   return extras.map((e) => {
     const selectedLines = parseSelectedLines(e.selectedLines);
+    const period = e.mealPeriod ?? "breakfast";
     return {
-      roomNumber: e.room.number,
+      roomNumber:
+        period === "breakfast" ? e.room.number : `${e.room.number} (${mealLabel(period)})`,
+      mealPeriod: period,
       fruits: e.fruits,
       selectedLines,
       selectedItemIds: e.selectedItemIds?.length
@@ -222,9 +232,32 @@ function legacyFlagsFromSelected(
   };
 }
 
+function emptyExtrasDto(mealPeriod: MealPeriod = "breakfast") {
+  return {
+    id: null as string | null,
+    meal_period: mealPeriod,
+    fruits: [] as string[],
+    selected_item_ids: [] as string[],
+    selected_lines: [] as Array<{
+      stock_item_id: string;
+      quantity: number;
+      name?: string;
+      unit?: string;
+      code?: string | null;
+      show_on_kot?: boolean;
+    }>,
+    pancake: false,
+    honey: false,
+    nutella: false,
+    cereal: false,
+    water_bottle: false,
+  };
+}
+
 function mapExtrasDto(
   ex: {
     id: string;
+    mealPeriod?: MealPeriod;
     fruits: string[];
     selectedItemIds?: string[];
     selectedLines?: unknown;
@@ -241,27 +274,9 @@ function mapExtrasDto(
     code: string | null;
     show_on_kot: boolean;
   }> = [],
+  mealPeriod: MealPeriod = "breakfast",
 ) {
-  if (!ex) {
-    return {
-      id: null as string | null,
-      fruits: [] as string[],
-      selected_item_ids: [] as string[],
-      selected_lines: [] as Array<{
-        stock_item_id: string;
-        quantity: number;
-        name?: string;
-        unit?: string;
-        code?: string | null;
-        show_on_kot?: boolean;
-      }>,
-      pancake: false,
-      honey: false,
-      nutella: false,
-      cereal: false,
-      water_bottle: false,
-    };
-  }
+  if (!ex) return emptyExtrasDto(mealPeriod);
   const byId = new Map(options.map((o) => [o.stock_item_id, o]));
   let lines = parseSelectedLines(ex.selectedLines).map((l) => {
     const opt = byId.get(l.stockItemId);
@@ -289,6 +304,7 @@ function mapExtrasDto(
   }
   return {
     id: ex.id,
+    meal_period: ex.mealPeriod ?? mealPeriod,
     fruits: ex.fruits,
     selected_item_ids: lines.map((l) => l.stock_item_id),
     selected_lines: lines,
@@ -297,6 +313,38 @@ function mapExtrasDto(
     nutella: ex.nutella,
     cereal: ex.cereal,
     water_bottle: ex.waterBottle,
+  };
+}
+
+function extrasByMealDto(
+  rows: Array<{
+    id: string;
+    roomId: string;
+    mealPeriod: MealPeriod;
+    fruits: string[];
+    selectedItemIds?: string[];
+    selectedLines?: unknown;
+    pancake: boolean;
+    honey: boolean;
+    nutella: boolean;
+    cereal: boolean;
+    waterBottle: boolean;
+  }>,
+  roomId: string,
+  options: Array<{
+    stock_item_id: string;
+    name: string;
+    unit: string;
+    code: string | null;
+    show_on_kot: boolean;
+  }>,
+) {
+  const forRoom = rows.filter((e) => e.roomId === roomId);
+  const byPeriod = new Map(forRoom.map((e) => [e.mealPeriod, e]));
+  return {
+    breakfast: mapExtrasDto(byPeriod.get("breakfast") ?? null, options, "breakfast"),
+    lunch: mapExtrasDto(byPeriod.get("lunch") ?? null, options, "lunch"),
+    dinner: mapExtrasDto(byPeriod.get("dinner") ?? null, options, "dinner"),
   };
 }
 
@@ -392,16 +440,16 @@ kitchenRouter.get(
     ]);
 
     const dayByRoom = new Map(roomDays.map((d) => [d.roomId, d]));
-    const extrasByRoom = new Map(extras.map((e) => [e.roomId, e]));
 
     res.json({
       date: dateStr,
       serving_times: normalServingTimes(),
+      meal_periods: MEAL_PERIODS,
       extra_options: extraCatalog.options,
       rooms: rooms.map((r) => {
         const day = dayByRoom.get(r.id);
-        const ex = extrasByRoom.get(r.id);
         const roomOrders = orders.filter((o) => o.roomId === r.id);
+        const byMeal = extrasByMealDto(extras, r.id, extraCatalog.options);
         return {
           id: r.id,
           number: r.number,
@@ -409,7 +457,8 @@ kitchenRouter.get(
           notes: day?.notes ?? null,
           breakfast_participants: roomOrders.filter((o) => o.status !== "cancelled").length,
           orders: roomOrders.map(mapOrder),
-          extras: mapExtrasDto(ex ?? null, extraCatalog.options),
+          extras: byMeal.breakfast,
+          extras_by_meal: byMeal,
         };
       }),
     });
@@ -659,6 +708,8 @@ const extrasLineSchema = z.object({
 const extrasSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   room_id: z.string().uuid(),
+  /** Defaults to breakfast for older clients. */
+  meal_period: mealPeriodEnum.default("breakfast"),
   fruits: z.array(fruitEnum).min(0).max(3),
   selected_lines: z.array(extrasLineSchema).default([]),
   /** Legacy — converted to qty 1 lines when selected_lines empty. */
@@ -712,12 +763,21 @@ kitchenRouter.put(
     };
 
     const date = parseYmd(body.date);
+    const mealPeriod = body.meal_period;
     const row = await prisma.roomDayExtras.upsert({
-      where: { userId_roomId_date: { userId, roomId: body.room_id, date } },
+      where: {
+        userId_roomId_date_mealPeriod: {
+          userId,
+          roomId: body.room_id,
+          date,
+          mealPeriod,
+        },
+      },
       create: {
         userId,
         roomId: body.room_id,
         date,
+        mealPeriod,
         fruits: body.fruits,
         selectedItemIds: selectedIds,
         selectedLines,
@@ -742,7 +802,7 @@ kitchenRouter.put(
     await applyKitchenUsageForDate(userId, dateStr);
     const shopping = await shoppingSummaryForDate(userId, dateStr);
     res.json({
-      ...mapExtrasDto(row, options),
+      ...mapExtrasDto(row, options, mealPeriod),
       room_id: row.roomId,
       date: dateStr,
       shopping,

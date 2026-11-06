@@ -391,31 +391,18 @@ export function KitchenSummariesPage() {
         <div className="border-t border-border px-4 py-3">
           <p className="text-label">Extras on KOT</p>
           <p className="mt-0.5 text-caption">
-            Configured in Recipes → Room extras (Show on KOT). Chosen per room on Breakfast orders.
+            Configured in Recipes → Room extras (Show on KOT). Chosen per room for breakfast, lunch, and dinner.
           </p>
         </div>
-        {kotExtras.map((e) => {
-          const pancake =
-            e.code === "pancake" ||
-            e.code === "pancake_batch" ||
-            e.code === "pancakes" ||
-            e.name.toLowerCase().includes("pancake");
-          return (
-            <ListRow
-              key={`${e.code ?? e.name}-${e.rooms.join("-")}`}
-              primary={e.name}
-              secondary={[
-                `Rooms ${e.rooms.join(", ")}`,
-                e.unit || null,
-                pancake ? `${e.quantity * 20} pieces` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              right={<span className="text-sm font-semibold tabular-nums text-ink">{e.quantity}</span>}
-              rightSecondary={pancake ? "batches" : e.unit || undefined}
-            />
-          );
-        })}
+        {kotExtras.map((e) => (
+          <ListRow
+            key={`${e.code ?? e.name}-${e.rooms.join("-")}`}
+            primary={e.name}
+            secondary={[`Rooms ${e.rooms.join(", ")}`, e.unit || null].filter(Boolean).join(" · ")}
+            right={<span className="text-sm font-semibold tabular-nums text-ink">{e.quantity}</span>}
+            rightSecondary={e.unit || undefined}
+          />
+        ))}
         {k && kotExtras.length === 0 ? (
           <p className="border-t border-border px-4 py-3 text-caption">
             No extras selected for this date (or none marked Show on KOT).

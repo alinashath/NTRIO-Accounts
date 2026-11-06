@@ -308,7 +308,7 @@ function RecipeForm({
       />
       <p className="text-caption">
         {applyTo === "room_extras"
-          ? "These items become the choosable extras on Breakfast orders. Turn on Show on KOT for lines that kitchen should see on the plan."
+          ? "These items become the choosable extras on Breakfast, Lunch, and Dinner orders. Turn on Show on KOT for lines that kitchen should see on the plan."
           : "Qty is per guest / serving. Saving updates shopping and inventory when breakfast orders use this type."}
       </p>
       <TextField label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />

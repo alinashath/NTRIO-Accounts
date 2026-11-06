@@ -436,8 +436,13 @@ export interface RoomExtraSelectionDto {
   show_on_kot?: boolean;
 }
 
+export type MealPeriod = "breakfast" | "lunch" | "dinner";
+
+export const MEAL_PERIODS: readonly MealPeriod[] = ["breakfast", "lunch", "dinner"] as const;
+
 export interface RoomDayExtrasDto {
   id: string | null;
+  meal_period: MealPeriod;
   fruits: string[];
   /** @deprecated Prefer selected_lines. Kept for older clients. */
   selected_item_ids: string[];
@@ -450,6 +455,8 @@ export interface RoomDayExtrasDto {
   water_bottle: boolean;
 }
 
+export type RoomExtrasByMealDto = Record<MealPeriod, RoomDayExtrasDto>;
+
 export interface KitchenDayRoomDto {
   id: string;
   number: string;
@@ -457,7 +464,10 @@ export interface KitchenDayRoomDto {
   notes: string | null;
   breakfast_participants: number;
   orders: BreakfastOrderDto[];
+  /** Breakfast extras (compat alias of extras_by_meal.breakfast). */
   extras: RoomDayExtrasDto;
+  /** Fruits & extras independently for breakfast, lunch, and dinner. */
+  extras_by_meal: RoomExtrasByMealDto;
 }
 
 export interface KitchenDayDto {

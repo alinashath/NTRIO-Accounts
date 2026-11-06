@@ -28,6 +28,8 @@ export type ExtraSelectionLike = {
 
 export type ExtrasLike = {
   roomNumber: string;
+  /** breakfast | lunch | dinner — used for labels; all meals feed stock/KOT. */
+  mealPeriod?: "breakfast" | "lunch" | "dinner";
   fruits: string[];
   /** Configurable extras with quantities (stock units). */
   selectedLines: ExtraSelectionLike[];
@@ -136,14 +138,15 @@ export function computeKitchenPrep(
   }
 
   for (const e of extras) {
-    let batches = 0;
+    let pieces = 0;
     for (const line of e.selectedLines) {
       if (line.quantity > 0 && pancakeStockItemIds.has(line.stockItemId)) {
-        batches += line.quantity;
+        pieces += line.quantity;
       }
     }
-    if (batches > 0) prep.pancakes += batches * 20;
-    else if (e.pancake) prep.pancakes += 20;
+    // Quantity is the user-set amount (recipe “Qty when selected”), not a forced ×20 batch.
+    if (pieces > 0) prep.pancakes += pieces;
+    else if (e.pancake) prep.pancakes += 1;
   }
 
   return prep;
@@ -365,7 +368,8 @@ export function computeIngredientNeeds(
   const roomExtraById = new Map(roomExtraLines.map((l) => [l.stock_item_id, l]));
   const hasRoomExtraRecipe = roomExtraLines.length > 0;
 
-  let pancakeBatches = 0;
+  /** Pancake batter recipe is sized for 20 pieces; scale by selected piece count. */
+  let pancakePieces = 0;
   for (const e of extras) {
     if (hasRoomExtraRecipe) {
       const selected = resolveSelectedExtras(e, roomExtraLines);
@@ -378,11 +382,15 @@ export function computeIngredientNeeds(
         if (isPancakeExtraLine(line)) {
           pancakeFromSelection += sel.quantity;
         }
+        // Potato portion extra → 0.2 kg potatoes each (same as Maldivian potato serving).
+        if ((line.code ?? "").toLowerCase() === "potato_portion") {
+          addByCode(map, "potatoes", sel.quantity * 0.2);
+        }
       }
-      if (pancakeFromSelection > 0) pancakeBatches += pancakeFromSelection;
-      else if (e.pancake) pancakeBatches += 1;
+      if (pancakeFromSelection > 0) pancakePieces += pancakeFromSelection;
+      else if (e.pancake) pancakePieces += 1;
     } else {
-      if (e.pancake) pancakeBatches += 1;
+      if (e.pancake) pancakePieces += 1;
       if (e.honey) addByCode(map, "honey", 1);
       if (e.nutella) addByCode(map, "nutella", 1);
       if (e.cereal) addByCode(map, "cornflakes", 1);
@@ -396,12 +404,13 @@ export function computeIngredientNeeds(
     }
   }
 
-  if (pancakeBatches > 0) {
-    addByCode(map, "flour", pancakeBatches * 0.25);
-    addByCode(map, "eggs", pancakeBatches * 4);
-    addByCode(map, "baking_powder", pancakeBatches * 2 * TSP_G);
-    addByCode(map, "sugar_g", pancakeBatches * 200);
-    addByCode(map, "banana_essence", pancakeBatches * 15);
+  if (pancakePieces > 0) {
+    const batches = pancakePieces / 20;
+    addByCode(map, "flour", batches * 0.25);
+    addByCode(map, "eggs", batches * 4);
+    addByCode(map, "baking_powder", batches * 2 * TSP_G);
+    addByCode(map, "sugar_g", batches * 200);
+    addByCode(map, "banana_essence", batches * 15);
   }
 
   return [...map.values()].filter((l) => l.quantity > 0);

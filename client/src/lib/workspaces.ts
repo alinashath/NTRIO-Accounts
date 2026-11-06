@@ -20,7 +20,7 @@ export const WORKSPACE_META: Record<
   },
   kitchen: {
     title: "Kitchen",
-    description: "Breakfast orders, server summary, KOT",
+    description: "Breakfast, lunch & dinner extras, server summary, KOT",
     to: WORKSPACE_MODULE_PATH.kitchen,
   },
   stock: {
