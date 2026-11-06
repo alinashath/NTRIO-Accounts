@@ -4,12 +4,23 @@ import { Filter } from "lucide-react";
 import { apiFetch } from "@/api/http";
 import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
+import {
+  emptyGstInvoiceState,
+  emptyGstWithDefaultRate,
+  GstInvoiceFields,
+  gstBreakdownTotal,
+  gstStateFromEntry,
+  gstStateToPayload,
+  hasGstData,
+  validateGstBreakdown,
+  type GstInvoiceState,
+} from "@/components/GstInvoiceFields";
 import { ReceiptAttachmentField } from "@/components/ReceiptAttachmentField";
 import { SkeletonLine, SkeletonTableRows } from "@/components/Skeleton";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
 import { ReceiptPreviewIcon } from "@/components/ReceiptPreviewIcon";
 import { ProjectFilter } from "@/components/ProjectFilter";
-import { Button, Card, FormActions, FormStepHeader, TextField } from "@/components/ui";
+import { Button, Card, ChoiceList, FormActions, FormStepHeader, TextField } from "@/components/ui";
 import { appendProjectFilter, useProjects } from "@/context/ProjectsContext";
 import { ACCOUNT_CURRENCIES } from "@/lib/fx";
 import { useAuthStore } from "@/store/auth";
@@ -623,6 +634,9 @@ function IncomeForm({
   const [projectId, setProjectId] = useState("");
   const [contactId, setContactId] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [taxMode, setTaxMode] = useState<"total" | "gst">("total");
+  const [gst, setGst] = useState<GstInvoiceState>(() => emptyGstInvoiceState());
+  const [amountFollowsGst, setAmountFollowsGst] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const selectedAcc = accounts.find((a) => a.id === accountId);
@@ -632,27 +646,84 @@ function IncomeForm({
     [],
   );
 
-  const stepTitles = ["Account & amount", "Details", "Receipt & save"] as const;
+  const stepTitles = useMemo(
+    () =>
+      taxMode === "gst"
+        ? ([
+            "Account",
+            "Customer & category",
+            "Tax",
+            "GST breakdown",
+            "Total & dates",
+            "Details",
+            "Receipt & save",
+          ] as const)
+        : ([
+            "Account",
+            "Customer & category",
+            "Tax",
+            "Total & dates",
+            "Details",
+            "Receipt & save",
+          ] as const),
+    [taxMode],
+  );
+  const lastStep = stepTitles.length - 1;
+  const classifyStep = 1;
+  const taxStep = 2;
+  const gstStep = taxMode === "gst" ? 3 : -1;
+  const amountStep = taxMode === "gst" ? 4 : 3;
+  const detailsStep = taxMode === "gst" ? 5 : 4;
+  const receiptStep = taxMode === "gst" ? 6 : 5;
 
-  function validateStep0(): string | null {
+  function validateAccount(): string | null {
     if (!receivable && !accountId) return "Select an account.";
+    return null;
+  }
+
+  function validateAmountDates(): string | null {
     const amt = Number(amount);
-    if (!amt || amt <= 0) return "Enter a valid amount.";
+    if (!amt || amt <= 0) return "Enter a valid total.";
     if (!date) return "Pick an earned date.";
     if (!receivable && !receivedDate) return "Pick a received / deposit date.";
     return null;
   }
 
+  function applyGst(next: GstInvoiceState) {
+    setGst(next);
+    if (!amountFollowsGst) return;
+    const total = gstBreakdownTotal(next);
+    if (total != null && total > 0) setAmount(String(total));
+  }
+
   function goNext() {
     onError(null);
     if (step === 0) {
-      const err = validateStep0();
+      const err = validateAccount();
       if (err) {
         onError(err);
         return;
       }
     }
-    setStep((s) => Math.min(s + 1, 2));
+    if (step === gstStep) {
+      const err = validateGstBreakdown(gst);
+      if (err) {
+        onError(err);
+        return;
+      }
+      if (amountFollowsGst) {
+        const total = gstBreakdownTotal(gst);
+        if (total != null && total > 0) setAmount(String(total));
+      }
+    }
+    if (step === amountStep) {
+      const err = validateAmountDates();
+      if (err) {
+        onError(err);
+        return;
+      }
+    }
+    setStep((s) => Math.min(s + 1, lastStep));
   }
 
   function goBack() {
@@ -691,6 +762,7 @@ function IncomeForm({
           project_id: projectId || undefined,
           contact_id: contactId || undefined,
           attachment_url: attachmentUrl.trim() || undefined,
+          ...gstStateToPayload(taxMode === "gst" ? gst : emptyGstInvoiceState()),
         }),
       });
       setAmount("");
@@ -700,6 +772,9 @@ function IncomeForm({
       setProjectId("");
       setContactId("");
       setAttachmentUrl("");
+      setTaxMode("total");
+      setGst(emptyGstInvoiceState());
+      setAmountFollowsGst(true);
       setReceivable(false);
       setIncomeCurrency("USD");
       setReceivedDate(new Date().toISOString().slice(0, 10));
@@ -717,10 +792,10 @@ function IncomeForm({
       className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (step === 2) void submitSave();
+        if (step === lastStep) void submitSave();
       }}
     >
-      <FormStepHeader step={step} total={3} titles={stepTitles} />
+      <FormStepHeader step={step} total={stepTitles.length} titles={[...stepTitles]} />
 
       <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
         {step === 0 ? (
@@ -762,37 +837,20 @@ function IncomeForm({
                 disabled={accountOptions.length === 0}
               />
             )}
-            <TextField
-              label={`Amount (${amountCcy})`}
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-            />
-            <div className="grid gap-form sm:grid-cols-2">
-              <TextField label="Earned date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-              {!receivable ? (
-                <TextField
-                  label="Received / deposit date"
-                  type="date"
-                  value={receivedDate}
-                  onChange={(e) => setReceivedDate(e.target.value)}
-                  required
-                />
-              ) : null}
-            </div>
           </>
         ) : null}
 
-        {step === 1 ? (
+        {step === classifyStep ? (
           <>
-            <TextField
-              label="Description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+            <Dropdown
+              label="Customer / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add customer"
+              onAddNotFound={createCustomerContact}
+              addNotFoundLabel="Add customer"
             />
             <Dropdown
               label="Category (optional)"
@@ -815,20 +873,80 @@ function IncomeForm({
                 addNotFoundLabel="Add project"
               />
             ) : null}
-            <Dropdown
-              label="Customer / contact (optional)"
-              value={contactId}
-              onChange={setContactId}
-              options={contactOptions}
-              required={false}
-              placeholder="None — search or add customer"
-              onAddNotFound={createCustomerContact}
-              addNotFoundLabel="Add customer"
-            />
           </>
         ) : null}
 
-        {step === 2 ? (
+        {step === taxStep ? (
+          <ChoiceList
+            name="tax_mode_i"
+            label="How do you want to enter the amount?"
+            value={taxMode}
+            onChange={(next) => {
+              setTaxMode(next);
+              if (next === "gst") {
+                setGst((g) => (g.gstRate == null ? emptyGstWithDefaultRate() : g));
+                setAmountFollowsGst(true);
+              } else {
+                setGst(emptyGstInvoiceState());
+              }
+            }}
+            options={[
+              { value: "total", label: "Total only", hint: "Enter the invoice total — no GST breakdown" },
+              { value: "gst", label: "With GST", hint: "Rate, subtotal, GST amount, then total" },
+            ]}
+          />
+        ) : null}
+
+        {step === gstStep ? (
+          <GstInvoiceFields
+            value={gst}
+            onChange={applyGst}
+            totalAmount={amount}
+            currencyLabel={amountCcy === "…" ? undefined : amountCcy}
+            defaultOpen
+          />
+        ) : null}
+
+        {step === amountStep ? (
+          <>
+            <TextField
+              label={`Total (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => {
+                setAmountFollowsGst(false);
+                setAmount(e.target.value);
+              }}
+              required
+              hint={taxMode === "gst" ? "Prefilled from GST breakdown — you can change it" : undefined}
+            />
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField label="Earned date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              {!receivable ? (
+                <TextField
+                  label="Received / deposit date"
+                  type="date"
+                  value={receivedDate}
+                  onChange={(e) => setReceivedDate(e.target.value)}
+                  required
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === detailsStep ? (
+          <TextField
+            label="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        ) : null}
+
+        {step === receiptStep ? (
           <ReceiptAttachmentField
             attachmentUrl={attachmentUrl}
             onAttachmentUrlChange={setAttachmentUrl}
@@ -838,7 +956,7 @@ function IncomeForm({
       </div>
 
       <FormActions>
-        {step < 2 ? (
+        {step < lastStep ? (
           <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
             Next
           </Button>
@@ -902,33 +1020,96 @@ function IncomeDetailForm({
   const [source, setSource] = useState(row.source ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
   const [attachmentUrl, setAttachmentUrl] = useState(row.attachment_url ?? "");
+  const initialGst = gstStateFromEntry(row);
+  const [taxMode, setTaxMode] = useState<"total" | "gst">(hasGstData(initialGst) ? "gst" : "total");
+  const [gst, setGst] = useState<GstInvoiceState>(() => initialGst);
+  const [amountFollowsGst, setAmountFollowsGst] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const voided = Boolean(row.voided_at);
-  const stepTitles = ["Account & amount", "Details", "Receipt & manage"] as const;
+  const stepTitles = useMemo(
+    () =>
+      taxMode === "gst"
+        ? ([
+            "Account",
+            "Customer & category",
+            "Tax",
+            "GST breakdown",
+            "Total & dates",
+            "Details",
+            "Receipt & manage",
+          ] as const)
+        : ([
+            "Account",
+            "Customer & category",
+            "Tax",
+            "Total & dates",
+            "Details",
+            "Receipt & manage",
+          ] as const),
+    [taxMode],
+  );
+  const lastStep = stepTitles.length - 1;
+  const classifyStep = 1;
+  const taxStep = 2;
+  const gstStep = taxMode === "gst" ? 3 : -1;
+  const amountStep = taxMode === "gst" ? 4 : 3;
+  const detailsStep = taxMode === "gst" ? 5 : 4;
+  const receiptStep = taxMode === "gst" ? 6 : 5;
   const selectedAcc = accounts.find((a) => a.id === accountId);
   const amountCcy = pending ? row.currency : selectedAcc?.currency ?? row.currency ?? "USD";
 
-  function validateStep0(): string | null {
+  function validateAccount(): string | null {
+    if (voided) return null;
+    if (!pending && !accountId) return "Select an account.";
+    return null;
+  }
+
+  function validateAmountDates(): string | null {
     if (voided) return null;
     const amt = Number(amount);
-    if (!amt || amt <= 0) return "Enter a valid amount.";
-    if (!pending && !accountId) return "Select an account.";
+    if (!amt || amt <= 0) return "Enter a valid total.";
     if (!earnedDate) return "Pick an earned date.";
+    if (!pending && !receivedDate) return "Pick a received / deposit date.";
     return null;
+  }
+
+  function applyGst(next: GstInvoiceState) {
+    setGst(next);
+    if (!amountFollowsGst) return;
+    const total = gstBreakdownTotal(next);
+    if (total != null && total > 0) setAmount(String(total));
   }
 
   function goNext() {
     onError(null);
     if (step === 0) {
-      const err = validateStep0();
+      const err = validateAccount();
       if (err) {
         onError(err);
         return;
       }
     }
-    setStep((s) => Math.min(s + 1, 2));
+    if (step === gstStep) {
+      const err = validateGstBreakdown(gst);
+      if (err) {
+        onError(err);
+        return;
+      }
+      if (amountFollowsGst) {
+        const total = gstBreakdownTotal(gst);
+        if (total != null && total > 0) setAmount(String(total));
+      }
+    }
+    if (step === amountStep) {
+      const err = validateAmountDates();
+      if (err) {
+        onError(err);
+        return;
+      }
+    }
+    setStep((s) => Math.min(s + 1, lastStep));
   }
 
   function goBack() {
@@ -938,10 +1119,24 @@ function IncomeDetailForm({
 
   async function save() {
     if (voided) return;
-    const err = validateStep0();
-    if (err) {
-      onError(err);
+    const accErr = validateAccount();
+    if (accErr) {
+      onError(accErr);
       setStep(0);
+      return;
+    }
+    if (taxMode === "gst") {
+      const gstErr = validateGstBreakdown(gst);
+      if (gstErr) {
+        onError(gstErr);
+        setStep(gstStep);
+        return;
+      }
+    }
+    const amtErr = validateAmountDates();
+    if (amtErr) {
+      onError(amtErr);
+      setStep(amountStep);
       return;
     }
     const amt = Number(amount);
@@ -958,6 +1153,7 @@ function IncomeDetailForm({
         source: source.trim() || undefined,
         notes: notes.trim() || undefined,
         attachment_url: attachmentUrl.trim() || null,
+        ...gstStateToPayload(taxMode === "gst" ? gst : emptyGstInvoiceState()),
       };
       if (!pending) {
         body.account_id = accountId;
@@ -1055,10 +1251,10 @@ function IncomeDetailForm({
       className="flex min-h-0 flex-1 flex-col gap-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (step === 2 && !voided) void save();
+        if (step === lastStep && !voided) void save();
       }}
     >
-      <FormStepHeader step={step} total={3} titles={stepTitles} />
+      <FormStepHeader step={step} total={stepTitles.length} titles={[...stepTitles]} />
 
       <div className="flex min-h-0 flex-1 flex-col gap-form overflow-y-auto overscroll-contain pb-2">
         {voided ? (
@@ -1105,44 +1301,21 @@ function IncomeDetailForm({
                 disabled={voided}
               />
             ) : null}
-            <TextField
-              label={`Amount (${amountCcy})`}
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              disabled={voided}
-            />
-            <div className="grid gap-form sm:grid-cols-2">
-              <TextField
-                label="Earned date"
-                type="date"
-                value={earnedDate}
-                onChange={(e) => setEarnedDate(e.target.value)}
-                disabled={voided}
-              />
-              {!pending ? (
-                <TextField
-                  label="Received / deposit date"
-                  type="date"
-                  value={receivedDate}
-                  onChange={(e) => setReceivedDate(e.target.value)}
-                  disabled={voided}
-                />
-              ) : null}
-            </div>
           </>
         ) : null}
 
-        {step === 1 ? (
+        {step === classifyStep ? (
           <>
-            <TextField
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+            <Dropdown
+              label="Customer / contact (optional)"
+              value={contactId}
+              onChange={setContactId}
+              options={contactOptions}
+              required={false}
+              placeholder="None — search or add customer"
               disabled={voided}
+              onAddNotFound={voided ? undefined : createCustomerContact}
+              addNotFoundLabel="Add customer"
             />
             <Dropdown
               label="Category (optional)"
@@ -1167,16 +1340,87 @@ function IncomeDetailForm({
                 addNotFoundLabel="Add project"
               />
             ) : null}
-            <Dropdown
-              label="Customer / contact (optional)"
-              value={contactId}
-              onChange={setContactId}
-              options={contactOptions}
-              required={false}
-              placeholder="None — search or add customer"
+          </>
+        ) : null}
+
+        {step === taxStep ? (
+          <fieldset disabled={voided} className="disabled:opacity-60">
+            <ChoiceList
+              name="tax_mode_ie"
+              label="How do you want to enter the amount?"
+              value={taxMode}
+              onChange={(next) => {
+                setTaxMode(next);
+                if (next === "gst") {
+                  setGst((g) => (g.gstRate == null ? emptyGstWithDefaultRate() : g));
+                  setAmountFollowsGst(true);
+                } else {
+                  setGst(emptyGstInvoiceState());
+                }
+              }}
+              options={[
+                { value: "total", label: "Total only", hint: "Enter the invoice total — no GST breakdown" },
+                { value: "gst", label: "With GST", hint: "Rate, subtotal, GST amount, then total" },
+              ]}
+            />
+          </fieldset>
+        ) : null}
+
+        {step === gstStep ? (
+          <GstInvoiceFields
+            value={gst}
+            onChange={applyGst}
+            totalAmount={amount}
+            currencyLabel={amountCcy}
+            disabled={voided}
+            defaultOpen
+          />
+        ) : null}
+
+        {step === amountStep ? (
+          <>
+            <TextField
+              label={`Total (${amountCcy})`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => {
+                setAmountFollowsGst(false);
+                setAmount(e.target.value);
+              }}
               disabled={voided}
-              onAddNotFound={voided ? undefined : createCustomerContact}
-              addNotFoundLabel="Add customer"
+              hint={taxMode === "gst" ? "Prefilled from GST breakdown — you can change it" : undefined}
+            />
+            <div className="grid gap-form sm:grid-cols-2">
+              <TextField
+                label="Earned date"
+                type="date"
+                value={earnedDate}
+                onChange={(e) => setEarnedDate(e.target.value)}
+                disabled={voided}
+              />
+              {!pending ? (
+                <TextField
+                  label="Received / deposit date"
+                  type="date"
+                  value={receivedDate}
+                  onChange={(e) => setReceivedDate(e.target.value)}
+                  disabled={voided}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === detailsStep ? (
+          <>
+            <TextField
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={voided}
             />
             <TextField
               label="Source (optional)"
@@ -1193,7 +1437,7 @@ function IncomeDetailForm({
           </>
         ) : null}
 
-        {step === 2 ? (
+        {step === receiptStep ? (
           <>
             {row.attachment_url || attachmentUrl ? (
               <div className="flex items-center gap-2 rounded-sm border border-border px-3 py-2">
@@ -1248,7 +1492,7 @@ function IncomeDetailForm({
       </div>
 
       <FormActions>
-        {step < 2 ? (
+        {step < lastStep ? (
           <Button type="button" className="w-full sm:flex-1" onClick={() => goNext()}>
             Next
           </Button>

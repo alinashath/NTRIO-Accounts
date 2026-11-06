@@ -114,6 +114,11 @@ function mapExpenseListRow(r: {
   notes: string | null;
   tags: string[];
   attachmentUrl: string | null;
+  invoiceNumber: string | null;
+  gstRate: unknown | null;
+  gstSubtotal: unknown | null;
+  gstAmount: unknown | null;
+  zeroRatedAmount: unknown | null;
   voidedAt: Date | null;
   voidReason: string | null;
   recurringId: string | null;
@@ -151,6 +156,11 @@ function mapExpenseListRow(r: {
     notes: r.notes,
     tags: r.tags,
     attachment_url: r.attachmentUrl,
+    invoice_number: r.invoiceNumber,
+    gst_rate: r.gstRate != null ? toMoney(Number(r.gstRate)) : null,
+    gst_subtotal: r.gstSubtotal != null ? toMoney(Number(r.gstSubtotal)) : null,
+    gst_amount: r.gstAmount != null ? toMoney(Number(r.gstAmount)) : null,
+    zero_rated_amount: r.zeroRatedAmount != null ? toMoney(Number(r.zeroRatedAmount)) : null,
     voided_at: r.voidedAt,
     void_reason: r.voidReason,
     recurring_id: r.recurringId,
@@ -249,6 +259,58 @@ const splitSchema = z.object({
   percentage: z.number().optional(),
 });
 
+const gstInvoiceFields = {
+  invoice_number: z.string().max(64).optional().nullable(),
+  gst_rate: z.number().min(0).max(100).optional().nullable(),
+  gst_subtotal: z.number().min(0).optional().nullable(),
+  gst_amount: z.number().min(0).optional().nullable(),
+  zero_rated_amount: z.number().min(0).optional().nullable(),
+};
+
+function gstCreateData(body: {
+  invoice_number?: string | null;
+  gst_rate?: number | null;
+  gst_subtotal?: number | null;
+  gst_amount?: number | null;
+  zero_rated_amount?: number | null;
+}) {
+  return {
+    invoiceNumber: body.invoice_number?.trim() || null,
+    gstRate: body.gst_rate != null ? toMoney(body.gst_rate) : null,
+    gstSubtotal: body.gst_subtotal != null ? toMoney(body.gst_subtotal) : null,
+    gstAmount: body.gst_amount != null ? toMoney(body.gst_amount) : null,
+    zeroRatedAmount: body.zero_rated_amount != null ? toMoney(body.zero_rated_amount) : null,
+  };
+}
+
+function gstUpdateData(body: {
+  invoice_number?: string | null;
+  gst_rate?: number | null;
+  gst_subtotal?: number | null;
+  gst_amount?: number | null;
+  zero_rated_amount?: number | null;
+}) {
+  return {
+    invoiceNumber:
+      body.invoice_number === undefined ? undefined : body.invoice_number?.trim() || null,
+    gstRate: body.gst_rate === undefined ? undefined : body.gst_rate == null ? null : toMoney(body.gst_rate),
+    gstSubtotal:
+      body.gst_subtotal === undefined
+        ? undefined
+        : body.gst_subtotal == null
+          ? null
+          : toMoney(body.gst_subtotal),
+    gstAmount:
+      body.gst_amount === undefined ? undefined : body.gst_amount == null ? null : toMoney(body.gst_amount),
+    zeroRatedAmount:
+      body.zero_rated_amount === undefined
+        ? undefined
+        : body.zero_rated_amount == null
+          ? null
+          : toMoney(body.zero_rated_amount),
+  };
+}
+
 const createSchema = z
   .object({
     amount: z.number().positive(),
@@ -269,6 +331,7 @@ const createSchema = z
     attachment_url: z.string().max(2048).optional().nullable(),
     recurring_id: z.string().uuid().optional(),
     splits: z.array(splitSchema).optional(),
+    ...gstInvoiceFields,
   })
   .refine(
     (b) => {
@@ -387,6 +450,7 @@ expensesRouter.post(
           tags: body.tags ?? [],
           attachmentUrl: body.attachment_url ?? null,
           recurringId: body.recurring_id ?? null,
+          ...gstCreateData(body),
         },
       });
 
@@ -434,6 +498,7 @@ const updateSchema = z.object({
   attachment_url: z.string().max(2048).nullable().optional(),
   recurring_id: z.string().uuid().optional(),
   splits: z.array(splitSchema).optional(),
+  ...gstInvoiceFields,
 });
 
 expensesRouter.put(
@@ -576,6 +641,7 @@ expensesRouter.put(
           tags: body.tags,
           attachmentUrl: body.attachment_url === undefined ? undefined : body.attachment_url,
           recurringId: body.recurring_id,
+          ...gstUpdateData(body),
         },
       });
 

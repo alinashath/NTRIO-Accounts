@@ -217,6 +217,16 @@ export interface IncomeEntryDto {
   notes: string | null;
   tags: string[];
   attachment_url: string | null;
+  /** Optional tax invoice number (MIRA-style). */
+  invoice_number: string | null;
+  /** GST percent (e.g. 8). Null when no tax breakdown. */
+  gst_rate: number | null;
+  /** Value of supplies subject to GST (excl. tax). */
+  gst_subtotal: number | null;
+  /** Tax charged (auto or manual). */
+  gst_amount: number | null;
+  /** Value of zero-rated supplies. */
+  zero_rated_amount: number | null;
   voided_at: string | null;
   void_reason: string | null;
   recurring_id: string | null;
@@ -259,6 +269,16 @@ export interface ExpenseEntryDto {
   notes: string | null;
   tags: string[];
   attachment_url: string | null;
+  /** Optional tax invoice number (MIRA-style). */
+  invoice_number: string | null;
+  /** GST percent (e.g. 8). Null when no tax breakdown. */
+  gst_rate: number | null;
+  /** Value of supplies subject to GST (excl. tax). */
+  gst_subtotal: number | null;
+  /** Tax charged (auto or manual). */
+  gst_amount: number | null;
+  /** Value of zero-rated supplies. */
+  zero_rated_amount: number | null;
   voided_at: string | null;
   void_reason: string | null;
   recurring_id: string | null;

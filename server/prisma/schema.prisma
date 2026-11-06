@@ -302,6 +302,16 @@ model IncomeEntry {
   tags           String[]  @default([])
   attachmentUrl  String?   @map("attachment_url")
   contactId      String?   @map("contact_id") @db.Uuid
+  /// Optional tax invoice number (MIRA-style).
+  invoiceNumber  String?   @map("invoice_number") @db.VarChar(64)
+  /// GST percent (e.g. 8.00). Null when no tax breakdown.
+  gstRate        Decimal?  @map("gst_rate") @db.Decimal(5, 2)
+  /// Value of supplies subject to GST (excl. tax).
+  gstSubtotal    Decimal?  @map("gst_subtotal") @db.Decimal(15, 2)
+  /// Tax charged (auto or manual).
+  gstAmount      Decimal?  @map("gst_amount") @db.Decimal(15, 2)
+  /// Value of zero-rated supplies.
+  zeroRatedAmount Decimal? @map("zero_rated_amount") @db.Decimal(15, 2)
   voidedAt       DateTime? @map("voided_at")
   voidReason     String?   @map("void_reason")
   recurringId    String?   @map("recurring_id") @db.Uuid
@@ -344,6 +354,16 @@ model ExpenseEntry {
   tags           String[]  @default([])
   attachmentUrl  String?   @map("attachment_url")
   contactId      String?   @map("contact_id") @db.Uuid
+  /// Optional tax invoice number (MIRA-style).
+  invoiceNumber  String?   @map("invoice_number") @db.VarChar(64)
+  /// GST percent (e.g. 8.00). Null when no tax breakdown.
+  gstRate        Decimal?  @map("gst_rate") @db.Decimal(5, 2)
+  /// Value of supplies subject to GST (excl. tax).
+  gstSubtotal    Decimal?  @map("gst_subtotal") @db.Decimal(15, 2)
+  /// Tax charged (auto or manual).
+  gstAmount      Decimal?  @map("gst_amount") @db.Decimal(15, 2)
+  /// Value of zero-rated supplies.
+  zeroRatedAmount Decimal? @map("zero_rated_amount") @db.Decimal(15, 2)
   voidedAt       DateTime? @map("voided_at")
   voidReason     String?   @map("void_reason")
   recurringId    String?   @map("recurring_id") @db.Uuid
