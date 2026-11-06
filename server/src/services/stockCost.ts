@@ -17,6 +17,36 @@ export function stockUnitPrice(item: StockPrice | null | undefined): number | nu
   return p >= 0 ? p : null;
 }
 
+/** Cost a list of ingredient needs using id/code → unit price maps. */
+export function costIngredientNeeds(
+  needs: Array<{ stock_item_id: string | null; code: string | null; quantity: number }>,
+  priceById: Map<string, number>,
+  priceByCode: Map<string, number>,
+): { estimated_cost: number | null; cost_incomplete: boolean } {
+  let total = 0;
+  let incomplete = false;
+  let hasPrice = false;
+  for (const need of needs) {
+    if (!(need.quantity > 0)) continue;
+    const price =
+      (need.stock_item_id ? priceById.get(need.stock_item_id) : undefined) ??
+      (need.code ? priceByCode.get(need.code) : undefined);
+    if (price == null) {
+      incomplete = true;
+      continue;
+    }
+    hasPrice = true;
+    total += need.quantity * price;
+  }
+  if (!hasPrice && incomplete) {
+    return { estimated_cost: null, cost_incomplete: true };
+  }
+  if (!hasPrice) {
+    return { estimated_cost: 0, cost_incomplete: false };
+  }
+  return { estimated_cost: toMoney(total), cost_incomplete: incomplete };
+}
+
 /** Cost of one prepared-recipe BOM serving. */
 export function costPreparedBom(lines: BomLine[]): {
   estimated_cost: number | null;

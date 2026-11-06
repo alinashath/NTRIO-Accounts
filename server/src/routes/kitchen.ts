@@ -25,6 +25,7 @@ import {
 import { loadMealCatalog } from "../services/mealCatalog.js";
 import { ensureMealMenus } from "../services/mealMenus.js";
 import { buildGroupedKitchenPlan } from "../services/kitchenPlan.js";
+import { costIngredientNeeds } from "../services/stockCost.js";
 
 export const kitchenRouter = Router();
 kitchenRouter.use(requireAuth);
@@ -1236,7 +1237,39 @@ kitchenRouter.get(
     const orderLikes = toOrderLikes(orders);
     const extrasLikes = toExtrasLikes(extras);
     const server = computeServerSummary(dateStr, orderLikes, mealCatalog.menus, mealPeriod);
-    const tableService = computeTableService(orderLikes, mealCatalog.menus, mealPeriod);
+    const tableServiceRaw = computeTableService(orderLikes, mealCatalog.menus, mealPeriod);
+
+    const stockForCost = await prisma.stockItem.findMany({
+      where: { userId, isActive: true },
+      select: { id: true, code: true, lastUnitCost: true },
+    });
+    const priceById = new Map<string, number>();
+    const priceByCode = new Map<string, number>();
+    for (const s of stockForCost) {
+      if (s.lastUnitCost == null) continue;
+      const p = dec(s.lastUnitCost);
+      if (!(p >= 0)) continue;
+      priceById.set(s.id, p);
+      if (s.code) priceByCode.set(s.code, p);
+    }
+    const tableService = tableServiceRaw.map((row) => {
+      const needs = computeIngredientNeeds(
+        row._orders ?? [],
+        [],
+        mealCatalog.menus,
+        mealCatalog.prepared,
+        mealCatalog.addons,
+      );
+      const priced = costIngredientNeeds(needs, priceById, priceByCode);
+      const { _orders, ...rest } = row;
+      void _orders;
+      return {
+        ...rest,
+        estimated_cost: priced.estimated_cost,
+        cost_incomplete: priced.cost_incomplete,
+      };
+    });
+
     const { kitchen, kotExtras, schedule, groups } = await buildGroupedKitchenPlan(
       userId,
       dateStr,

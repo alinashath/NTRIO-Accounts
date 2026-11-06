@@ -244,8 +244,8 @@ export function buildReceiptSvg(opts: {
       // Item | Need | In stock | Buy | Type
       return [padX, width - padX - 280, width - padX - 190, width - padX - 100, width - padX];
     }
-    // Item | Qty | Type
-    return [padX, width - padX - 150, width - padX];
+    // Item | Qty | Note — wider gap so qty never overlaps a long note
+    return [padX, width - padX - 220, width - padX];
   }
 
   parts.push(solidRule(y));
@@ -283,17 +283,25 @@ export function buildReceiptSvg(opts: {
       );
       y += rowH;
     } else {
-      const maxItem = colCount >= 5 ? 22 : 34;
+      const maxItem = colCount >= 5 ? 22 : 28;
+      const maxNote = colCount >= 5 ? 10 : 14;
+      const maxMid = 8;
+      const clip = (s: string, max: number) =>
+        s.length > max ? `${s.slice(0, Math.max(1, max - 1))}…` : s;
       for (const row of section.rows) {
-        const itemText =
-          row[0].length > maxItem ? `${row[0].slice(0, maxItem - 1)}…` : row[0];
         for (let i = 0; i < headers.length; i++) {
-          const val = row[i] ?? "—";
+          const raw = row[i] ?? "—";
+          const val =
+            i === 0
+              ? clip(raw, maxItem)
+              : i === headers.length - 1
+                ? clip(raw, maxNote)
+                : clip(raw, maxMid);
           const anchor = i === 0 ? "start" : "end";
           const weight = i === 0 || i === headers.length - 1 ? "400" : "600";
           const fill = i === headers.length - 1 ? "#374151" : "#181a20";
           parts.push(
-            `<text x="${xs[i]}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="${cellSize}" font-weight="${weight}" fill="${fill}">${escapeXml(i === 0 ? itemText : val)}</text>`,
+            `<text x="${xs[i]}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="${cellSize}" font-weight="${weight}" fill="${fill}">${escapeXml(val)}</text>`,
           );
         }
         y += rowH;

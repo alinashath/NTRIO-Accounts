@@ -377,6 +377,9 @@ export function KitchenSummariesPage() {
         ? rows.flatMap((r) => [
             `${r.serving_time} · Room ${r.room_number} · ${r.guest_count} guest${r.guest_count === 1 ? "" : "s"}`,
             `  Menus: ${r.menu_names.join(", ") || "—"}`,
+            `  Cost: ${r.estimated_cost != null ? fmtCost(r.estimated_cost) : "—"}${
+              r.cost_incomplete ? " (partial)" : ""
+            }`,
             `  Serve: ${formatServeLine(r.serve_items)}`,
             ...(r.special_requests.length
               ? [`  Notes: ${r.special_requests.join("; ")}`]
@@ -399,6 +402,8 @@ export function KitchenSummariesPage() {
           "Room",
           "Guests",
           "Menus",
+          "Cost",
+          "Cost note",
           "Serve on table",
           "Special requests",
           "Outside window",
@@ -409,6 +414,8 @@ export function KitchenSummariesPage() {
           r.room_number,
           r.guest_count,
           r.menu_names.join("; "),
+          r.estimated_cost,
+          r.cost_incomplete ? "partial" : "",
           formatServeLine(r.serve_items),
           r.special_requests.join("; "),
           r.outside_normal_window,
@@ -425,17 +432,26 @@ export function KitchenSummariesPage() {
       title: "Table service",
       subtitle: `${data.date} · serve on table (portions)`,
       sections: rows.length
-        ? rows.map((r) => ({
-            heading: `${r.serving_time} · Room ${r.room_number}`,
-            headers: ["Serve", "Qty", "Note"],
-            rows: [
-              ["Guests", fmtNum(r.guest_count), r.menu_names.join(", ") || "—"],
-              ...r.serve_items.map((i) => [i.name, fmtNum(i.quantity), "serve"]),
-              ...(r.special_requests.length
-                ? [["Special", "—", r.special_requests.join("; ")]]
-                : []),
-            ],
-          }))
+        ? rows.map((r) => {
+            const menus = r.menu_names.join(", ") || "—";
+            const costNote = r.cost_incomplete ? "partial" : "est";
+            return {
+              heading: `${r.serving_time} · Room ${r.room_number}`,
+              headers: ["Serve", "Qty", "Note"],
+              rows: [
+                ["Guests", fmtNum(r.guest_count), menus],
+                [
+                  "Cost",
+                  r.estimated_cost != null ? fmtCost(r.estimated_cost) : "—",
+                  r.estimated_cost != null ? costNote : "—",
+                ],
+                ...r.serve_items.map((i) => [i.name, fmtNum(i.quantity), "serve"]),
+                ...(r.special_requests.length
+                  ? [["Special", "—", r.special_requests.join("; ")]]
+                  : []),
+              ],
+            };
+          })
         : [{ heading: "Tables", headers: ["Serve", "Qty", "Note"], rows: [] }],
     });
     void downloadPngFromSvg(`table-service-${date}.png`, svg)
@@ -454,8 +470,15 @@ export function KitchenSummariesPage() {
                   .map((i) => `<li>${i.name} ×${fmtNum(i.quantity)}</li>`)
                   .join("")}</ul>`
               : "<p class=\"empty\">—</p>";
+            const costLine =
+              r.estimated_cost != null
+                ? `<p><strong>Cost</strong> ${fmtCost(r.estimated_cost)}${
+                    r.cost_incomplete ? " (partial)" : ""
+                  }</p>`
+                : `<p><strong>Cost</strong> —</p>`;
             return `<hr class="rule"/><p class="sec">${r.serving_time} · Room ${r.room_number}</p>
               <p>${r.guest_count} guest${r.guest_count === 1 ? "" : "s"} · ${r.menu_names.join(", ") || "—"}</p>
+              ${costLine}
               ${items}
               ${r.special_requests.length ? `<p>Notes: ${r.special_requests.join("; ")}</p>` : ""}
               ${r.outside_normal_window ? `<p class="flag">Outside window</p>` : ""}`;
@@ -715,12 +738,25 @@ export function KitchenSummariesPage() {
             secondary={[
               `${r.guest_count} guest${r.guest_count === 1 ? "" : "s"}`,
               r.menu_names.join(", ") || null,
+              r.estimated_cost != null
+                ? `Cost ${fmtCost(r.estimated_cost)}${r.cost_incomplete ? " partial" : ""}`
+                : "Cost —",
               formatServeLine(r.serve_items),
               r.outside_normal_window ? "Outside window" : null,
               r.special_requests.join("; ") || null,
             ]
               .filter(Boolean)
               .join(" · ")}
+            right={
+              r.estimated_cost != null ? (
+                <span className="text-sm font-semibold tabular-nums text-ink">
+                  {fmtCost(r.estimated_cost)}
+                </span>
+              ) : (
+                <span className="text-caption">—</span>
+              )
+            }
+            rightSecondary="Cost"
           />
         ))}
         {data && (data.table_service ?? []).length === 0 ? (

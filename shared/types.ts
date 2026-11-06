@@ -731,6 +731,9 @@ export interface TableServiceRowDto {
   serve_items: TableServiceItemDto[];
   special_requests: string[];
   outside_normal_window: boolean;
+  /** Estimated ingredient cost for this table (stock unit prices × BOM). */
+  estimated_cost: number | null;
+  cost_incomplete: boolean;
 }
 
 export interface KitchenSummariesDto {

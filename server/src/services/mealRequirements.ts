@@ -663,6 +663,10 @@ export type TableServiceRow = {
   serve_items: Array<{ name: string; quantity: number }>;
   special_requests: string[];
   outside_normal_window: boolean;
+  estimated_cost: number | null;
+  cost_incomplete: boolean;
+  /** Orders in this table group — used to price the table. */
+  _orders?: MealOrderLike[];
 };
 
 /**
@@ -687,6 +691,7 @@ export function computeTableService(
     items: Map<string, { name: string; quantity: number }>;
     special_requests: string[];
     outside_normal_window: boolean;
+    orders: MealOrderLike[];
   };
   const map = new Map<string, Acc>();
 
@@ -703,10 +708,12 @@ export function computeTableService(
         items: new Map(),
         special_requests: [],
         outside_normal_window: false,
+        orders: [],
       };
       map.set(key, row);
     }
     row.guest_count += 1;
+    row.orders.push(o);
 
     const menu =
       (o.menuId ? menus.find((m) => m.id === o.menuId) : undefined) ??
@@ -751,6 +758,9 @@ export function computeTableService(
         .sort((a, b) => a.name.localeCompare(b.name)),
       special_requests: r.special_requests,
       outside_normal_window: r.outside_normal_window,
+      estimated_cost: null as number | null,
+      cost_incomplete: false,
+      _orders: r.orders,
     }))
     .sort((a, b) => {
       const t = a.serving_time.localeCompare(b.serving_time);
