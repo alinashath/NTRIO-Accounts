@@ -22,12 +22,32 @@ export async function copyText(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
-export function printHtml(title: string, bodyHtml: string) {
+export function printHtml(
+  title: string,
+  bodyHtml: string,
+  opts?: { receipt?: boolean },
+) {
   // Do not use noopener — it makes window.open return null and leaves a blank tab.
-  const w = window.open("", "_blank", "width=800,height=900");
+  const w = window.open("", "_blank", "width=720,height=900");
   if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
-    <style>
+  const receiptCss = opts?.receipt
+    ? `
+      body{font-family:"IBM Plex Sans",ui-monospace,Menlo,Consolas,monospace;padding:16px;color:#181a20;font-size:12px;max-width:420px;margin:0 auto}
+      h1{font-size:15px;margin:0;text-align:center;letter-spacing:0.04em;text-transform:uppercase}
+      .sub{text-align:center;color:#707a8a;margin:4px 0 12px;font-size:11px}
+      .rule{border:0;border-top:1px solid #181a20;margin:10px 0}
+      .rule-dashed{border:0;border-top:1px dashed #cdd1d6;margin:8px 0}
+      .sec{font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin:0 0 6px;color:#181a20}
+      table.rcpt{border-collapse:collapse;width:100%;margin:0 0 4px}
+      table.rcpt th,table.rcpt td{border:0;padding:3px 0;vertical-align:top;font-size:12px}
+      table.rcpt th{color:#707a8a;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #eaecef}
+      table.rcpt .c1{text-align:left;width:54%}
+      table.rcpt .c2{text-align:right;width:22%;font-variant-numeric:tabular-nums;font-family:"IBM Plex Sans",ui-monospace,monospace}
+      table.rcpt .c3{text-align:right;width:24%;color:#374151}
+      .empty{color:#707a8a;font-size:11px;margin:0 0 4px}
+      @media print{body{padding:0;max-width:none}}
+    `
+    : `
       body{font-family:system-ui,sans-serif;padding:24px;color:#171717;font-size:13px}
       h1{font-size:18px;margin:0 0 8px} h2{font-size:14px;margin:16px 0 8px}
       table{border-collapse:collapse;width:100%;margin-top:8px}
@@ -35,7 +55,9 @@ export function printHtml(title: string, bodyHtml: string) {
       th{background:#f0f0f0}
       .flag{color:#d3212c;font-weight:600}
       @media print{body{padding:0}}
-    </style></head><body>${bodyHtml}</body></html>`);
+    `;
+  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    <style>${receiptCss}</style></head><body>${bodyHtml}</body></html>`);
   w.document.close();
   w.focus();
   w.print();
@@ -163,6 +185,113 @@ export function buildShareCardSvg(opts: {
   y += 48;
   const height = Math.max(y, 320);
 
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="100%" height="100%" fill="#FFFFFF"/>
+  ${parts.join("\n  ")}
+</svg>`;
+}
+
+export type ReceiptSection = {
+  heading: string;
+  /** Column headers: Item | Qty | Type */
+  headers?: [string, string, string];
+  rows: Array<[string, string, string]>;
+};
+
+/**
+ * Compact receipt-style SVG: 3 columns (item / qty / type), clear section rules.
+ * Narrower than chat cards so vertical length stays manageable.
+ */
+export function buildReceiptSvg(opts: {
+  title: string;
+  subtitle?: string;
+  sections: ReceiptSection[];
+}) {
+  const width = 720;
+  const padX = 28;
+  const col1 = padX;
+  const col2 = width - padX - 150;
+  const col3 = width - padX;
+  const titleSize = 22;
+  const subSize = 14;
+  const headSize = 13;
+  const cellSize = 15;
+  const rowH = 26;
+  const font = "IBM Plex Sans,ui-monospace,Menlo,Consolas,monospace";
+
+  let y = 36;
+  const parts: string[] = [];
+
+  parts.push(
+    `<text x="${width / 2}" y="${y}" text-anchor="middle" font-family="${font}" font-size="${titleSize}" font-weight="700" fill="#181a20">${escapeXml(opts.title.toUpperCase())}</text>`,
+  );
+  y += 22;
+  if (opts.subtitle) {
+    parts.push(
+      `<text x="${width / 2}" y="${y}" text-anchor="middle" font-family="${font}" font-size="${subSize}" fill="#707a8a">${escapeXml(opts.subtitle)}</text>`,
+    );
+    y += 18;
+  }
+
+  const solidRule = (yy: number) =>
+    `<line x1="${padX}" y1="${yy}" x2="${width - padX}" y2="${yy}" stroke="#181a20" stroke-width="1.5"/>`;
+  const dashedRule = (yy: number) =>
+    `<line x1="${padX}" y1="${yy}" x2="${width - padX}" y2="${yy}" stroke="#cdd1d6" stroke-width="1" stroke-dasharray="4 3"/>`;
+
+  parts.push(solidRule(y));
+  y += 14;
+
+  for (const section of opts.sections) {
+    parts.push(
+      `<text x="${padX}" y="${y}" font-family="${font}" font-size="${headSize}" font-weight="700" letter-spacing="0.08em" fill="#181a20">${escapeXml(section.heading.toUpperCase())}</text>`,
+    );
+    y += 8;
+    parts.push(dashedRule(y));
+    y += 16;
+
+    const headers = section.headers ?? (["Item", "Qty", "Type"] as [string, string, string]);
+    parts.push(
+      `<text x="${col1}" y="${y}" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[0].toUpperCase())}</text>`,
+    );
+    parts.push(
+      `<text x="${col2}" y="${y}" text-anchor="end" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[1].toUpperCase())}</text>`,
+    );
+    parts.push(
+      `<text x="${col3}" y="${y}" text-anchor="end" font-family="${font}" font-size="11" font-weight="600" fill="#707a8a">${escapeXml(headers[2].toUpperCase())}</text>`,
+    );
+    y += 6;
+    parts.push(dashedRule(y));
+    y += rowH - 4;
+
+    if (!section.rows.length) {
+      parts.push(
+        `<text x="${col1}" y="${y}" font-family="${font}" font-size="${cellSize}" fill="#707a8a">—</text>`,
+      );
+      y += rowH;
+    } else {
+      for (const [item, qty, type] of section.rows) {
+        const itemText = item.length > 34 ? `${item.slice(0, 32)}…` : item;
+        parts.push(
+          `<text x="${col1}" y="${y}" font-family="${font}" font-size="${cellSize}" fill="#181a20">${escapeXml(itemText)}</text>`,
+        );
+        parts.push(
+          `<text x="${col2}" y="${y}" text-anchor="end" font-family="${font}" font-size="${cellSize}" font-weight="600" fill="#181a20">${escapeXml(qty)}</text>`,
+        );
+        parts.push(
+          `<text x="${col3}" y="${y}" text-anchor="end" font-family="${font}" font-size="${cellSize}" fill="#374151">${escapeXml(type || "—")}</text>`,
+        );
+        y += rowH;
+      }
+    }
+
+    y += 4;
+    parts.push(solidRule(y));
+    y += 16;
+  }
+
+  y += 8;
+  const height = Math.max(y, 240);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#FFFFFF"/>

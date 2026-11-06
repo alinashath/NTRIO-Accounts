@@ -237,7 +237,7 @@ function expandLineNeeds(
 ) {
   const mult = line.qty_per_serving * servings;
   if (!(mult > 0) && !line.component_recipe_id) {
-    // qty 0 choice markers (egg style) — no stock
+    // qty 0 lines (legacy markers) — no stock
     return;
   }
   if (line.component_recipe_id) {
@@ -262,7 +262,15 @@ function expandLinePrep(
   const name = line.display_name;
   const unit = line.stock_item_unit ?? (line.component_recipe_id ? "serving" : "");
   const code = line.stock_item_code;
-  const key = line.id;
+  // Aggregate by item (recipe / choice style / stock), not per menu-line id —
+  // otherwise Maldivian vs Continental (or per-order lines) split the same dish.
+  const key = line.component_recipe_id
+    ? `recipe:${line.component_recipe_id}`
+    : line.choice_group_key
+      ? `choice:${line.choice_group_key}:${(line.notes ?? line.display_name).toLowerCase()}`
+      : line.stock_item_id
+        ? `stock:${line.stock_item_id}`
+        : `name:${line.display_name.toLowerCase()}`;
   bumpPrep(agg, key, name, unit, code, line.qty_per_serving || 1, roomNumber);
 }
 
@@ -353,12 +361,13 @@ export function computeKitchenPrep(
         else if (style.includes("boiled")) prep.eggs_boiled += 1;
         else if (style.includes("scrambled")) prep.eggs_scrambled += 1;
       }
-      if (isPancakeCode(line.stock_item_code) || isPancakeName(line.display_name)) {
+      if (isPancakeCode(line.stock_item_code) || isPancakeName(line.display_name) || isPancakeName(line.component_recipe_name)) {
         prep.pancakes += line.qty_per_serving || 1;
       }
       const code = (line.stock_item_code ?? "").toLowerCase();
-      if (code === "roshi") prep.roshi += line.qty_per_serving;
-      if (code === "mashuni") prep.mashuni_cups += line.qty_per_serving;
+      const prepName = `${line.display_name} ${line.component_recipe_name ?? ""}`.toLowerCase();
+      if (code === "roshi" || /\broshi\b/.test(prepName)) prep.roshi += line.qty_per_serving;
+      if (code === "mashuni" || /mashuni/.test(prepName)) prep.mashuni_cups += line.qty_per_serving;
       if (code === "sausages") prep.sausages += line.qty_per_serving;
       if (code === "potatoes" || code === "potato" || code === "potato_portion") {
         prep.potato_servings += line.qty_per_serving;

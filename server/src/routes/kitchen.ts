@@ -9,8 +9,6 @@ import { asyncHandler } from "../utils/http.js";
 import { ensureKitchenStockSeed } from "../services/kitchenSeed.js";
 import {
   computeIngredientNeeds,
-  computeKitchenPrep,
-  computeKotExtras,
   computeServerSummary,
   isOutsideNormalWindow,
   normalServingTimes,
@@ -25,6 +23,7 @@ import {
 } from "../services/stockPlanning.js";
 import { loadMealCatalog } from "../services/mealCatalog.js";
 import { ensureMealMenus } from "../services/mealMenus.js";
+import { buildGroupedKitchenPlan } from "../services/kitchenPlan.js";
 
 export const kitchenRouter = Router();
 kitchenRouter.use(requireAuth);
@@ -270,20 +269,29 @@ async function loadRoomExtraOptions(userId: string): Promise<{
   return { options, recipes: sources, breakfast_options: breakfastOptions };
 }
 
-/** Sync legacy potato/juice/tea/coffee/milk/sugar flags from selected option codes. */
+/** Sync legacy potato/juice/tea/coffee/milk/sugar flags from selected option codes / names. */
 function breakfastFlagsFromSelectedOptions(
   selectedIds: string[],
-  options: Array<{ stock_item_id: string; code: string | null }>,
+  options: Array<{ stock_item_id: string; code: string | null; name?: string | null }>,
 ) {
+  const selected = selectedIds
+    .map((id) => options.find((o) => o.stock_item_id === id))
+    .filter((o): o is NonNullable<typeof o> => !!o);
   const codes = new Set(
-    selectedIds
-      .map((id) => options.find((o) => o.stock_item_id === id)?.code?.toLowerCase() ?? "")
-      .filter(Boolean),
+    selected.map((o) => (o.code ?? "").toLowerCase()).filter(Boolean),
   );
+  const names = selected.map((o) => (o.name ?? "").toLowerCase());
   return {
     potato:
-      codes.has("potatoes") || codes.has("potato") || codes.has("potato_portion"),
-    juice: codes.has("sunquick") || codes.has("juice"),
+      codes.has("potatoes") ||
+      codes.has("potato") ||
+      codes.has("potato_portion") ||
+      codes.has("stir_fried_potato") ||
+      names.some((n) => n.includes("potato")),
+    juice:
+      codes.has("sunquick") ||
+      codes.has("juice") ||
+      names.some((n) => n === "juice" || n.includes("sunquick")),
     tea: codes.has("tea"),
     coffee: codes.has("coffee"),
     milk: codes.has("milk"),
@@ -1006,10 +1014,14 @@ kitchenRouter.post(
     const flagSources = [
       ...menu.lines
         .filter((l) => selectedOptionIds.includes(l.id) || (l.stock_item_id && selectedOptionIds.includes(l.stock_item_id)))
-        .map((l) => ({ stock_item_id: l.stock_item_id ?? l.id, code: l.stock_item_code })),
+        .map((l) => ({
+          stock_item_id: l.stock_item_id ?? l.id,
+          code: l.stock_item_code ?? l.component_recipe_name,
+          name: l.display_name,
+        })),
       ...mealCatalog.addons
         .filter((a) => selectedOptionIds.includes(a.stock_item_id))
-        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code })),
+        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code, name: a.name })),
     ];
     const flags = breakfastFlagsFromSelectedOptions(
       flagSources.map((f) => f.stock_item_id),
@@ -1140,10 +1152,14 @@ kitchenRouter.patch(
             selectedOptionIds.includes(l.id) ||
             (l.stock_item_id && selectedOptionIds.includes(l.stock_item_id)),
         )
-        .map((l) => ({ stock_item_id: l.stock_item_id ?? l.id, code: l.stock_item_code })),
+        .map((l) => ({
+          stock_item_id: l.stock_item_id ?? l.id,
+          code: l.stock_item_code ?? l.component_recipe_name,
+          name: l.display_name,
+        })),
       ...mealCatalog.addons
         .filter((a) => selectedOptionIds.includes(a.stock_item_id))
-        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code })),
+        .map((a) => ({ stock_item_id: a.stock_item_id, code: a.code, name: a.name })),
     ];
     const flags = breakfastFlagsFromSelectedOptions(
       flagSources.map((f) => f.stock_item_id),
@@ -1218,35 +1234,14 @@ kitchenRouter.get(
     ]);
     const orderLikes = toOrderLikes(orders);
     const extrasLikes = toExtrasLikes(extras);
-    const kitchen = computeKitchenPrep(
+    const server = computeServerSummary(dateStr, orderLikes, mealCatalog.menus, mealPeriod);
+    const { kitchen, kotExtras, schedule, groups } = await buildGroupedKitchenPlan(
+      userId,
+      dateStr,
       orderLikes,
       extrasLikes,
-      mealCatalog.menus,
-      mealCatalog.addons,
+      mealPeriod,
     );
-    const kotExtras = computeKotExtras(extrasLikes, mealCatalog.addons);
-    const server = computeServerSummary(dateStr, orderLikes, mealCatalog.menus, mealPeriod);
-
-    const schedule = orderLikes
-      .filter((o) => o.status !== "cancelled")
-      .filter((o) => (mealPeriod ? o.mealPeriod === mealPeriod : true))
-      .map((o) => {
-        const menu = o.menuId
-          ? mealCatalog.menus.find((m) => m.id === o.menuId)
-          : mealCatalog.menus.find((m) => m.code === o.breakfastType);
-        return {
-          room_number: o.roomNumber,
-          guest_number: o.guestNumber,
-          serving_time: o.servingTime,
-          meal_period: o.mealPeriod,
-          menu_name: menu?.name ?? o.breakfastType ?? "Meal",
-          breakfast_type: o.breakfastType ?? "maldivian",
-          egg_style: o.eggStyle ?? "omelette",
-          outside_normal_window: o.outsideNormalWindow,
-          special_requests: o.specialRequests,
-        };
-      })
-      .sort((a, b) => a.serving_time.localeCompare(b.serving_time));
 
     res.json({
       date: dateStr,
@@ -1269,6 +1264,11 @@ kitchenRouter.get(
           rooms: e.rooms,
         })),
         schedule,
+        main_meals: groups.main_meals,
+        by_room: groups.by_room,
+        prepared_needed: groups.prepared_needed,
+        stock_needed: groups.stock_needed,
+        stock_alerts: groups.stock_alerts,
       },
     });
   }),

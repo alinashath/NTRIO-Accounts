@@ -318,6 +318,7 @@ export async function ensureKitchenStockSeed(userId: string) {
   }
 
   await ensureDefaultRecipes(userId);
+  await ensurePreparedRecipes(userId);
   await ensureRoomExtrasPatches(userId);
   await ensureBreakfastOptionPatches(userId);
   const { ensureMealMenus } = await import("./mealMenus.js");
@@ -344,6 +345,7 @@ async function upsertRecipe(
     code: string;
     name: string;
     applyTo: "maldivian" | "continental" | "room_extras" | "custom";
+    kind?: "menu_legacy" | "prepared" | "addons";
     notes?: string;
     lines: SeedLine[];
   },
@@ -352,6 +354,9 @@ async function upsertRecipe(
     where: { userId, code: { in: def.lines.map((l) => l.stockCode) } },
   });
   const byCode = new Map(items.map((i) => [i.code!, i.id]));
+  const kind =
+    def.kind ??
+    (def.applyTo === "custom" ? "prepared" : def.applyTo === "room_extras" ? "addons" : "menu_legacy");
 
   const existing = await prisma.recipe.findUnique({
     where: { userId_code: { userId, code: def.code } },
@@ -359,7 +364,33 @@ async function upsertRecipe(
   });
 
   if (existing) {
-    // Never mutate existing recipes or lines — user edits are authoritative.
+    // Align kind only; never overwrite user-edited lines.
+    if (existing.kind !== kind) {
+      return prisma.recipe.update({
+        where: { id: existing.id },
+        data: { kind },
+        include: { lines: { include: { stockItem: true } } },
+      });
+    }
+    // If a prepared recipe was created empty, fill default BOM once.
+    if (kind === "prepared" && existing.lines.length === 0) {
+      await prisma.recipeLine.createMany({
+        data: def.lines
+          .filter((l) => byCode.has(l.stockCode))
+          .map((l) => ({
+            recipeId: existing.id,
+            stockItemId: byCode.get(l.stockCode)!,
+            qtyPerServing: l.qty,
+            notes: l.notes ?? null,
+            showOnKot: l.showOnKot ?? false,
+            isOption: false,
+          })),
+      });
+      return prisma.recipe.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: { lines: { include: { stockItem: true } } },
+      });
+    }
     return existing;
   }
 
@@ -369,6 +400,7 @@ async function upsertRecipe(
       code: def.code,
       name: def.name,
       applyTo: def.applyTo,
+      kind,
       notes: def.notes ?? null,
       lines: {
         create: def.lines
@@ -382,6 +414,94 @@ async function upsertRecipe(
           })),
       },
     },
+    include: { lines: { include: { stockItem: true } } },
+  });
+}
+
+/**
+ * Prepared items: plated/served dishes with stock BOMs (Recipes → Prepared).
+ * Menu lines should map to these (or to truly served single stock like eggs / tea).
+ * Raw ingredients never sit alone on a meal menu.
+ */
+export async function ensurePreparedRecipes(userId: string) {
+  await upsertRecipe(userId, {
+    code: "mashuni_cups",
+    name: "Mashuni cups",
+    applyTo: "custom",
+    kind: "prepared",
+    notes: "1 cup per Maldivian breakfast. Stock BOM is per cup.",
+    lines: [
+      { stockCode: "coconut", qty: 200, notes: "200 g per cup", showOnKot: false },
+      { stockCode: "copy_faiy", qty: 50, notes: "50 g per cup", showOnKot: false },
+      { stockCode: "canned_tuna", qty: 0.5, notes: "0.5 can per cup", showOnKot: false },
+      { stockCode: "lime", qty: 0.5, notes: "0.5 lime per cup", showOnKot: false },
+      { stockCode: "salt", qty: 2.5, notes: "~0.5 tsp per cup", showOnKot: false },
+    ],
+  });
+
+  await upsertRecipe(userId, {
+    code: "roshi",
+    name: "Roshi",
+    applyTo: "custom",
+    kind: "prepared",
+    notes: "BOM per 1 roshi. Maldivian menu uses qty 5.",
+    lines: [
+      { stockCode: "flour", qty: 1 / 40, notes: "40 roshi per kg", showOnKot: false },
+      { stockCode: "cooking_oil", qty: 0.2 / 40, notes: "200 ml per 40 roshi", showOnKot: false },
+      { stockCode: "salt", qty: 30 / 40, notes: "30 g (6 tsp) per 40 roshi", showOnKot: false },
+    ],
+  });
+
+  await upsertRecipe(userId, {
+    code: "stir_fried_potato",
+    name: "Stir-fried potato",
+    applyTo: "custom",
+    kind: "prepared",
+    notes: "1 side portion. Maldivian optional side / room potato extra.",
+    lines: [
+      { stockCode: "potatoes", qty: 0.2, notes: "200 g per portion", showOnKot: false },
+    ],
+  });
+
+  await upsertRecipe(userId, {
+    code: "juice",
+    name: "Juice",
+    applyTo: "custom",
+    kind: "prepared",
+    notes: "1 cup. Concentrate is not served raw — diluted juice is.",
+    lines: [
+      { stockCode: "sunquick", qty: 0.06, notes: "~4 tbsp concentrate per cup", showOnKot: false },
+    ],
+  });
+
+  await upsertRecipe(userId, {
+    code: "continental_plate",
+    name: "Continental plate",
+    applyTo: "custom",
+    kind: "prepared",
+    notes: "Bread, sausages, butter & jam as one plated set. Egg is separate (style choice).",
+    lines: [
+      { stockCode: "bread", qty: 3, notes: "3 slices", showOnKot: false },
+      { stockCode: "sausages", qty: 2, notes: "2 pieces", showOnKot: false },
+      { stockCode: "butter", qty: 2, notes: "2 portions", showOnKot: false },
+      { stockCode: "jam", qty: 1, notes: "1 portion", showOnKot: false },
+    ],
+  });
+
+  await upsertRecipe(userId, {
+    code: "pancakes",
+    name: "Pancakes",
+    applyTo: "custom",
+    kind: "prepared",
+    notes:
+      "Batter BOM per 20-piece batch. Room extras count pieces; stock planning scales batches = pieces / 20.",
+    lines: [
+      { stockCode: "flour", qty: 0.25, notes: "0.25 kg per 20 pieces", showOnKot: false },
+      { stockCode: "eggs", qty: 4, notes: "4 eggs per 20 pieces", showOnKot: false },
+      { stockCode: "baking_powder", qty: 10, notes: "2 tsp (~10 g) per 20", showOnKot: false },
+      { stockCode: "sugar_g", qty: 200, notes: "200 g per 20 pieces", showOnKot: false },
+      { stockCode: "banana_essence", qty: 15, notes: "1 tbsp per 20 pieces", showOnKot: false },
+    ],
   });
 }
 
@@ -391,27 +511,10 @@ async function ensureDefaultRecipes(userId: string) {
     code: "maldivian",
     name: "Maldivian breakfast",
     applyTo: "maldivian",
+    kind: "menu_legacy",
     notes:
-      "Base: 5 Roshi, 1 Mashuni, 1 egg. Optional sides (potato, drinks) are choosable on the order.",
+      "Prepared: Roshi/Mashuni/potato/juice. Egg style choice includes 1 egg stock. Hot drinks are served options.",
     lines: [
-      { stockCode: "roshi", qty: 5, showOnKot: true },
-      { stockCode: "mashuni", qty: 1, showOnKot: true },
-      { stockCode: "eggs", qty: 1, showOnKot: true },
-      { stockCode: "flour", qty: 5 / 40, notes: "Roshi: 40 per kg", showOnKot: false },
-      { stockCode: "cooking_oil", qty: (5 / 40) * 0.2, notes: "200 ml per 40 roshi", showOnKot: false },
-      { stockCode: "salt", qty: (5 / 40) * 6 * 5, notes: "6 tsp salt per 40 roshi", showOnKot: false },
-      { stockCode: "coconut", qty: 200, notes: "Mashuni batch", showOnKot: false },
-      { stockCode: "copy_faiy", qty: 50, showOnKot: false },
-      { stockCode: "canned_tuna", qty: 0.5, showOnKot: false },
-      { stockCode: "lime", qty: 0.5, showOnKot: false },
-      {
-        stockCode: "potatoes",
-        qty: 0.2,
-        notes: "Stir-fried potato side",
-        showOnKot: true,
-        isOption: true,
-      },
-      { stockCode: "sunquick", qty: 0.06, notes: "Juice (~4 tbsp)", showOnKot: true, isOption: true },
       { stockCode: "tea", qty: 1, notes: "Tea", showOnKot: true, isOption: true },
       { stockCode: "coffee", qty: 1, notes: "Coffee", showOnKot: true, isOption: true },
       { stockCode: "milk", qty: 1, notes: "Milk", showOnKot: true, isOption: true },
@@ -423,14 +526,10 @@ async function ensureDefaultRecipes(userId: string) {
     code: "continental",
     name: "Continental breakfast",
     applyTo: "continental",
-    notes: "Base: 3 bread, 2 sausages, 2 butter, 1 jam, 1 egg. Optional drinks are choosable on the order.",
+    kind: "menu_legacy",
+    notes:
+      "Prepared: Continental plate + stir-fried potato + juice. Egg style choice includes 1 egg. Hot drinks are served options.",
     lines: [
-      { stockCode: "bread", qty: 3, showOnKot: true },
-      { stockCode: "sausages", qty: 2, showOnKot: true },
-      { stockCode: "butter", qty: 2, showOnKot: false },
-      { stockCode: "jam", qty: 1, showOnKot: false },
-      { stockCode: "eggs", qty: 1, showOnKot: true },
-      { stockCode: "sunquick", qty: 0.06, notes: "Juice (~4 tbsp)", showOnKot: true, isOption: true },
       { stockCode: "tea", qty: 1, notes: "Tea", showOnKot: true, isOption: true },
       { stockCode: "coffee", qty: 1, notes: "Coffee", showOnKot: true, isOption: true },
       { stockCode: "milk", qty: 1, notes: "Milk", showOnKot: true, isOption: true },
@@ -448,7 +547,8 @@ async function ensureDefaultRecipes(userId: string) {
       {
         stockCode: "pancake_batch",
         qty: 1,
-        notes: "Counted in pieces on KOT; set Qty when selected for each Add",
+        notes:
+          "Counted in pieces on KOT. Batter stock comes from Prepared recipe “Pancakes” (per 20 pieces).",
         showOnKot: true,
       },
       {

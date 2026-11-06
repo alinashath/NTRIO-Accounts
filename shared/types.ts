@@ -606,6 +606,55 @@ export interface KitchenPlanExtraLineDto {
   rooms: string[];
 }
 
+export interface KitchenPlanMainMealDto {
+  meal_period: MealPeriod;
+  menu_name: string;
+  menu_code: string | null;
+  count: number;
+  egg_styles: Array<{ style: string; count: number }>;
+}
+
+export interface KitchenPlanRoomGuestDto {
+  guest_number: number;
+  serving_time: string;
+  meal_period: MealPeriod;
+  menu_name: string;
+  egg_style: string;
+  options: string[];
+  special_requests: string | null;
+  outside_normal_window: boolean;
+}
+
+export interface KitchenPlanByRoomDto {
+  room_number: string;
+  guest_count: number;
+  guests: KitchenPlanRoomGuestDto[];
+}
+
+export interface KitchenPlanStockNeedDto {
+  stock_item_id: string | null;
+  code: string | null;
+  name: string;
+  unit: string;
+  required: number;
+  on_hand: number;
+  /** Amount to purchase to cover order shortfall. */
+  to_buy: number;
+  min_stock: number;
+  below_min: boolean;
+}
+
+export interface KitchenPlanStockAlertDto {
+  stock_item_id: string | null;
+  code: string | null;
+  name: string;
+  unit: string;
+  required: number;
+  on_hand: number;
+  to_buy: number;
+  reasons: string[];
+}
+
 export interface KitchenPlanDto {
   /** @deprecated Prefer prep_lines — kept for older CSV labels. */
   roshi: number;
@@ -637,7 +686,18 @@ export interface KitchenPlanDto {
     egg_style: EggStyle;
     outside_normal_window: boolean;
     special_requests: string | null;
+    options?: string[];
   }>;
+  /** Aggregated menu counts for the day / meal filter. */
+  main_meals: KitchenPlanMainMealDto[];
+  /** Guests grouped by room. */
+  by_room: KitchenPlanByRoomDto[];
+  /** Plated / prepared items to cook (KOT + extras). */
+  prepared_needed: KitchenPlanExtraLineDto[];
+  /** Aggregated ingredient stock required (BOM-expanded). */
+  stock_needed: KitchenPlanStockNeedDto[];
+  /** Shortfalls / below-min / missing catalog items. */
+  stock_alerts: KitchenPlanStockAlertDto[];
 }
 
 export interface KitchenSummariesDto {
