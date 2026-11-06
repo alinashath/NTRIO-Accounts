@@ -7,6 +7,7 @@ import { Dropdown, type DropdownOption } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
 import { Button, TextField } from "@/components/ui";
 import type {
+  BreakfastOptionDto,
   BreakfastOrderDto,
   BreakfastType,
   EggStyle,
@@ -112,6 +113,11 @@ export function KitchenOrdersPage() {
     room: KitchenDayRoomDto;
     meal: MealPeriod;
   } | null>(null);
+  const [editExtraModal, setEditExtraModal] = useState<{
+    room: KitchenDayRoomDto;
+    meal: MealPeriod;
+    line: RoomExtraSelectionDto;
+  } | null>(null);
   const [occRoom, setOccRoom] = useState<KitchenDayRoomDto | null>(null);
 
   const load = useCallback(async () => {
@@ -136,13 +142,13 @@ export function KitchenOrdersPage() {
     }
   }
 
-  async function removeExtraLine(
+  async function putExtraLines(
     room: KitchenDayRoomDto,
     meal: MealPeriod,
-    stockItemId: string,
+    lines: Array<{ stock_item_id: string; quantity: number }>,
+    successMsg: string,
   ) {
     const extras = extrasForMeal(room, meal);
-    const lines = (extras.selected_lines ?? []).filter((l) => l.stock_item_id !== stockItemId);
     try {
       const res = await apiFetch<{ shopping?: ShoppingSummaryDto }>("/api/kitchen/extras", {
         method: "PUT",
@@ -151,18 +157,50 @@ export function KitchenOrdersPage() {
           room_id: room.id,
           meal_period: meal,
           fruits: extras.fruits,
-          selected_lines: lines.map((l) => ({
-            stock_item_id: l.stock_item_id,
-            quantity: l.quantity,
-          })),
+          selected_lines: lines,
         }),
       });
       noteShopping(res.shopping);
-      setMsg(`${mealTitle(meal)} extra removed`);
+      setMsg(successMsg);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
+      throw e;
     }
+  }
+
+  async function removeExtraLine(
+    room: KitchenDayRoomDto,
+    meal: MealPeriod,
+    stockItemId: string,
+  ) {
+    const extras = extrasForMeal(room, meal);
+    const lines = (extras.selected_lines ?? [])
+      .filter((l) => l.stock_item_id !== stockItemId)
+      .map((l) => ({ stock_item_id: l.stock_item_id, quantity: l.quantity }));
+    try {
+      await putExtraLines(room, meal, lines, `${mealTitle(meal)} extra removed`);
+    } catch {
+      /* error already set */
+    }
+  }
+
+  async function updateExtraLineQty(
+    room: KitchenDayRoomDto,
+    meal: MealPeriod,
+    stockItemId: string,
+    quantity: number,
+  ) {
+    if (!(quantity > 0)) {
+      setError("Count must be greater than 0");
+      return;
+    }
+    const extras = extrasForMeal(room, meal);
+    const lines = (extras.selected_lines ?? []).map((l) => ({
+      stock_item_id: l.stock_item_id,
+      quantity: l.stock_item_id === stockItemId ? quantity : l.quantity,
+    }));
+    await putExtraLines(room, meal, lines, `${mealTitle(meal)} count updated`);
   }
 
   return (
@@ -259,19 +297,19 @@ export function KitchenOrdersPage() {
                   </Button>
                 </div>
               ) : (
-                room.orders.map((o) => (
+                room.orders.map((o) => {
+                  const typeOpts = day?.breakfast_options?.[o.breakfast_type] ?? [];
+                  const selectedNames = (o.selected_option_ids ?? [])
+                    .map((id) => typeOpts.find((opt) => opt.stock_item_id === id)?.name)
+                    .filter(Boolean);
+                  return (
                   <ListRow
                     key={o.id}
                     primary={`Guest ${o.guest_number} · ${o.breakfast_type} · ${o.egg_style}`}
                     secondary={[
                       o.serving_time,
                       o.outside_normal_window ? "Outside window" : null,
-                      o.potato ? "potato" : null,
-                      o.juice ? "juice" : null,
-                      o.tea ? "tea" : null,
-                      o.coffee ? "coffee" : null,
-                      o.milk ? "milk" : null,
-                      o.sugar ? "sugar" : null,
+                      selectedNames.length ? selectedNames.join(", ") : null,
                       o.status,
                       o.special_requests,
                     ]
@@ -287,7 +325,8 @@ export function KitchenOrdersPage() {
                     }
                     onClick={() => setOrderModal({ room, editing: o })}
                   />
-                ))
+                  );
+                })
               )
             ) : !hasExtras ? (
               <div className="border-t border-border px-4 py-3 space-y-2">
@@ -323,14 +362,26 @@ export function KitchenOrdersPage() {
                       .filter(Boolean)
                       .join(" · ")}
                     right={
-                      <button
-                        type="button"
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
-                        aria-label={`Remove ${line.name ?? "extra"}`}
-                        onClick={() => void removeExtraLine(room, mealPeriod, line.stock_item_id)}
-                      >
-                        <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                      </button>
+                      <span className="inline-flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-action hover:bg-neutral-bg"
+                          aria-label={`Edit count for ${line.name ?? "extra"}`}
+                          onClick={() =>
+                            setEditExtraModal({ room, meal: mealPeriod, line })
+                          }
+                        >
+                          <Pencil className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-debit hover:bg-debit-bg"
+                          aria-label={`Remove ${line.name ?? "extra"}`}
+                          onClick={() => void removeExtraLine(room, mealPeriod, line.stock_item_id)}
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                        </button>
+                      </span>
                     }
                   />
                 ))}
@@ -350,6 +401,7 @@ export function KitchenOrdersPage() {
             date={date}
             room={orderModal.room}
             servingTimes={day?.serving_times ?? []}
+            breakfastOptions={day?.breakfast_options ?? { maldivian: [], continental: [] }}
             editing={orderModal.editing}
             usedGuests={orderModal.room.orders
               .filter((o) => o.status !== "cancelled" && o.id !== orderModal.editing?.id)
@@ -381,6 +433,29 @@ export function KitchenOrdersPage() {
               setExtrasModal(null);
               noteShopping(shopping);
               void load().catch(() => {});
+            }}
+            onError={setError}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={!!editExtraModal}
+        title={`Edit count · ${editExtraModal?.line.name ?? "Extra"}`}
+        onClose={() => setEditExtraModal(null)}
+      >
+        {editExtraModal ? (
+          <EditExtraCountForm
+            line={editExtraModal.line}
+            onCancel={() => setEditExtraModal(null)}
+            onSave={async (quantity) => {
+              await updateExtraLineQty(
+                editExtraModal.room,
+                editExtraModal.meal,
+                editExtraModal.line.stock_item_id,
+                quantity,
+              );
+              setEditExtraModal(null);
             }}
             onError={setError}
           />
@@ -462,10 +537,31 @@ function OccupancyForm({
   );
 }
 
+function initialSelectedOptionIds(
+  editing: BreakfastOrderDto | undefined,
+  options: BreakfastOptionDto[],
+): string[] {
+  if (editing?.selected_option_ids?.length) {
+    const allowed = new Set(options.map((o) => o.stock_item_id));
+    return editing.selected_option_ids.filter((id) => allowed.has(id));
+  }
+  if (!editing || !options.length) return [];
+  // Legacy orders: map boolean flags onto option stock ids.
+  const want = new Set<string>();
+  if (editing.potato) want.add("potatoes");
+  if (editing.juice) want.add("sunquick");
+  if (editing.tea) want.add("tea");
+  if (editing.coffee) want.add("coffee");
+  if (editing.milk) want.add("milk");
+  if (editing.sugar) want.add("portion_sugar");
+  return options.filter((o) => o.code && want.has(o.code)).map((o) => o.stock_item_id);
+}
+
 function OrderForm({
   date,
   room,
   servingTimes,
+  breakfastOptions,
   editing,
   usedGuests,
   onDone,
@@ -474,6 +570,7 @@ function OrderForm({
   date: string;
   room: KitchenDayRoomDto;
   servingTimes: string[];
+  breakfastOptions: Record<BreakfastType, BreakfastOptionDto[]>;
   editing?: BreakfastOrderDto;
   usedGuests: number[];
   onDone: (shopping?: ShoppingSummaryDto) => void;
@@ -490,12 +587,10 @@ function OrderForm({
   const [eggStyle, setEggStyle] = useState<EggStyle>(
     editing?.egg_style ?? (editing?.breakfast_type === "continental" ? "fried" : "omelette"),
   );
-  const [potato, setPotato] = useState(editing?.potato ?? false);
-  const [juice, setJuice] = useState(editing?.juice ?? false);
-  const [tea, setTea] = useState(editing?.tea ?? false);
-  const [coffee, setCoffee] = useState(editing?.coffee ?? false);
-  const [milk, setMilk] = useState(editing?.milk ?? false);
-  const [sugar, setSugar] = useState(editing?.sugar ?? false);
+  const typeOptions = breakfastOptions[breakfastType] ?? [];
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(() =>
+    initialSelectedOptionIds(editing, breakfastOptions[editing?.breakfast_type ?? "maldivian"] ?? []),
+  );
   const [special, setSpecial] = useState(editing?.special_requests ?? "");
   const [status, setStatus] = useState(editing?.status ?? "pending");
   const [saving, setSaving] = useState(false);
@@ -503,9 +598,20 @@ function OrderForm({
   useEffect(() => {
     if (!editing) {
       setEggStyle(breakfastType === "continental" ? "fried" : "omelette");
-      if (breakfastType === "continental") setPotato(false);
     }
-  }, [breakfastType, editing]);
+    const nextOpts = breakfastOptions[breakfastType] ?? [];
+    if (editing && editing.breakfast_type === breakfastType) {
+      setSelectedOptionIds(initialSelectedOptionIds(editing, nextOpts));
+    } else {
+      setSelectedOptionIds((prev) => prev.filter((id) => nextOpts.some((o) => o.stock_item_id === id)));
+    }
+  }, [breakfastType, breakfastOptions, editing]);
+
+  function toggleOption(stockItemId: string) {
+    setSelectedOptionIds((prev) =>
+      prev.includes(stockItemId) ? prev.filter((id) => id !== stockItemId) : [...prev, stockItemId],
+    );
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -519,12 +625,7 @@ function OrderForm({
         serving_time: time,
         breakfast_type: breakfastType,
         egg_style: eggStyle,
-        potato: breakfastType === "maldivian" ? potato : false,
-        juice,
-        tea,
-        coffee,
-        milk,
-        sugar,
+        selected_option_ids: selectedOptionIds,
         special_requests: special.trim() || null,
         status,
       };
@@ -589,48 +690,59 @@ function OrderForm({
       />
 
       <div className="rounded-[var(--radius)] border border-border bg-neutral-bg px-4 py-3 text-sm text-ink">
-        {breakfastType === "maldivian" ? (
-          <>
-            <p className="font-semibold">Maldivian stock</p>
-            <p className="text-caption">
-              Ingredients come from the Maldivian recipe (Kitchen → Recipes). Add or remove items there.
-            </p>
-            <label className="mt-2 flex min-h-11 items-center gap-2">
-              <input type="checkbox" checked={potato} onChange={(e) => setPotato(e.target.checked)} />
-              Stir-fried potato (optional extra)
-            </label>
-          </>
-        ) : (
-          <>
-            <p className="font-semibold">Continental stock</p>
-            <p className="text-caption">
-              Ingredients come from the Continental recipe (Kitchen → Recipes). Add or remove items there.
-            </p>
-          </>
-        )}
-        <Link to="/kitchen/recipes" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-action underline">
-          Edit breakfast recipes
+        <p className="font-semibold">
+          {breakfastType === "maldivian" ? "Maldivian" : "Continental"} menu
+        </p>
+        <p className="text-caption">
+          Base ingredients and optional sides come from Kitchen → Recipes for this breakfast type.
+        </p>
+        <Link
+          to="/kitchen/recipes"
+          className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-action underline"
+        >
+          Edit breakfast recipes & sides
         </Link>
       </div>
 
       <Dropdown label="Egg style" value={eggStyle} onChange={(v) => setEggStyle(v as EggStyle)} options={eggOpts} />
 
       <fieldset className="space-y-1">
-        <legend className="text-label">Beverages</legend>
-        {(
-          [
-            ["juice", juice, setJuice],
-            ["tea", tea, setTea],
-            ["coffee", coffee, setCoffee],
-            ["milk", milk, setMilk],
-            ["sugar", sugar, setSugar],
-          ] as const
-        ).map(([label, val, set]) => (
-          <label key={label} className="flex min-h-11 items-center gap-2 text-sm capitalize text-ink">
-            <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} />
-            {label}
-          </label>
-        ))}
+        <legend className="text-label">Options & sides</legend>
+        {typeOptions.length ? (
+          <>
+            <p className="text-caption">
+              From Recipes for this breakfast type. Selected items count for KOT and kitchen stock.
+            </p>
+            {typeOptions.map((opt) => (
+              <label
+                key={opt.stock_item_id}
+                className="flex min-h-11 items-center gap-2 text-sm text-ink"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedOptionIds.includes(opt.stock_item_id)}
+                  onChange={() => toggleOption(opt.stock_item_id)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{opt.name}</span>
+                  <span className="block text-caption">
+                    {opt.qty_per_serving} {opt.unit}
+                    {opt.show_on_kot ? " · on KOT" : ""}
+                    {opt.notes ? ` · ${opt.notes}` : ""}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </>
+        ) : (
+          <p className="text-caption">
+            No optional sides configured. Add lines marked “Optional side” under{" "}
+            <Link to="/kitchen/recipes" className="font-semibold text-action underline">
+              Recipes → {breakfastType === "maldivian" ? "Maldivian" : "Continental"}
+            </Link>
+            .
+          </p>
+        )}
       </fieldset>
 
       <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
@@ -670,6 +782,93 @@ function OrderForm({
             Remove
           </Button>
         ) : null}
+      </div>
+    </form>
+  );
+}
+
+function EditExtraCountForm({
+  line,
+  onSave,
+  onCancel,
+  onError,
+}: {
+  line: RoomExtraSelectionDto;
+  onSave: (quantity: number) => Promise<void>;
+  onCancel: () => void;
+  onError: (s: string) => void;
+}) {
+  const [qty, setQty] = useState(String(line.quantity));
+  const [saving, setSaving] = useState(false);
+  const unit = line.unit?.trim() || "";
+
+  function bump(delta: number) {
+    const n = Number(qty);
+    const base = Number.isFinite(n) && n > 0 ? n : 0;
+    const next = Math.max(0.01, Math.round((base + delta) * 100) / 100);
+    setQty(String(next));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const quantity = Number(qty);
+    if (!(quantity > 0)) {
+      onError("Count must be greater than 0");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(quantity);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="space-y-3" onSubmit={(e) => void submit(e)}>
+      <p className="text-caption">
+        Change how many {line.name ?? "of this extra"} to prepare for this meal
+        {unit ? ` (${unit})` : ""}.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <button
+          type="button"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-lg font-semibold text-ink hover:bg-neutral-bg"
+          aria-label="Decrease count"
+          onClick={() => bump(-1)}
+        >
+          −
+        </button>
+        <div className="min-w-0 flex-1">
+          <TextField
+            label={`Count${unit ? ` (${unit})` : ""}`}
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min={0.01}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className="font-num"
+          />
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-lg font-semibold text-ink hover:bg-neutral-bg"
+          aria-label="Increase count"
+          onClick={() => bump(1)}
+        >
+          +
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={saving} className="flex-1 sm:flex-none">
+          {saving ? "Saving…" : "Save count"}
+        </Button>
+        <Button type="button" variant="secondary" disabled={saving} onClick={onCancel}>
+          Cancel
+        </Button>
       </div>
     </form>
   );

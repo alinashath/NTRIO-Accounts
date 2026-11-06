@@ -17,21 +17,30 @@ function todayYmd() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** KOT metrics with quantity > 0 only. */
-function kotNonZeroLines(k: KitchenPlanDto): Array<{ label: string; value: number }> {
-  return (
+/** KOT metrics with quantity > 0 — recipe prep lines + egg styles + pancakes. */
+function kotNonZeroLines(k: KitchenPlanDto): Array<{ label: string; value: number; unit?: string }> {
+  const fromRecipe = (k.prep_lines ?? []).map((line) => ({
+    label: line.name,
+    value: line.quantity,
+    unit: line.unit || undefined,
+  }));
+  const eggs = (
     [
-      { label: "Roshi", value: k.roshi },
-      { label: "Mashuni cups", value: k.mashuni_cups },
-      { label: "Sausages", value: k.sausages },
       { label: "Eggs omelette", value: k.eggs_omelette },
       { label: "Eggs fried", value: k.eggs_fried },
       { label: "Eggs boiled", value: k.eggs_boiled },
       { label: "Eggs scrambled", value: k.eggs_scrambled },
-      { label: "Potato servings", value: k.potato_servings },
       { label: "Pancakes", value: k.pancakes },
     ] as const
   ).filter((line) => line.value > 0);
+  return [...fromRecipe.filter((l) => l.value > 0), ...eggs];
+}
+
+function formatOptionSides(
+  sides: Array<{ name: string; quantity: number }> | undefined,
+): string | null {
+  if (!sides?.length) return null;
+  return sides.map((s) => `${s.name} ${s.quantity}`).join(" · ");
 }
 
 function ActionIcon({
@@ -76,12 +85,14 @@ export function KitchenSummariesPage() {
     return [
       `Server breakfast summary — ${data.date}`,
       "",
-      ...data.server_summary.map(
-        (r) =>
-          `${r.breakfast_time} · Room ${r.room_number} · M:${r.maldivian} C:${r.continental} Juice:${r.juice} Tea/Coffee:${r.tea_or_coffee}${
-            r.outside_normal_window ? " · OUTSIDE WINDOW" : ""
-          }${r.special_requests.length ? ` · ${r.special_requests.join("; ")}` : ""}`,
-      ),
+      ...data.server_summary.map((r) => {
+        const sides = formatOptionSides(r.option_sides);
+        return `${r.breakfast_time} · Room ${r.room_number} · M:${r.maldivian} C:${r.continental}${
+          sides ? ` · ${sides}` : ""
+        }${r.outside_normal_window ? " · OUTSIDE WINDOW" : ""}${
+          r.special_requests.length ? ` · ${r.special_requests.join("; ")}` : ""
+        }`;
+      }),
     ].join("\n");
   }
 
@@ -123,8 +134,7 @@ export function KitchenSummariesPage() {
           "Room Number",
           "Maldivian",
           "Continental",
-          "Juice",
-          "Tea or Coffee",
+          "Options & sides",
           "Special Requests",
           "Outside Window",
         ],
@@ -134,8 +144,7 @@ export function KitchenSummariesPage() {
           r.room_number,
           r.maldivian,
           r.continental,
-          r.juice,
-          r.tea_or_coffee,
+          formatOptionSides(r.option_sides) ?? "",
           r.special_requests.join("; "),
           r.outside_normal_window,
         ]),
@@ -159,8 +168,7 @@ export function KitchenSummariesPage() {
           lines: data.server_summary.map((r) => {
             const bits = [
               `${r.breakfast_time} R${r.room_number}`,
-              `Juice ${r.juice}`,
-              `Tea/Coffee ${r.tea_or_coffee}`,
+              formatOptionSides(r.option_sides),
               r.outside_normal_window ? "OUTSIDE WINDOW" : null,
               r.special_requests.join("; ") || null,
             ].filter(Boolean);
@@ -247,12 +255,12 @@ export function KitchenSummariesPage() {
     const rows = data.server_summary
       .map(
         (r) =>
-          `<tr><td>${r.date}</td><td>${r.breakfast_time}</td><td>${r.room_number}</td><td>${r.maldivian}</td><td>${r.continental}</td><td>${r.juice}</td><td>${r.tea_or_coffee}</td><td>${r.special_requests.join("; ")}</td><td>${r.outside_normal_window ? "YES" : ""}</td></tr>`,
+          `<tr><td>${r.date}</td><td>${r.breakfast_time}</td><td>${r.room_number}</td><td>${r.maldivian}</td><td>${r.continental}</td><td>${formatOptionSides(r.option_sides) ?? ""}</td><td>${r.special_requests.join("; ")}</td><td>${r.outside_normal_window ? "YES" : ""}</td></tr>`,
       )
       .join("");
     printHtml(
       `Server summary ${date}`,
-      `<h1>Breakfast summary for servers</h1><p>${date}</p><table><thead><tr><th>Date</th><th>Time</th><th>Room</th><th>Maldivian</th><th>Continental</th><th>Juice</th><th>Tea/Coffee</th><th>Special requests</th><th>Outside</th></tr></thead><tbody>${rows}</tbody></table>`,
+      `<h1>Breakfast summary for servers</h1><p>${date}</p><table><thead><tr><th>Date</th><th>Time</th><th>Room</th><th>Maldivian</th><th>Continental</th><th>Options &amp; sides</th><th>Special requests</th><th>Outside</th></tr></thead><tbody>${rows}</tbody></table>`,
     );
   }
 
@@ -337,8 +345,7 @@ export function KitchenSummariesPage() {
               secondary={[
                 `M ${r.maldivian}`,
                 `C ${r.continental}`,
-                `Juice ${r.juice}`,
-                `Tea/Coffee ${r.tea_or_coffee}`,
+                formatOptionSides(r.option_sides),
                 r.outside_normal_window ? "Outside window" : null,
                 r.special_requests.join("; ") || null,
               ]

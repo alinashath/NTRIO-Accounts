@@ -610,6 +610,8 @@ model BreakfastOrder {
   coffee               Boolean               @default(false)
   milk                 Boolean               @default(false)
   sugar                Boolean               @default(false)
+  /// Selected optional side stock-item ids from the breakfast-type recipe.
+  selectedOptionIds    String[]              @default([]) @map("selected_option_ids")
   specialRequests      String?               @map("special_requests")
   status               BreakfastOrderStatus  @default(pending)
   createdAt            DateTime              @default(now()) @map("created_at")
@@ -722,6 +724,8 @@ model RecipeLine {
   notes       String?
   /// When true and this extra is selected for a room, include it on KOT / kitchen plan.
   showOnKot   Boolean @default(true) @map("show_on_kot")
+  /// When true on maldivian/continental recipes: choosable side on the order form (not always included).
+  isOption    Boolean @default(false) @map("is_option")
 
   recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)

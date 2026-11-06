@@ -50,6 +50,7 @@ function mapOrder(o: {
   coffee: boolean;
   milk: boolean;
   sugar: boolean;
+  selectedOptionIds?: string[];
   specialRequests: string | null;
   status: string;
   createdAt: Date;
@@ -72,6 +73,7 @@ function mapOrder(o: {
     coffee: o.coffee,
     milk: o.milk,
     sugar: o.sugar,
+    selected_option_ids: o.selectedOptionIds ?? [],
     special_requests: o.specialRequests,
     status: o.status,
     created_at: o.createdAt.toISOString(),
@@ -106,6 +108,7 @@ function toOrderLikes(
     coffee: o.coffee,
     milk: o.milk,
     sugar: o.sugar,
+    selectedOptionIds: o.selectedOptionIds ?? [],
     status: o.status,
     servingTime: o.servingTime,
     outsideNormalWindow: o.outsideNormalWindow,
@@ -158,6 +161,16 @@ function toExtrasLikes(
   });
 }
 
+type BreakfastOptionRow = {
+  stock_item_id: string;
+  name: string;
+  unit: string;
+  code: string | null;
+  qty_per_serving: number;
+  show_on_kot: boolean;
+  notes: string | null;
+};
+
 async function loadRoomExtraOptions(userId: string): Promise<{
   options: Array<{
     stock_item_id: string;
@@ -169,6 +182,10 @@ async function loadRoomExtraOptions(userId: string): Promise<{
     show_on_kot: boolean;
   }>;
   recipes: RecipeNeedSource[];
+  breakfast_options: {
+    maldivian: BreakfastOptionRow[];
+    continental: BreakfastOptionRow[];
+  };
 }> {
   const recipes = await prisma.recipe.findMany({
     where: { userId, isActive: true },
@@ -187,6 +204,7 @@ async function loadRoomExtraOptions(userId: string): Promise<{
         unit: l.stockItem.unit,
         qty_per_serving: dec(l.qtyPerServing),
         show_on_kot: l.showOnKot,
+        is_option: Boolean(l.isOption),
       })),
   }));
   const seen = new Set<string>();
@@ -207,7 +225,56 @@ async function loadRoomExtraOptions(userId: string): Promise<{
     }
   }
   options.sort((a, b) => a.name.localeCompare(b.name));
-  return { options, recipes: sources };
+
+  const breakfastOptions: {
+    maldivian: BreakfastOptionRow[];
+    continental: BreakfastOptionRow[];
+  } = {
+    maldivian: [],
+    continental: [],
+  };
+  for (const applyTo of ["maldivian", "continental"] as const) {
+    const seenOpt = new Set<string>();
+    for (const r of recipes.filter((x) => x.applyTo === applyTo)) {
+      for (const l of r.lines) {
+        if (!l.isOption || !l.stockItem.isActive || seenOpt.has(l.stockItemId)) continue;
+        seenOpt.add(l.stockItemId);
+        breakfastOptions[applyTo].push({
+          stock_item_id: l.stockItemId,
+          name: l.stockItem.name,
+          unit: l.stockItem.unit,
+          code: l.stockItem.code,
+          qty_per_serving: dec(l.qtyPerServing),
+          show_on_kot: l.showOnKot,
+          notes: l.notes,
+        });
+      }
+    }
+    breakfastOptions[applyTo].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  return { options, recipes: sources, breakfast_options: breakfastOptions };
+}
+
+/** Sync legacy potato/juice/tea/coffee/milk/sugar flags from selected option codes. */
+function breakfastFlagsFromSelectedOptions(
+  selectedIds: string[],
+  options: Array<{ stock_item_id: string; code: string | null }>,
+) {
+  const codes = new Set(
+    selectedIds
+      .map((id) => options.find((o) => o.stock_item_id === id)?.code?.toLowerCase() ?? "")
+      .filter(Boolean),
+  );
+  return {
+    potato:
+      codes.has("potatoes") || codes.has("potato") || codes.has("potato_portion"),
+    juice: codes.has("sunquick") || codes.has("juice"),
+    tea: codes.has("tea"),
+    coffee: codes.has("coffee"),
+    milk: codes.has("milk"),
+    sugar: codes.has("portion_sugar") || codes.has("sugar") || codes.has("sugar_g"),
+  };
 }
 
 /** Map selected stock codes back onto legacy boolean columns for prep/compat. */
@@ -446,6 +513,7 @@ kitchenRouter.get(
       serving_times: normalServingTimes(),
       meal_periods: MEAL_PERIODS,
       extra_options: extraCatalog.options,
+      breakfast_options: extraCatalog.breakfast_options,
       rooms: rooms.map((r) => {
         const day = dayByRoom.get(r.id);
         const roomOrders = orders.filter((o) => o.roomId === r.id);
@@ -823,6 +891,7 @@ const orderCreateSchema = z.object({
   coffee: z.boolean().optional(),
   milk: z.boolean().optional(),
   sugar: z.boolean().optional(),
+  selected_option_ids: z.array(z.string().uuid()).optional(),
   special_requests: z.string().max(2000).optional().nullable(),
   status: z.enum(["pending", "served", "cancelled"]).optional(),
 });
@@ -845,6 +914,34 @@ kitchenRouter.post(
     const eggStyle = body.egg_style ?? defaultEgg;
     const outside = isOutsideNormalWindow(body.serving_time);
     const date = parseYmd(body.breakfast_date);
+    const catalog = await loadRoomExtraOptions(userId);
+    const typeOptions = catalog.breakfast_options[body.breakfast_type] ?? [];
+    const allowed = new Set(typeOptions.map((o) => o.stock_item_id));
+    let selectedOptionIds = (body.selected_option_ids ?? []).filter((id) => allowed.has(id));
+    // Legacy clients: map boolean flags onto option ids when selected_option_ids omitted.
+    if (body.selected_option_ids === undefined && typeOptions.length) {
+      const want = new Set<string>();
+      if (body.potato) want.add("potatoes");
+      if (body.juice) want.add("sunquick");
+      if (body.tea) want.add("tea");
+      if (body.coffee) want.add("coffee");
+      if (body.milk) want.add("milk");
+      if (body.sugar) want.add("portion_sugar");
+      selectedOptionIds = typeOptions
+        .filter((o) => o.code && want.has(o.code))
+        .map((o) => o.stock_item_id);
+    }
+    const flags =
+      typeOptions.length > 0
+        ? breakfastFlagsFromSelectedOptions(selectedOptionIds, typeOptions)
+        : {
+            potato: body.breakfast_type === "maldivian" ? (body.potato ?? false) : false,
+            juice: body.juice ?? false,
+            tea: body.tea ?? false,
+            coffee: body.coffee ?? false,
+            milk: body.milk ?? false,
+            sugar: body.sugar ?? false,
+          };
 
     try {
       const created = await prisma.breakfastOrder.create({
@@ -857,12 +954,13 @@ kitchenRouter.post(
           outsideNormalWindow: outside,
           breakfastType: body.breakfast_type,
           eggStyle,
-          potato: body.breakfast_type === "maldivian" ? (body.potato ?? false) : false,
-          juice: body.juice ?? false,
-          tea: body.tea ?? false,
-          coffee: body.coffee ?? false,
-          milk: body.milk ?? false,
-          sugar: body.sugar ?? false,
+          potato: flags.potato,
+          juice: flags.juice,
+          tea: flags.tea,
+          coffee: flags.coffee,
+          milk: flags.milk,
+          sugar: flags.sugar,
+          selectedOptionIds,
           specialRequests: body.special_requests ?? null,
           status: body.status ?? "pending",
         },
@@ -910,6 +1008,31 @@ kitchenRouter.patch(
         ? isOutsideNormalWindow(servingTime)
         : existing.outsideNormalWindow;
 
+    const catalog = await loadRoomExtraOptions(userId);
+    const typeOptions = catalog.breakfast_options[breakfastType] ?? [];
+    const allowed = new Set(typeOptions.map((o) => o.stock_item_id));
+    let selectedOptionIds =
+      body.selected_option_ids !== undefined
+        ? body.selected_option_ids.filter((id) => allowed.has(id))
+        : (existing.selectedOptionIds ?? []).filter((id) => allowed.has(id));
+    if (body.selected_option_ids === undefined && typeOptions.length === 0) {
+      selectedOptionIds = existing.selectedOptionIds ?? [];
+    }
+    const flags =
+      typeOptions.length > 0
+        ? breakfastFlagsFromSelectedOptions(selectedOptionIds, typeOptions)
+        : {
+            potato:
+              breakfastType === "maldivian"
+                ? (body.potato ?? existing.potato)
+                : false,
+            juice: body.juice ?? existing.juice,
+            tea: body.tea ?? existing.tea,
+            coffee: body.coffee ?? existing.coffee,
+            milk: body.milk ?? existing.milk,
+            sugar: body.sugar ?? existing.sugar,
+          };
+
     const updated = await prisma.breakfastOrder.update({
       where: { id },
       data: {
@@ -918,15 +1041,13 @@ kitchenRouter.patch(
         outsideNormalWindow: outside,
         breakfastType,
         eggStyle: body.egg_style,
-        potato:
-          breakfastType === "maldivian"
-            ? (body.potato ?? existing.potato)
-            : false,
-        juice: body.juice,
-        tea: body.tea,
-        coffee: body.coffee,
-        milk: body.milk,
-        sugar: body.sugar,
+        potato: flags.potato,
+        juice: flags.juice,
+        tea: flags.tea,
+        coffee: flags.coffee,
+        milk: flags.milk,
+        sugar: flags.sugar,
+        selectedOptionIds,
         specialRequests: body.special_requests,
         status: body.status,
       },
@@ -984,9 +1105,14 @@ kitchenRouter.get(
         )
         .map((o) => o.stock_item_id),
     );
-    const kitchen = computeKitchenPrep(orderLikes, extrasLikes, pancakeIds);
+    const kitchen = computeKitchenPrep(
+      orderLikes,
+      extrasLikes,
+      pancakeIds,
+      extraCatalog.recipes,
+    );
     const kotExtras = computeKotExtras(extrasLikes, extraCatalog.recipes);
-    const server = computeServerSummary(dateStr, orderLikes);
+    const server = computeServerSummary(dateStr, orderLikes, extraCatalog.recipes);
 
     const schedule = orderLikes
       .filter((o) => o.status !== "cancelled")
@@ -1006,6 +1132,13 @@ kitchenRouter.get(
       server_summary: server,
       kitchen_plan: {
         ...kitchen,
+        prep_lines: kitchen.prep_lines.map((e) => ({
+          name: e.name,
+          unit: e.unit,
+          code: e.code,
+          quantity: e.quantity,
+          rooms: e.rooms,
+        })),
         extras: kotExtras.map((e) => ({
           name: e.name,
           unit: e.unit,

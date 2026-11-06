@@ -128,6 +128,13 @@ export const PDF_STOCK_CATALOG: Array<{
     sortOrder: 150,
   },
   {
+    code: "milk",
+    name: "Milk",
+    unit: "Portion",
+    useNotes: "1 portion when milk is selected with breakfast.",
+    sortOrder: 155,
+  },
+  {
     code: "sausages",
     name: "Sausages",
     unit: "Number",
@@ -312,6 +319,7 @@ export async function ensureKitchenStockSeed(userId: string) {
 
   await ensureDefaultRecipes(userId);
   await ensureRoomExtrasPatches(userId);
+  await ensureBreakfastOptionPatches(userId);
 
   const rooms = await prisma.room.findMany({
     where: { userId },
@@ -320,7 +328,13 @@ export async function ensureKitchenStockSeed(userId: string) {
   return rooms;
 }
 
-type SeedLine = { stockCode: string; qty: number; notes?: string; showOnKot?: boolean };
+type SeedLine = {
+  stockCode: string;
+  qty: number;
+  notes?: string;
+  showOnKot?: boolean;
+  isOption?: boolean;
+};
 
 async function upsertRecipe(
   userId: string,
@@ -362,6 +376,7 @@ async function upsertRecipe(
             qtyPerServing: l.qty,
             notes: l.notes ?? null,
             showOnKot: l.showOnKot ?? true,
+            isOption: Boolean(l.isOption),
           })),
       },
     },
@@ -374,18 +389,31 @@ async function ensureDefaultRecipes(userId: string) {
     code: "maldivian",
     name: "Maldivian breakfast",
     applyTo: "maldivian",
-    notes: "Per guest: 5 Roshi, 1 Mashuni, 1 egg. Potato optional (0.2 kg) when selected on order.",
+    notes:
+      "Base: 5 Roshi, 1 Mashuni, 1 egg. Optional sides (potato, drinks) are choosable on the order.",
     lines: [
-      { stockCode: "roshi", qty: 5 },
-      { stockCode: "mashuni", qty: 1 },
-      { stockCode: "eggs", qty: 1 },
-      { stockCode: "flour", qty: 5 / 40, notes: "Roshi: 40 per kg" },
-      { stockCode: "cooking_oil", qty: (5 / 40) * 0.2, notes: "200 ml per 40 roshi" },
-      { stockCode: "salt", qty: (5 / 40) * 6 * 5, notes: "6 tsp salt per 40 roshi" },
-      { stockCode: "coconut", qty: 200, notes: "Mashuni batch" },
-      { stockCode: "copy_faiy", qty: 50 },
-      { stockCode: "canned_tuna", qty: 0.5 },
-      { stockCode: "lime", qty: 0.5 },
+      { stockCode: "roshi", qty: 5, showOnKot: true },
+      { stockCode: "mashuni", qty: 1, showOnKot: true },
+      { stockCode: "eggs", qty: 1, showOnKot: true },
+      { stockCode: "flour", qty: 5 / 40, notes: "Roshi: 40 per kg", showOnKot: false },
+      { stockCode: "cooking_oil", qty: (5 / 40) * 0.2, notes: "200 ml per 40 roshi", showOnKot: false },
+      { stockCode: "salt", qty: (5 / 40) * 6 * 5, notes: "6 tsp salt per 40 roshi", showOnKot: false },
+      { stockCode: "coconut", qty: 200, notes: "Mashuni batch", showOnKot: false },
+      { stockCode: "copy_faiy", qty: 50, showOnKot: false },
+      { stockCode: "canned_tuna", qty: 0.5, showOnKot: false },
+      { stockCode: "lime", qty: 0.5, showOnKot: false },
+      {
+        stockCode: "potatoes",
+        qty: 0.2,
+        notes: "Stir-fried potato side",
+        showOnKot: true,
+        isOption: true,
+      },
+      { stockCode: "sunquick", qty: 0.06, notes: "Juice (~4 tbsp)", showOnKot: true, isOption: true },
+      { stockCode: "tea", qty: 1, notes: "Tea", showOnKot: true, isOption: true },
+      { stockCode: "coffee", qty: 1, notes: "Coffee", showOnKot: true, isOption: true },
+      { stockCode: "milk", qty: 1, notes: "Milk", showOnKot: true, isOption: true },
+      { stockCode: "portion_sugar", qty: 1, notes: "Sugar with hot drink", showOnKot: true, isOption: true },
     ],
   });
 
@@ -393,13 +421,18 @@ async function ensureDefaultRecipes(userId: string) {
     code: "continental",
     name: "Continental breakfast",
     applyTo: "continental",
-    notes: "Per guest: 3 bread, 2 sausages, 2 butter, 1 jam, 1 egg.",
+    notes: "Base: 3 bread, 2 sausages, 2 butter, 1 jam, 1 egg. Optional drinks are choosable on the order.",
     lines: [
-      { stockCode: "bread", qty: 3 },
-      { stockCode: "sausages", qty: 2 },
-      { stockCode: "butter", qty: 2 },
-      { stockCode: "jam", qty: 1 },
-      { stockCode: "eggs", qty: 1 },
+      { stockCode: "bread", qty: 3, showOnKot: true },
+      { stockCode: "sausages", qty: 2, showOnKot: true },
+      { stockCode: "butter", qty: 2, showOnKot: false },
+      { stockCode: "jam", qty: 1, showOnKot: false },
+      { stockCode: "eggs", qty: 1, showOnKot: true },
+      { stockCode: "sunquick", qty: 0.06, notes: "Juice (~4 tbsp)", showOnKot: true, isOption: true },
+      { stockCode: "tea", qty: 1, notes: "Tea", showOnKot: true, isOption: true },
+      { stockCode: "coffee", qty: 1, notes: "Coffee", showOnKot: true, isOption: true },
+      { stockCode: "milk", qty: 1, notes: "Milk", showOnKot: true, isOption: true },
+      { stockCode: "portion_sugar", qty: 1, notes: "Sugar with hot drink", showOnKot: true, isOption: true },
     ],
   });
 
@@ -546,5 +579,74 @@ export async function ensureRoomExtrasPatches(userId: string) {
         showOnKot: true,
       },
     });
+  }
+}
+
+const BREAKFAST_OPTION_DEFAULTS: Array<{
+  stockCode: string;
+  qty: number;
+  notes: string;
+  /** When true, only seed onto Maldivian (e.g. potato). */
+  maldivianOnly?: boolean;
+}> = [
+  { stockCode: "potatoes", qty: 0.2, notes: "Stir-fried potato side", maldivianOnly: true },
+  { stockCode: "sunquick", qty: 0.06, notes: "Juice (~4 tbsp)" },
+  { stockCode: "tea", qty: 1, notes: "Tea" },
+  { stockCode: "coffee", qty: 1, notes: "Coffee" },
+  { stockCode: "milk", qty: 1, notes: "Milk" },
+  { stockCode: "portion_sugar", qty: 1, notes: "Sugar with hot drink" },
+];
+
+/**
+ * One-time bootstrap: if a Maldivian/Continental recipe has no Optional side lines yet,
+ * promote/create the starter sides (potato, drinks). After that, Recipes UI is the source of
+ * truth — never re-add or force isOption on subsequent seeds.
+ */
+export async function ensureBreakfastOptionPatches(userId: string) {
+  const codes = BREAKFAST_OPTION_DEFAULTS.map((d) => d.stockCode);
+  const items = await prisma.stockItem.findMany({
+    where: { userId, code: { in: codes }, isActive: true },
+  });
+  const byCode = new Map(items.map((i) => [i.code!, i]));
+
+  for (const applyTo of ["maldivian", "continental"] as const) {
+    const recipe =
+      (await prisma.recipe.findUnique({
+        where: { userId_code: { userId, code: applyTo } },
+        include: { lines: { include: { stockItem: true } } },
+      })) ??
+      (await prisma.recipe.findFirst({
+        where: { userId, applyTo, isActive: true },
+        include: { lines: { include: { stockItem: true } } },
+        orderBy: { createdAt: "asc" },
+      }));
+    if (!recipe) continue;
+    if (recipe.lines.some((l) => l.isOption)) continue;
+
+    for (const def of BREAKFAST_OPTION_DEFAULTS) {
+      if (def.maldivianOnly && applyTo !== "maldivian") continue;
+      const stock = byCode.get(def.stockCode);
+      if (!stock) continue;
+      const existing = recipe.lines.find(
+        (l) => l.stockItemId === stock.id || l.stockItem?.code === def.stockCode,
+      );
+      if (existing) {
+        await prisma.recipeLine.update({
+          where: { id: existing.id },
+          data: { isOption: true, showOnKot: true },
+        });
+        continue;
+      }
+      await prisma.recipeLine.create({
+        data: {
+          recipeId: recipe.id,
+          stockItemId: stock.id,
+          qtyPerServing: def.qty,
+          notes: def.notes,
+          showOnKot: true,
+          isOption: true,
+        },
+      });
+    }
   }
 }

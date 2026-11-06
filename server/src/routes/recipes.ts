@@ -26,6 +26,7 @@ function mapRecipe(r: {
     qtyPerServing: { toNumber?: () => number } | number;
     notes: string | null;
     showOnKot?: boolean;
+    isOption?: boolean;
     stockItem: { name: string; unit: string; code: string | null };
   }>;
 }) {
@@ -47,6 +48,7 @@ function mapRecipe(r: {
       qty_per_serving: dec(l.qtyPerServing),
       notes: l.notes,
       show_on_kot: l.showOnKot !== false,
+      is_option: Boolean(l.isOption),
     })),
   };
 }
@@ -56,6 +58,7 @@ const lineSchema = z.object({
   qty_per_serving: z.number().positive(),
   notes: z.string().max(500).optional().nullable(),
   show_on_kot: z.boolean().optional().default(true),
+  is_option: z.boolean().optional().default(false),
 });
 
 const createSchema = z.object({
@@ -134,6 +137,7 @@ recipesRouter.post(
             qtyPerServing: l.qty_per_serving,
             notes: l.notes ?? null,
             showOnKot: l.show_on_kot ?? true,
+            isOption: body.apply_to === "room_extras" ? false : Boolean(l.is_option),
           })),
         },
       },
@@ -167,6 +171,7 @@ recipesRouter.put(
         }
       }
       await prisma.recipeLine.deleteMany({ where: { recipeId: id } });
+      const applyTo = body.apply_to ?? existing.applyTo;
       await prisma.recipeLine.createMany({
         data: body.lines.map((l) => ({
           recipeId: id,
@@ -174,6 +179,7 @@ recipesRouter.put(
           qtyPerServing: l.qty_per_serving,
           notes: l.notes ?? null,
           showOnKot: l.show_on_kot ?? true,
+          isOption: applyTo === "room_extras" ? false : Boolean(l.is_option),
         })),
       });
     }

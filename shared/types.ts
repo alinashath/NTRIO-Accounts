@@ -442,10 +442,23 @@ export interface BreakfastOrderDto {
   coffee: boolean;
   milk: boolean;
   sugar: boolean;
+  /** Selected optional side stock-item ids from the breakfast-type recipe. */
+  selected_option_ids: string[];
   special_requests: string | null;
   status: BreakfastOrderStatus;
   created_at: string;
   updated_at: string;
+}
+
+/** Choosable side on a Maldivian / Continental breakfast order. */
+export interface BreakfastOptionDto {
+  stock_item_id: string;
+  name: string;
+  unit: string;
+  code: string | null;
+  qty_per_serving: number;
+  show_on_kot: boolean;
+  notes: string | null;
 }
 
 export interface RoomExtraOptionDto {
@@ -507,7 +520,15 @@ export interface KitchenDayDto {
   serving_times: string[];
   /** Choosable room extras from Recipes → Room extras (configure there). */
   extra_options: RoomExtraOptionDto[];
+  /** Optional sides per breakfast menu type (from Recipes → Maldivian / Continental). */
+  breakfast_options: Record<BreakfastType, BreakfastOptionDto[]>;
   rooms: KitchenDayRoomDto[];
+}
+
+export interface ServerSummaryOptionSideDto {
+  name: string;
+  code: string | null;
+  quantity: number;
 }
 
 export interface ServerSummaryRowDto {
@@ -516,7 +537,11 @@ export interface ServerSummaryRowDto {
   room_number: string;
   maldivian: number;
   continental: number;
+  /** Selected optional sides from Recipes for this room/time. */
+  option_sides: ServerSummaryOptionSideDto[];
+  /** @deprecated Prefer option_sides — kept for older CSV labels. */
   juice: number;
+  /** @deprecated Prefer option_sides — kept for older CSV labels. */
   tea_or_coffee: number;
   special_requests: string[];
   outside_normal_window: boolean;
@@ -531,16 +556,25 @@ export interface KitchenPlanExtraLineDto {
 }
 
 export interface KitchenPlanDto {
+  /** @deprecated Prefer prep_lines — kept for older CSV labels. */
   roshi: number;
+  /** @deprecated Prefer prep_lines */
   mashuni_cups: number;
+  /** @deprecated Prefer prep_lines */
   sausages: number;
   eggs_omelette: number;
   eggs_fried: number;
   eggs_boiled: number;
   eggs_scrambled: number;
+  /** @deprecated Prefer prep_lines */
   potato_servings: number;
   pancakes: number;
-  /** Configurable extras with Show on KOT enabled. */
+  /**
+   * KOT prep from breakfast recipes: base lines with Show on KOT + selected optional sides.
+   * Fully recipe-driven (no hardcoded menu items).
+   */
+  prep_lines: KitchenPlanExtraLineDto[];
+  /** Room extras with Show on KOT enabled. */
   extras: KitchenPlanExtraLineDto[];
   schedule: Array<{
     room_number: string;
@@ -659,6 +693,8 @@ export interface RecipeLineDto {
   qty_per_serving: number;
   notes: string | null;
   show_on_kot: boolean;
+  /** Choosable side on Maldivian/Continental orders (not always included). */
+  is_option: boolean;
 }
 
 export interface RecipeDto {

@@ -13,6 +13,7 @@ type LineDraft = {
   qty_per_serving: string;
   notes: string;
   show_on_kot: boolean;
+  is_option: boolean;
 };
 
 const APPLY_LABEL: Record<RecipeApplyTo, string> = {
@@ -75,8 +76,9 @@ export function KitchenRecipesPage() {
         <div>
           <h1 className="text-page-title text-ink">Recipes</h1>
           <p className="mt-1 text-caption">
-            Configure what stock each breakfast uses. Edit Maldivian / Continental recipes to add or remove
-            ingredients — shopping list and inventory Used follow these lines.
+            Configure breakfast menu types (Maldivian / Continental): always-included ingredients and
+            optional sides. Sides show as checkboxes on Add breakfast and feed KOT / kitchen counts when
+            selected.
           </p>
         </div>
         <Button type="button" className="gap-2" onClick={() => setModal("create")}>
@@ -127,7 +129,10 @@ export function KitchenRecipesPage() {
                 secondary={
                   r.lines.length
                     ? r.lines
-                        .map((l) => `${l.stock_item_name} ${l.qty_per_serving}${l.stock_item_unit ? ` ${l.stock_item_unit}` : ""}`)
+                        .map((l) => {
+                          const qty = `${l.stock_item_name} ${l.qty_per_serving}${l.stock_item_unit ? ` ${l.stock_item_unit}` : ""}`;
+                          return l.is_option ? `${qty} (option)` : qty;
+                        })
                         .join(" · ")
                     : "No ingredient lines — add items"
                 }
@@ -210,12 +215,14 @@ function RecipeForm({
       qty_per_serving: String(l.qty_per_serving),
       notes: l.notes ?? "",
       show_on_kot: l.show_on_kot !== false,
+      is_option: Boolean(l.is_option),
     })) ?? [
       {
         stock_item_id: items[0]?.id ?? "",
         qty_per_serving: "1",
         notes: "",
         show_on_kot: true,
+        is_option: false,
       },
     ],
   );
@@ -229,6 +236,7 @@ function RecipeForm({
         qty_per_serving: "1",
         notes: "",
         show_on_kot: true,
+        is_option: false,
       },
     ]);
   }
@@ -250,6 +258,7 @@ function RecipeForm({
         qty_per_serving: Number(l.qty_per_serving),
         notes: l.notes.trim() || null,
         show_on_kot: l.show_on_kot,
+        is_option: applyTo === "room_extras" ? false : l.is_option,
       }));
     if (!payloadLines.length) {
       onError("Add at least one stock item with quantity greater than 0");
@@ -295,7 +304,7 @@ function RecipeForm({
     <form className="space-y-3" onSubmit={(e) => void submit(e)}>
       <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
       <Dropdown
-        label="Applies to breakfast type"
+        label="Breakfast menu type"
         value={applyTo}
         onChange={(v) => setApplyTo(v as RecipeApplyTo)}
         options={[
@@ -309,7 +318,9 @@ function RecipeForm({
       <p className="text-caption">
         {applyTo === "room_extras"
           ? "These items become the choosable extras on Breakfast, Lunch, and Dinner orders. Turn on Show on KOT for lines that kitchen should see on the plan."
-          : "Qty is per guest / serving. Saving updates shopping and inventory when breakfast orders use this type."}
+          : applyTo === "maldivian" || applyTo === "continental"
+            ? "Base items are always included per guest. Mark a line as Optional side to show it as a checkbox on Add breakfast for this menu type — selected sides count for KOT and kitchen stock."
+            : "Qty is per guest / serving. Saving updates shopping and inventory when breakfast orders use this type."}
       </p>
       <TextField label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
 
@@ -351,6 +362,20 @@ function RecipeForm({
                 setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, notes: e.target.value } : l)))
               }
             />
+            {applyTo === "maldivian" || applyTo === "continental" ? (
+              <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={line.is_option}
+                  onChange={(e) =>
+                    setLines((prev) =>
+                      prev.map((l, i) => (i === idx ? { ...l, is_option: e.target.checked } : l)),
+                    )
+                  }
+                />
+                Optional side (checkbox on order)
+              </label>
+            ) : null}
             <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -361,7 +386,9 @@ function RecipeForm({
                   )
                 }
               />
-              Show on KOT when selected
+              {line.is_option || applyTo === "room_extras"
+                ? "Show on KOT when selected"
+                : "Show on KOT"}
             </label>
             <Button type="button" variant="secondary" onClick={() => removeLine(idx)}>
               Remove item

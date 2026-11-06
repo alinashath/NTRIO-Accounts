@@ -1,7 +1,7 @@
 /**
  * Expand breakfast orders + room extras into kitchen prep counts and ingredient requirements.
- * Maldivian / Continental base ingredients come from editable Recipes when present;
- * drinks, potato option, and room extras keep PDF option rules.
+ * Maldivian / Continental ingredients and sides come only from editable Recipes.
+ * Room extras come from the room_extras recipe. No hardcoded menu items.
  */
 
 export type OrderLike = {
@@ -13,6 +13,8 @@ export type OrderLike = {
   coffee: boolean;
   milk: boolean;
   sugar: boolean;
+  /** Selected optional side stock-item ids from the breakfast-type recipe. */
+  selectedOptionIds?: string[];
   status: "pending" | "served" | "cancelled";
   servingTime: string;
   outsideNormalWindow: boolean;
@@ -51,8 +53,39 @@ export type RecipeNeedSource = {
     unit?: string;
     qty_per_serving: number;
     show_on_kot?: boolean;
+    /** Choosable side on maldivian/continental (not always included). */
+    is_option?: boolean;
   }>;
 };
+
+export type KotBreakfastSideLine = {
+  stock_item_id: string;
+  name: string;
+  unit: string;
+  code: string | null;
+  quantity: number;
+  rooms: string[];
+};
+
+function optionLinesForType(
+  recipes: RecipeNeedSource[],
+  applyTo: "maldivian" | "continental",
+) {
+  return recipes
+    .filter((r) => r.apply_to === applyTo)
+    .flatMap((r) => r.lines)
+    .filter((l) => l.is_option);
+}
+
+function baseLinesForType(
+  recipes: RecipeNeedSource[],
+  applyTo: "maldivian" | "continental",
+) {
+  return recipes
+    .filter((r) => r.apply_to === applyTo)
+    .flatMap((r) => r.lines)
+    .filter((l) => !l.is_option);
+}
 
 export type KotExtraLine = {
   stock_item_id: string;
@@ -81,10 +114,10 @@ export type IngredientNeedLine = {
   quantity: number;
 };
 
-const TBSP_L = 0.015; // approx 15 ml
 const TSP_G = 5; // approx salt tsp → grams
 
 export type KitchenPrep = {
+  /** Derived from recipe prep_lines codes for older CSV labels. */
   roshi: number;
   mashuni_cups: number;
   sausages: number;
@@ -94,6 +127,8 @@ export type KitchenPrep = {
   eggs_scrambled: number;
   potato_servings: number;
   pancakes: number;
+  /** Recipe-driven KOT lines (base Show on KOT + selected options). */
+  prep_lines: KotBreakfastSideLine[];
 };
 
 export type IngredientNeed = {
@@ -105,14 +140,43 @@ function activeOrders(orders: OrderLike[]) {
   return orders.filter((o) => o.status !== "cancelled");
 }
 
-/** Kitchen Summary aggregates (PDF §6). */
+function bumpPrepLine(
+  agg: Map<string, KotBreakfastSideLine>,
+  line: RecipeNeedSource["lines"][number],
+  qty: number,
+  roomNumber: string,
+) {
+  if (!(qty > 0) || line.show_on_kot === false) return;
+  const cur = agg.get(line.stock_item_id);
+  if (cur) {
+    cur.quantity += qty;
+    if (!cur.rooms.includes(roomNumber)) cur.rooms.push(roomNumber);
+  } else {
+    agg.set(line.stock_item_id, {
+      stock_item_id: line.stock_item_id,
+      name: line.name ?? line.code ?? "Item",
+      unit: line.unit ?? "",
+      code: line.code,
+      quantity: qty,
+      rooms: [roomNumber],
+    });
+  }
+}
+
+/**
+ * Kitchen prep from recipes only: base lines with Show on KOT + selected optional sides.
+ * Egg styles come from the order; pancakes from room extras.
+ */
 export function computeKitchenPrep(
   orders: OrderLike[],
   extras: ExtrasLike[],
-  /** Stock item ids that count as pancake batches (from room_extras recipe). */
+  /** Stock item ids that count as pancake pieces (from room_extras recipe). */
   pancakeStockItemIds: Set<string> = new Set(),
+  recipes: RecipeNeedSource[] = [],
 ): KitchenPrep {
   const active = activeOrders(orders);
+  const prepAgg = new Map<string, KotBreakfastSideLine>();
+
   const prep: KitchenPrep = {
     roshi: 0,
     mashuni_cups: 0,
@@ -123,18 +187,25 @@ export function computeKitchenPrep(
     eggs_scrambled: 0,
     potato_servings: 0,
     pancakes: 0,
+    prep_lines: [],
   };
 
   for (const o of active) {
-    if (o.breakfastType === "maldivian") {
-      prep.roshi += 5;
-      prep.mashuni_cups += 1;
-      if (o.potato) prep.potato_servings += 1;
-    } else {
-      prep.sausages += 2;
+    const eggKey = `eggs_${o.eggStyle}` as
+      | "eggs_omelette"
+      | "eggs_fried"
+      | "eggs_boiled"
+      | "eggs_scrambled";
+    prep[eggKey] += 1;
+
+    const selected = new Set(o.selectedOptionIds ?? []);
+    for (const line of baseLinesForType(recipes, o.breakfastType)) {
+      bumpPrepLine(prepAgg, line, line.qty_per_serving, o.roomNumber);
     }
-    prep[`eggs_${o.eggStyle}` as keyof KitchenPrep] =
-      (prep[`eggs_${o.eggStyle}` as keyof KitchenPrep] as number) + 1;
+    for (const line of optionLinesForType(recipes, o.breakfastType)) {
+      if (!selected.has(line.stock_item_id)) continue;
+      bumpPrepLine(prepAgg, line, line.qty_per_serving, o.roomNumber);
+    }
   }
 
   for (const e of extras) {
@@ -144,13 +215,26 @@ export function computeKitchenPrep(
         pieces += line.quantity;
       }
     }
-    // Quantity is the user-set amount (recipe “Qty when selected”), not a forced ×20 batch.
     if (pieces > 0) prep.pancakes += pieces;
     else if (e.pancake) prep.pancakes += 1;
   }
 
+  prep.prep_lines = [...prepAgg.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Legacy summary counters from recipe codes (not hardcoded menu qty).
+  for (const line of prep.prep_lines) {
+    const code = (line.code ?? "").toLowerCase();
+    if (code === "roshi") prep.roshi += line.quantity;
+    else if (code === "mashuni") prep.mashuni_cups += line.quantity;
+    else if (code === "sausages") prep.sausages += line.quantity;
+    else if (code === "potatoes" || code === "potato" || code === "potato_portion") {
+      prep.potato_servings += line.quantity;
+    }
+  }
+
   return prep;
 }
+
 
 /** Resolve selected configurable extras with quantities for a room. */
 export function resolveSelectedExtras(
@@ -267,50 +351,22 @@ function applyRecipeLines(
   servings: number,
 ) {
   if (servings <= 0) return false;
-  const matched = recipes.filter((r) => r.apply_to === applyTo && r.lines.length > 0);
-  if (!matched.length) return false;
-  for (const r of matched) {
-    for (const line of r.lines) {
-      addNeed(map, line.stock_item_id, line.code, line.qty_per_serving * servings);
-    }
+  const base = baseLinesForType(recipes, applyTo);
+  if (!base.length) {
+    // Recipe exists but only options — still counts as "has recipe" if any lines exist.
+    const any = recipes.some((r) => r.apply_to === applyTo && r.lines.length > 0);
+    return any;
+  }
+  for (const line of base) {
+    addNeed(map, line.stock_item_id, line.code, line.qty_per_serving * servings);
   }
   return true;
 }
 
-/** PDF hardcoded base for Maldivian / Continental when no recipe lines exist. */
-function applyHardcodedBreakfastBase(
-  map: Map<string, IngredientNeedLine>,
-  maldivian: number,
-  continental: number,
-) {
-  if (maldivian > 0) {
-    const roshiPieces = maldivian * 5;
-    const roshiBatches = roshiPieces / 40;
-    addByCode(map, "roshi", roshiPieces);
-    addByCode(map, "flour", roshiBatches * 1);
-    addByCode(map, "cooking_oil", roshiBatches * 0.2);
-    addByCode(map, "salt", roshiBatches * 6 * TSP_G);
-    addByCode(map, "mashuni", maldivian);
-    addByCode(map, "coconut", maldivian * 200);
-    addByCode(map, "copy_faiy", maldivian * 50);
-    addByCode(map, "canned_tuna", maldivian * 0.5);
-    addByCode(map, "lime", maldivian * 0.5);
-    addByCode(map, "salt", maldivian * 0.5 * TSP_G);
-    addByCode(map, "eggs", maldivian);
-  }
-  if (continental > 0) {
-    addByCode(map, "bread", continental * 3);
-    addByCode(map, "sausages", continental * 2);
-    addByCode(map, "butter", continental * 2);
-    addByCode(map, "jam", continental * 1);
-    addByCode(map, "eggs", continental);
-  }
-}
-
 /**
  * Ingredient requirements from orders + extras.
- * When Recipes exist for maldivian/continental, those lines drive base stock usage
- * (so Kitchen → Recipes edit/delete/add items actually configure breakfasts).
+ * Breakfast stock usage comes only from Maldivian/Continental recipe base + selected options.
+ * Room extras come only from selected room_extras recipe lines.
  */
 export function computeIngredientNeeds(
   orders: OrderLike[],
@@ -322,80 +378,39 @@ export function computeIngredientNeeds(
 
   let maldivian = 0;
   let continental = 0;
-  let potatoMeals = 0;
-  let juiceCups = 0;
-  let teaCount = 0;
-  let coffeeCount = 0;
-  let sugarWithHotDrink = 0;
 
   for (const o of active) {
-    if (o.breakfastType === "maldivian") {
-      maldivian += 1;
-      if (o.potato) potatoMeals += 1;
-    } else {
-      continental += 1;
-    }
-    if (o.juice) juiceCups += 1;
-    if (o.tea) {
-      teaCount += 1;
-      if (o.sugar) sugarWithHotDrink += 1;
-    }
-    if (o.coffee) {
-      coffeeCount += 1;
-      if (o.sugar) sugarWithHotDrink += 1;
+    if (o.breakfastType === "maldivian") maldivian += 1;
+    else continental += 1;
+
+    const selected = new Set(o.selectedOptionIds ?? []);
+    for (const line of optionLinesForType(recipes, o.breakfastType)) {
+      if (!selected.has(line.stock_item_id)) continue;
+      addNeed(map, line.stock_item_id, line.code, line.qty_per_serving);
     }
   }
 
-  const usedMalRecipe = applyRecipeLines(map, recipes, "maldivian", maldivian);
-  const usedConRecipe = applyRecipeLines(map, recipes, "continental", continental);
-  if (!usedMalRecipe || !usedConRecipe) {
-    applyHardcodedBreakfastBase(
-      map,
-      usedMalRecipe ? 0 : maldivian,
-      usedConRecipe ? 0 : continental,
-    );
-  }
-
-  addByCode(map, "potatoes", potatoMeals * 0.2);
-  addByCode(map, "sunquick", juiceCups * 4 * TBSP_L);
-  addByCode(map, "tea", teaCount);
-  addByCode(map, "coffee", coffeeCount);
-  addByCode(map, "portion_sugar", sugarWithHotDrink);
+  applyRecipeLines(map, recipes, "maldivian", maldivian);
+  applyRecipeLines(map, recipes, "continental", continental);
 
   const roomExtraLines = recipes
     .filter((r) => r.apply_to === "room_extras")
     .flatMap((r) => r.lines);
   const roomExtraById = new Map(roomExtraLines.map((l) => [l.stock_item_id, l]));
-  const hasRoomExtraRecipe = roomExtraLines.length > 0;
 
   /** Pancake batter recipe is sized for 20 pieces; scale by selected piece count. */
   let pancakePieces = 0;
   for (const e of extras) {
-    if (hasRoomExtraRecipe) {
-      const selected = resolveSelectedExtras(e, roomExtraLines);
-      let pancakeFromSelection = 0;
-      for (const sel of selected) {
-        const line = roomExtraById.get(sel.stockItemId);
-        if (!line) continue;
-        // User-entered quantity is in stock units (defaults from recipe qty when added).
-        addNeed(map, line.stock_item_id, line.code, sel.quantity);
-        if (isPancakeExtraLine(line)) {
-          pancakeFromSelection += sel.quantity;
-        }
-        // Potato portion extra → 0.2 kg potatoes each (same as Maldivian potato serving).
-        if ((line.code ?? "").toLowerCase() === "potato_portion") {
-          addByCode(map, "potatoes", sel.quantity * 0.2);
-        }
+    const selected = resolveSelectedExtras(e, roomExtraLines);
+    for (const sel of selected) {
+      const line = roomExtraById.get(sel.stockItemId);
+      if (!line) continue;
+      addNeed(map, line.stock_item_id, line.code, sel.quantity);
+      if (isPancakeExtraLine(line)) {
+        pancakePieces += sel.quantity;
       }
-      if (pancakeFromSelection > 0) pancakePieces += pancakeFromSelection;
-      else if (e.pancake) pancakePieces += 1;
-    } else {
-      if (e.pancake) pancakePieces += 1;
-      if (e.honey) addByCode(map, "honey", 1);
-      if (e.nutella) addByCode(map, "nutella", 1);
-      if (e.cereal) addByCode(map, "cornflakes", 1);
-      if (e.waterBottle) addByCode(map, "water_bottle", 1);
     }
+    if (selected.length === 0 && e.pancake) pancakePieces += 1;
     for (const f of e.fruits) {
       if (f === "watermelon") addByCode(map, "watermelon", 1);
       else if (f === "papaya") addByCode(map, "papaya", 1);
@@ -417,13 +432,23 @@ export function computeIngredientNeeds(
 }
 
 
+export type ServerSummaryOptionSide = {
+  name: string;
+  code: string | null;
+  quantity: number;
+};
+
 export type ServerSummaryRow = {
   date: string;
   breakfast_time: string;
   room_number: string;
   maldivian: number;
   continental: number;
+  /** Selected optional sides from Recipes (name + count). */
+  option_sides: ServerSummaryOptionSide[];
+  /** @deprecated Derived from option_sides codes for older CSV labels. */
   juice: number;
+  /** @deprecated Derived from option_sides codes for older CSV labels. */
   tea_or_coffee: number;
   special_requests: string[];
   outside_normal_window: boolean;
@@ -433,10 +458,12 @@ export type ServerSummaryRow = {
 export function computeServerSummary(
   dateYmd: string,
   orders: OrderLike[],
+  recipes: RecipeNeedSource[] = [],
 ): ServerSummaryRow[] {
   const active = activeOrders(orders);
   const key = (o: OrderLike) => `${o.roomNumber}|${o.servingTime}`;
-  const map = new Map<string, ServerSummaryRow>();
+  type Acc = ServerSummaryRow & { sideAgg: Map<string, ServerSummaryOptionSide> };
+  const map = new Map<string, Acc>();
 
   for (const o of active) {
     const k = key(o);
@@ -448,26 +475,56 @@ export function computeServerSummary(
         room_number: o.roomNumber,
         maldivian: 0,
         continental: 0,
+        option_sides: [],
         juice: 0,
         tea_or_coffee: 0,
         special_requests: [],
         outside_normal_window: false,
+        sideAgg: new Map(),
       };
       map.set(k, row);
     }
     if (o.breakfastType === "maldivian") row.maldivian += 1;
     else row.continental += 1;
-    if (o.juice) row.juice += 1;
-    if (o.tea || o.coffee) row.tea_or_coffee += 1;
+
+    const selected = new Set(o.selectedOptionIds ?? []);
+    const opts = optionLinesForType(recipes, o.breakfastType);
+    if (opts.length) {
+      for (const line of opts) {
+        if (!selected.has(line.stock_item_id)) continue;
+        const cur = row.sideAgg.get(line.stock_item_id);
+        if (cur) cur.quantity += 1;
+        else {
+          row.sideAgg.set(line.stock_item_id, {
+            name: line.name ?? line.code ?? "Side",
+            code: line.code,
+            quantity: 1,
+          });
+        }
+        const code = (line.code ?? "").toLowerCase();
+        if (code === "sunquick" || code === "juice") row.juice += 1;
+        if (code === "tea" || code === "coffee") row.tea_or_coffee += 1;
+      }
+    } else {
+      // Legacy orders before recipe options existed.
+      if (o.juice) row.juice += 1;
+      if (o.tea || o.coffee) row.tea_or_coffee += 1;
+    }
+
     if (o.specialRequests?.trim()) row.special_requests.push(o.specialRequests.trim());
     if (o.outsideNormalWindow) row.outside_normal_window = true;
   }
 
-  return [...map.values()].sort((a, b) => {
-    const t = a.breakfast_time.localeCompare(b.breakfast_time);
-    if (t !== 0) return t;
-    return a.room_number.localeCompare(b.room_number);
-  });
+  return [...map.values()]
+    .map(({ sideAgg, ...row }) => ({
+      ...row,
+      option_sides: [...sideAgg.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => {
+      const t = a.breakfast_time.localeCompare(b.breakfast_time);
+      if (t !== 0) return t;
+      return a.room_number.localeCompare(b.room_number);
+    });
 }
 
 /** Normal window 07:00–09:30 inclusive, 15-min steps. */
