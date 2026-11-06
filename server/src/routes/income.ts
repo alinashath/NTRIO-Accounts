@@ -262,6 +262,9 @@ type GreenTaxGuestRow = {
   booking_method: string | null;
 };
 
+/** Zod request shape (optional fields may be undefined). */
+type GreenTaxGuestInput = z.infer<typeof greenTaxGuestSchema>;
+
 function parseOptionalDateTime(raw: string | null | undefined): Date | null {
   if (raw == null || !String(raw).trim()) return null;
   const d = new Date(String(raw).trim());
@@ -292,7 +295,7 @@ function parseGreenTaxGuests(raw: unknown): GreenTaxGuestRow[] {
 }
 
 function normalizeGreenTaxGuests(
-  raw: GreenTaxGuestRow[] | null | undefined,
+  raw: GreenTaxGuestInput[] | null | undefined,
 ): GreenTaxGuestRow[] {
   if (raw == null) return [];
   return parseGreenTaxGuests(raw);
@@ -308,7 +311,7 @@ function gstCreateData(body: {
   green_tax_check_in?: string | null;
   green_tax_check_out?: string | null;
   green_tax_form_url?: string | null;
-  green_tax_guests?: GreenTaxGuestRow[] | null;
+  green_tax_guests?: GreenTaxGuestInput[] | null;
 }) {
   return {
     invoiceNumber: body.invoice_number?.trim() || null,
@@ -334,7 +337,7 @@ function gstUpdateData(body: {
   green_tax_check_in?: string | null;
   green_tax_check_out?: string | null;
   green_tax_form_url?: string | null;
-  green_tax_guests?: GreenTaxGuestRow[] | null;
+  green_tax_guests?: GreenTaxGuestInput[] | null;
 }) {
   return {
     invoiceNumber:
