@@ -744,18 +744,48 @@ export interface KitchenSummariesDto {
   kitchen_plan: KitchenPlanDto;
 }
 
+export type StockBaseUnit = "g" | "ml" | "pcs";
+
+export interface StockUnitDefDto {
+  code: string;
+  label: string;
+  to_base: number;
+  kind: "standard" | "pack";
+}
+
 export interface StockItemDto {
   id: string;
   code: string | null;
   name: string;
+  /** Display label (preferred unit name). */
   unit: string;
+  base_unit: StockBaseUnit;
+  display_unit: string;
+  units: StockUnitDefDto[];
   kind: StockItemKind;
+  /** Min stock in base units. */
   min_stock: number;
-  /** Latest known unit price from a refill (meal cost estimates). */
+  /** Latest known price per base unit from a refill (meal cost estimates). */
   last_unit_cost: number | null;
   use_notes: string | null;
   pack_info: string | null;
   sort_order: number;
+}
+
+export interface StockProductDto {
+  id: string;
+  stock_item_id: string;
+  stock_item_name: string;
+  stock_item_unit: string;
+  name: string;
+  description: string | null;
+  qty: number;
+  unit_code: string;
+  default_price: number | null;
+  sort_order: number;
+  is_active: boolean;
+  /** Base qty added by one product. */
+  base_qty: number;
 }
 
 export interface StockInventoryRowDto {
@@ -763,22 +793,28 @@ export interface StockInventoryRowDto {
   code: string | null;
   name: string;
   unit: string;
+  base_unit: StockBaseUnit;
+  display_unit: string;
+  units: StockUnitDefDto[];
   kind: StockItemKind;
   use_notes: string | null;
   pack_info: string | null;
+  /** Min stock in base units. */
   min_stock: number;
+  /** Ledger quantities in base units. */
   opening: number;
   received: number;
   used: number;
   waste: number;
   expenditure: number;
-  /** Unit price recorded on this day's refill (or last known). */
+  /** Price per base unit recorded on this day's refill (or last known). */
   unit_cost: number | null;
-  /** Latest catalog unit price used for meal costing. */
+  /** Latest catalog price per base unit used for meal costing. */
   last_unit_cost: number | null;
   balance: number;
   below_min: boolean;
   ledger_id: string | null;
+  product_count: number;
 }
 
 export type ShoppingReason = "order_shortfall" | "min_stock" | "missing_item";
@@ -846,12 +882,22 @@ export interface RecipeLineDto {
   stock_item_name: string;
   stock_item_unit: string;
   stock_item_code: string | null;
+  stock_item_base_unit?: StockBaseUnit;
+  stock_item_units?: StockUnitDefDto[];
+  /** Quantity in base units (used for stock usage / costing). */
   qty_per_serving: number;
+  /** Qty as entered in the editor. */
+  input_qty: number | null;
+  /** Unit code chosen in the editor. */
+  input_unit: string | null;
+  /** When set on addons, selection expands this prepared recipe (qty ÷ batch_size). */
+  component_recipe_id: string | null;
+  component_recipe_name: string | null;
   notes: string | null;
   show_on_kot: boolean;
   /** Choosable side on Maldivian/Continental orders (not always included). */
   is_option: boolean;
-  /** Line cost = qty × last unit price. */
+  /** Line cost = base qty × last unit price. */
   estimated_cost: number | null;
   unit_cost: number | null;
 }
@@ -863,6 +909,8 @@ export interface RecipeDto {
   kind: RecipeKind;
   code: string | null;
   notes: string | null;
+  /** BOM sized for this many servings/pieces when > 1. */
+  batch_size: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -11,6 +11,8 @@ import {
   type MealOrderLike,
 } from "./mealRequirements.js";
 import { loadMealCatalog } from "./mealCatalog.js";
+import { stockUnitsOf } from "../lib/stockDto.js";
+import { fromBase, roundQty } from "../lib/units.js";
 
 function balanceOf(opening: number, received: number, used: number) {
   return opening + received - used;
@@ -276,16 +278,19 @@ export async function buildShoppingListForDate(userId: string, dateStr: string) 
     if (available - required < minStock && minStock > 0) reasons.push("min_stock");
     if (toBuy > 0 && reasons.length === 0) reasons.push("min_stock");
 
+    const { baseUnit, units } = stockUnitsOf(item);
+    const displayUnit = item.displayUnit || item.unit || baseUnit;
+    const toDisp = (n: number) => roundQty(fromBase(n, displayUnit, units, baseUnit), 4);
     lines.push({
       code,
       stock_item_id: item.id,
       name: item.name,
       unit: item.unit,
-      required,
-      on_hand: available,
-      min_stock: minStock,
-      to_buy: toBuy,
-      projected_after_use: projected,
+      required: toDisp(required),
+      on_hand: toDisp(available),
+      min_stock: toDisp(minStock),
+      to_buy: toDisp(toBuy),
+      projected_after_use: toDisp(projected),
       reasons: toBuy > 0 ? reasons : [],
       use_notes: item.useNotes,
       pack_info: item.packInfo,
@@ -302,16 +307,19 @@ export async function buildShoppingListForDate(userId: string, dateStr: string) 
     const { available } = await availableForDate(userId, item.id, date);
     if (available >= minStock) continue;
     const toBuy = minStock - available;
+    const { baseUnit, units } = stockUnitsOf(item);
+    const displayUnit = item.displayUnit || item.unit || baseUnit;
+    const toDisp = (n: number) => roundQty(fromBase(n, displayUnit, units, baseUnit), 4);
     lines.push({
       code: item.code ?? `item:${item.id}`,
       stock_item_id: item.id,
       name: item.name,
       unit: item.unit,
       required: 0,
-      on_hand: available,
-      min_stock: minStock,
-      to_buy: toBuy,
-      projected_after_use: available + toBuy,
+      on_hand: toDisp(available),
+      min_stock: toDisp(minStock),
+      to_buy: toDisp(toBuy),
+      projected_after_use: toDisp(available + toBuy),
       reasons: ["min_stock"],
       use_notes: item.useNotes,
       pack_info: item.packInfo,

@@ -82,6 +82,9 @@ export type PreparedBomLine = {
 export type PreparedRecipeSource = {
   id: string;
   name: string;
+  code: string | null;
+  /** When > 1, BOM quantities are for this many pieces/servings. */
+  batch_size: number;
   lines: PreparedBomLine[];
 };
 
@@ -93,6 +96,8 @@ export type AddonLineSource = {
   qty_per_serving: number;
   show_on_kot: boolean;
   notes: string | null;
+  /** When set, selection expands this prepared recipe (qty ÷ batch_size). */
+  component_recipe_id: string | null;
 };
 
 export type KotPrepLine = {
@@ -228,6 +233,20 @@ function addNeed(
   map.set(key, { stock_item_id: stockItemId, code, quantity: qty });
 }
 
+/** Expand ordered qty of a prepared recipe into base-unit stock needs. */
+function expandPreparedNeeds(
+  map: Map<string, IngredientNeedLine>,
+  prep: PreparedRecipeSource,
+  orderedQty: number,
+) {
+  if (!(orderedQty > 0)) return;
+  const batchSize = prep.batch_size > 0 ? prep.batch_size : 1;
+  const batches = orderedQty / batchSize;
+  for (const bom of prep.lines) {
+    addNeed(map, bom.stock_item_id, bom.code, bom.qty_per_serving * batches);
+  }
+}
+
 /** Expand a menu line into stock needs (stock item or prepared BOM). */
 function expandLineNeeds(
   map: Map<string, IngredientNeedLine>,
@@ -243,9 +262,7 @@ function expandLineNeeds(
   if (line.component_recipe_id) {
     const prep = preparedById.get(line.component_recipe_id);
     if (!prep) return;
-    for (const bom of prep.lines) {
-      addNeed(map, bom.stock_item_id, bom.code, bom.qty_per_serving * mult);
-    }
+    expandPreparedNeeds(map, prep, mult);
     return;
   }
   if (line.stock_item_id) {
@@ -274,12 +291,12 @@ function expandLinePrep(
   bumpPrep(agg, key, name, unit, code, line.qty_per_serving || 1, roomNumber);
 }
 
-const PANCAKE_CODES = new Set(["pancake", "pancake_batch", "pancakes"]);
-
+/** @deprecated Kept for older callers; prefer component_recipe links. */
 export function isPancakeCode(code: string | null | undefined) {
-  return !!code && PANCAKE_CODES.has(code);
+  return !!code && ["pancake", "pancake_batch", "pancakes"].includes(code);
 }
 
+/** @deprecated Kept for older callers; prefer component_recipe links. */
 export function isPancakeName(name: string | null | undefined) {
   return (name ?? "").toLowerCase().includes("pancake");
 }
@@ -329,14 +346,40 @@ export function toMealOrderLike(o: OrderLike): MealOrderLike {
   };
 }
 
+function bumpLegacyPrepCounter(
+  prep: KitchenPrep,
+  recipeCode: string | null | undefined,
+  recipeName: string | null | undefined,
+  stockCode: string | null | undefined,
+  qty: number,
+) {
+  if (!(qty > 0)) return;
+  const code = (recipeCode ?? stockCode ?? "").toLowerCase();
+  const name = (recipeName ?? "").toLowerCase();
+  if (code === "pancakes" || code === "pancake_batch" || code === "pancake") prep.pancakes += qty;
+  if (code === "roshi" || /\broshi\b/.test(name)) prep.roshi += qty;
+  if (code === "mashuni_cups" || code === "mashuni" || /mashuni/.test(name)) prep.mashuni_cups += qty;
+  if (code === "sausages") prep.sausages += qty;
+  if (
+    code === "stir_fried_potato" ||
+    code === "potato_portion" ||
+    code === "potatoes" ||
+    code === "potato"
+  ) {
+    prep.potato_servings += qty;
+  }
+}
+
 export function computeKitchenPrep(
   orders: MealOrderLike[],
   extras: ExtrasLike[],
   menus: MenuSource[] = [],
   addons: AddonLineSource[] = [],
+  prepared: PreparedRecipeSource[] = [],
 ): KitchenPrep {
   const active = activeOrders(orders);
   const prepAgg = new Map<string, KotPrepLine>();
+  const preparedById = new Map(prepared.map((p) => [p.id, p]));
   const prep: KitchenPrep = {
     prep_lines: [],
     eggs_omelette: 0,
@@ -361,17 +404,16 @@ export function computeKitchenPrep(
         else if (style.includes("boiled")) prep.eggs_boiled += 1;
         else if (style.includes("scrambled")) prep.eggs_scrambled += 1;
       }
-      if (isPancakeCode(line.stock_item_code) || isPancakeName(line.display_name) || isPancakeName(line.component_recipe_name)) {
-        prep.pancakes += line.qty_per_serving || 1;
-      }
-      const code = (line.stock_item_code ?? "").toLowerCase();
-      const prepName = `${line.display_name} ${line.component_recipe_name ?? ""}`.toLowerCase();
-      if (code === "roshi" || /\broshi\b/.test(prepName)) prep.roshi += line.qty_per_serving;
-      if (code === "mashuni" || /mashuni/.test(prepName)) prep.mashuni_cups += line.qty_per_serving;
-      if (code === "sausages") prep.sausages += line.qty_per_serving;
-      if (code === "potatoes" || code === "potato" || code === "potato_portion") {
-        prep.potato_servings += line.qty_per_serving;
-      }
+      const linked = line.component_recipe_id
+        ? preparedById.get(line.component_recipe_id)
+        : undefined;
+      bumpLegacyPrepCounter(
+        prep,
+        linked?.code ?? null,
+        linked?.name ?? line.component_recipe_name,
+        line.stock_item_code,
+        line.qty_per_serving || 1,
+      );
     }
 
     // Selected add-ons by stock id (shared catalog)
@@ -390,9 +432,16 @@ export function computeKitchenPrep(
         addon.qty_per_serving,
         o.roomNumber,
       );
-      if (isPancakeCode(addon.code) || isPancakeName(addon.name)) {
-        prep.pancakes += addon.qty_per_serving;
-      }
+      const linked = addon.component_recipe_id
+        ? preparedById.get(addon.component_recipe_id)
+        : undefined;
+      bumpLegacyPrepCounter(
+        prep,
+        linked?.code ?? null,
+        linked?.name ?? addon.name,
+        addon.code,
+        addon.qty_per_serving,
+      );
     }
   }
 
@@ -409,9 +458,16 @@ export function computeKitchenPrep(
         sel.quantity,
         e.roomNumber,
       );
-      if (isPancakeCode(addon.code) || isPancakeName(addon.name)) {
-        prep.pancakes += sel.quantity;
-      }
+      const linked = addon.component_recipe_id
+        ? preparedById.get(addon.component_recipe_id)
+        : undefined;
+      bumpLegacyPrepCounter(
+        prep,
+        linked?.code ?? null,
+        linked?.name ?? addon.name,
+        addon.code,
+        sel.quantity,
+      );
     }
   }
 
@@ -491,6 +547,18 @@ export function computeIngredientNeeds(
   const preparedById = new Map(prepared.map((p) => [p.id, p]));
   const addonById = new Map(addons.map((a) => [a.stock_item_id, a]));
 
+  function expandAddon(addon: AddonLineSource, qty: number) {
+    if (!(qty > 0)) return;
+    if (addon.component_recipe_id) {
+      const prep = preparedById.get(addon.component_recipe_id);
+      if (prep) {
+        expandPreparedNeeds(map, prep, qty * (addon.qty_per_serving || 1));
+        return;
+      }
+    }
+    addNeed(map, addon.stock_item_id, addon.code, qty * (addon.qty_per_serving || 1));
+  }
+
   for (const o of active) {
     const lines = resolveOrderMenuLines(o, menus);
     for (const line of lines) {
@@ -500,8 +568,7 @@ export function computeIngredientNeeds(
       if (lines.some((l) => l.id === id || l.stock_item_id === id)) continue;
       const addon = addonById.get(id);
       if (!addon) continue;
-      addNeed(map, addon.stock_item_id, addon.code, addon.qty_per_serving);
-      // If addon maps to a prepared recipe by code match — handled via stock qty only
+      expandAddon(addon, 1);
     }
   }
 
@@ -512,7 +579,7 @@ export function computeIngredientNeeds(
         addNeed(map, sel.stockItemId, null, sel.quantity);
         continue;
       }
-      addNeed(map, line.stock_item_id, line.code, sel.quantity);
+      expandAddon(line, sel.quantity);
     }
     for (const f of e.fruits) {
       if (f === "watermelon") addNeed(map, null, "watermelon", 1);
@@ -520,41 +587,6 @@ export function computeIngredientNeeds(
       else if (f === "apple") addNeed(map, null, "apple", 4);
       else if (f === "orange") addNeed(map, null, "orange", 4);
     }
-  }
-
-  // Pancake batter: if pancake pieces selected, expand prepared recipe named/coded pancake if present
-  let pancakePieces = 0;
-  for (const need of map.values()) {
-    if (isPancakeCode(need.code)) pancakePieces += need.quantity;
-  }
-  const pancakePrep =
-    prepared.find((p) => isPancakeName(p.name) || p.lines.some((l) => isPancakeCode(l.code))) ??
-    prepared.find((p) => /pancake/i.test(p.name));
-  // Prefer dedicated batter recipe with flour in BOM
-  const batter = prepared.find(
-    (p) =>
-      p.lines.some((l) => l.code === "flour") &&
-      (isPancakeName(p.name) || p.lines.some((l) => isPancakeCode(l.code))),
-  );
-  const usePrep = batter ?? pancakePrep;
-  if (pancakePieces > 0 && usePrep && usePrep.lines.some((l) => l.code === "flour")) {
-    // Assume prepared recipe BOM is sized per 1 piece OR per batch — prefer notes in seed (20 pieces).
-    // Convention: if BOM has flour ~0.25, treat as per-20-piece batch.
-    const flourLine = usePrep.lines.find((l) => l.code === "flour");
-    const perBatch = flourLine && flourLine.qty_per_serving >= 0.2;
-    const batches = perBatch ? pancakePieces / 20 : pancakePieces;
-    for (const bom of usePrep.lines) {
-      if (isPancakeCode(bom.code)) continue;
-      addNeed(map, bom.stock_item_id, bom.code, bom.qty_per_serving * batches);
-    }
-  } else if (pancakePieces > 0) {
-    // Legacy hardcoded batter fallback
-    const batches = pancakePieces / 20;
-    addNeed(map, null, "flour", batches * 0.25);
-    addNeed(map, null, "eggs", batches * 4);
-    addNeed(map, null, "baking_powder", batches * 10);
-    addNeed(map, null, "sugar_g", batches * 200);
-    addNeed(map, null, "banana_essence", batches * 15);
   }
 
   return [...map.values()].filter((l) => l.quantity > 0);

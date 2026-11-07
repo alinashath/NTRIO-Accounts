@@ -53,6 +53,8 @@ export async function loadMealCatalog(userId: string) {
     .map((r) => ({
       id: r.id,
       name: r.name,
+      code: r.code,
+      batch_size: r.batchSize && r.batchSize > 0 ? r.batchSize : 1,
       lines: r.lines
         .filter((l) => l.stockItem.isActive)
         .map((l) => ({
@@ -78,6 +80,7 @@ export async function loadMealCatalog(userId: string) {
         qty_per_serving: dec(l.qtyPerServing),
         show_on_kot: l.showOnKot,
         notes: l.notes,
+        component_recipe_id: l.componentRecipeId ?? null,
       });
     }
   }

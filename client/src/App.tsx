@@ -37,9 +37,18 @@ import { CashMovementPage } from "./pages/CashMovementPage";
 import { KitchenOrdersPage } from "./pages/kitchen/KitchenOrdersPage";
 import { KitchenSummariesPage } from "./pages/kitchen/KitchenSummariesPage";
 import { KitchenRecipesPage } from "./pages/kitchen/KitchenRecipesPage";
+import { RecipeEditPage } from "./pages/kitchen/RecipeEditPage";
+import { RecipeLineEditPage } from "./pages/kitchen/RecipeLineEditPage";
+import { MenuEditPage } from "./pages/kitchen/MenuEditPage";
+import { MenuLineEditPage } from "./pages/kitchen/MenuLineEditPage";
 import { OccupancyCalendarPage } from "./pages/occupancy/OccupancyCalendarPage";
 import { OccupancyRoomsPage } from "./pages/occupancy/OccupancyRoomsPage";
 import { StockInventoryPage } from "./pages/stock/StockInventoryPage";
+import { StockItemEditPage } from "./pages/stock/StockItemEditPage";
+import { StockItemAdjustPage } from "./pages/stock/StockItemAdjustPage";
+import { StockRefillPage } from "./pages/stock/StockRefillPage";
+import { StockProductsPage } from "./pages/stock/StockProductsPage";
+import { StockProductEditPage } from "./pages/stock/StockProductEditPage";
 import { StockShoppingPage } from "./pages/stock/StockShoppingPage";
 import { StockReportsPage } from "./pages/stock/StockReportsPage";
 
@@ -193,6 +202,14 @@ export default function App() {
           <Route index element={<KitchenOrdersPage />} />
           <Route path="summaries" element={<KitchenSummariesPage />} />
           <Route path="recipes" element={<KitchenRecipesPage />} />
+          <Route path="recipes/new" element={<RecipeEditPage />} />
+          <Route path="recipes/:id" element={<RecipeEditPage />} />
+          <Route path="recipes/:id/lines/new" element={<RecipeLineEditPage />} />
+          <Route path="recipes/:id/lines/:lineId" element={<RecipeLineEditPage />} />
+          <Route path="menus/new" element={<MenuEditPage />} />
+          <Route path="menus/:id" element={<MenuEditPage />} />
+          <Route path="menus/:id/lines/new" element={<MenuLineEditPage />} />
+          <Route path="menus/:id/lines/:lineId" element={<MenuLineEditPage />} />
           <Route path="rooms" element={<Navigate to="/occupancy/rooms" replace />} />
         </Route>
 
@@ -203,6 +220,14 @@ export default function App() {
 
         <Route path="/stock" element={<StockShell />}>
           <Route index element={<StockInventoryPage />} />
+          <Route path="items/new" element={<StockItemEditPage />} />
+          <Route path="items/:id" element={<StockItemEditPage />} />
+          <Route path="items/:id/adjust" element={<StockItemAdjustPage />} />
+          <Route path="items/:id/refill" element={<StockRefillPage />} />
+          <Route path="refill" element={<StockRefillPage />} />
+          <Route path="products" element={<StockProductsPage />} />
+          <Route path="products/new" element={<StockProductEditPage />} />
+          <Route path="products/:id" element={<StockProductEditPage />} />
           <Route path="shopping" element={<StockShoppingPage />} />
           <Route path="reports" element={<StockReportsPage />} />
         </Route>

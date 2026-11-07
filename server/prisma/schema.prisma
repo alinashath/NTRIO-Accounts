@@ -109,6 +109,7 @@ model User {
   roomDayExtras       RoomDayExtras[]
   stockItems          StockItem[]
   stockLedgerDays     StockLedgerDay[]
+  stockProducts       StockProduct[]
   recipes             Recipe[]
   mealMenus           MealMenu[]
 
@@ -678,14 +679,22 @@ model StockItem {
   /// Stable key for recipe math (e.g. flour, eggs); null for custom non-food items
   code        String?
   name        String
+  /// Display label for the preferred unit (kept for list copy).
   unit        String
+  /// Lowest storage unit: g | ml | pcs
+  baseUnit    String        @default("pcs") @map("base_unit")
+  /// Preferred UI unit code (kg, L, can, slice, …)
+  displayUnit String        @default("pcs") @map("display_unit")
+  /// JSON StockUnitDef[] — standard + pack units with to_base factors
+  units       Json          @default("[]")
   kind        StockItemKind @default(kitchen)
+  /// Min stock in base units
   minStock    Decimal       @default(0) @map("min_stock") @db.Decimal(15, 4)
-  /// Latest unit price from a refill — used for meal cost estimates.
-  lastUnitCost Decimal?     @map("last_unit_cost") @db.Decimal(15, 4)
+  /// Latest price per base unit from a refill — used for meal cost estimates.
+  lastUnitCost Decimal?     @map("last_unit_cost") @db.Decimal(18, 8)
   /// Human-readable Use rules from PDF
   useNotes    String?       @map("use_notes")
-  /// Optional pack size info (e.g. 200 portions per pack)
+  /// Optional pack size info (legacy human note)
   packInfo    String?       @map("pack_info")
   sortOrder   Int           @default(0) @map("sort_order")
   isActive    Boolean       @default(true) @map("is_active")
@@ -695,10 +704,36 @@ model StockItem {
   ledgerDays  StockLedgerDay[]
   recipeLines RecipeLine[]
   menuLines   MealMenuLine[]
+  products    StockProduct[]
 
   @@unique([userId, code])
   @@index([userId, kind])
   @@map("stock_items")
+}
+
+/// Buyable product that refills one stock item by a fixed amount.
+model StockProduct {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  stockItemId  String   @map("stock_item_id") @db.Uuid
+  name         String
+  description  String?
+  /// How much one product adds, in `unitCode` (converted to base on refill).
+  qty          Decimal  @db.Decimal(15, 4)
+  unitCode     String   @map("unit_code")
+  /// Optional suggested price per one product (currency).
+  defaultPrice Decimal? @map("default_price") @db.Decimal(15, 2)
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stockItemId])
+  @@map("stock_products")
 }
 
 /// Recipe linked to breakfast menu type or a custom named recipe.
@@ -731,13 +766,16 @@ model Recipe {
   /// Optional stable code for seeded recipes (maldivian, continental, pancake, …)
   code        String?
   notes       String?
+  /// When > 1, BOM is sized for this many servings/pieces (e.g. pancake batter = 20).
+  batchSize   Int            @default(1) @map("batch_size")
   isActive    Boolean        @default(true) @map("is_active")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lines     RecipeLine[]
-  menuLines MealMenuLine[] @relation("MenuLineComponentRecipe")
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines             RecipeLine[]   @relation("RecipeOwnLines")
+  componentOfLines  RecipeLine[]   @relation("RecipeLineComponent")
+  menuLines         MealMenuLine[] @relation("MenuLineComponentRecipe")
 
   @@unique([userId, code])
   @@index([userId, applyTo])
@@ -749,18 +787,27 @@ model RecipeLine {
   id          String  @id @default(uuid()) @db.Uuid
   recipeId    String  @map("recipe_id") @db.Uuid
   stockItemId String  @map("stock_item_id") @db.Uuid
-  /// Quantity of stock item per one serving / one room-extras application
+  /// Quantity in base units per one serving / one room-extras application (or per batch when recipe.batchSize > 1)
   qtyPerServing Decimal @map("qty_per_serving") @db.Decimal(15, 4)
+  /// Qty as entered in the editor (e.g. 0.5)
+  inputQty    Decimal? @map("input_qty") @db.Decimal(15, 4)
+  /// Unit code chosen in the editor (e.g. can, g)
+  inputUnit   String?  @map("input_unit")
   notes       String?
   /// When true and this extra is selected for a room, include it on KOT / kitchen plan.
   showOnKot   Boolean @default(true) @map("show_on_kot")
   /// When true on maldivian/continental recipes: choosable side on the order form (not always included).
   isOption    Boolean @default(false) @map("is_option")
+  /// When set (addons / extras), selecting this line expands the prepared recipe BOM
+  /// using qty ÷ recipe.batchSize instead of depleting the marker stock item.
+  componentRecipeId String? @map("component_recipe_id") @db.Uuid
 
-  recipe    Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  recipe          Recipe  @relation("RecipeOwnLines", fields: [recipeId], references: [id], onDelete: Cascade)
+  stockItem       StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  componentRecipe Recipe? @relation("RecipeLineComponent", fields: [componentRecipeId], references: [id], onDelete: SetNull)
 
   @@index([recipeId])
+  @@index([componentRecipeId])
   @@map("recipe_lines")
 }
 
@@ -823,7 +870,8 @@ model StockLedgerDay {
   waste        Decimal  @default(0) @db.Decimal(15, 4)
   /// Expenditure for received goods on this date (currency units)
   expenditure  Decimal  @default(0) @db.Decimal(15, 2)
-  unitCost     Decimal? @map("unit_cost") @db.Decimal(15, 4)
+  /// Price per base unit recorded on this day's refill
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(18, 8)
   notes        String?
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

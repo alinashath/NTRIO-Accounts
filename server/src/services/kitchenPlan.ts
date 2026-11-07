@@ -159,6 +159,7 @@ export async function buildGroupedKitchenPlan(
     filteredExtras,
     catalog.menus,
     catalog.addons,
+    catalog.prepared,
   );
   const kotExtras = computeKotExtras(filteredExtras, catalog.addons);
 

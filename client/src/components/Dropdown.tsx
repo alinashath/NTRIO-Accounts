@@ -19,9 +19,10 @@ type DropdownProps = {
   searchable?: boolean;
   /**
    * When the user types a search that matches no option, show a row to create one (e.g. category).
-   * Should return the new option’s `value` (id). Enables search UI even when `options` is empty.
+   * Return the new option’s `value` (id) to select it, or `void` if the parent will configure
+   * the new item outside the menu (menu still closes).
    */
-  onAddNotFound?: (name: string) => Promise<string>;
+  onAddNotFound?: (name: string) => Promise<string | void> | string | void;
   /** Label for the create row (default: Add category) */
   addNotFoundLabel?: string;
 };
@@ -197,9 +198,9 @@ export function Dropdown({
     setAdding(true);
     try {
       const id = await onAddNotFound(qTrim);
-      onChange(id);
       setOpen(false);
       setQuery("");
+      if (typeof id === "string" && id) onChange(id);
     } catch (e) {
       setAddErr(e instanceof Error ? e.message : "Could not add");
     } finally {

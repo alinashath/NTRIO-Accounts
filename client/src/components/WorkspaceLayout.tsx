@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   ShoppingCart,
+  Tags,
   TrendingDown,
   TrendingUp,
   Users,
@@ -183,6 +184,7 @@ export function WorkspaceLayout({
                 ]
               : [
                   { to: "/stock", label: "Inventory", end: true as boolean },
+                  { to: "/stock/products", label: "Products", end: false },
                   { to: "/stock/shopping", label: "Shopping", end: false },
                   { to: "/stock/reports", label: "Reports", end: false },
                 ]
@@ -296,8 +298,8 @@ export function WorkspaceLayout({
           ) : (
             <>
               <BottomTab to="/stock" end label="Inventory" icon={Package} />
-              <BottomTab to="/stock/shopping" label="Shopping" icon={ShoppingCart} />
-              <BottomTab to="/stock/reports" label="Reports" icon={BarChart3} />
+              <BottomTab to="/stock/products" label="Products" icon={Tags} />
+              <BottomTab to="/stock/shopping" label="Shop" icon={ShoppingCart} />
               <button
                 type="button"
                 onClick={() => setMoreOpen(true)}
