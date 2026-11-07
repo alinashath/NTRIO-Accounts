@@ -455,14 +455,79 @@ function queueMissingProducts(
 }
 
 /** Ensure rooms 101–106 and PDF stock catalog exist for the user. */
+/**
+ * Full catalog/recipe/menu seed is for bootstrap only (new org / incomplete data).
+ * Synced workspaces skip it — routes just need rooms.
+ */
+const kitchenReadyUsers = new Set<string>();
+
+const REQUIRED_RECIPE_CODES = [
+  "maldivian",
+  "continental",
+  "room_extras",
+  "pancakes",
+  "mashuni_cups",
+  "roshi",
+] as const;
+
+export function invalidateKitchenSeedCache(userId?: string) {
+  if (userId) kitchenReadyUsers.delete(userId);
+  else kitchenReadyUsers.clear();
+}
+
+async function listRooms(userId: string) {
+  return prisma.room.findMany({
+    where: { userId },
+    orderBy: { number: "asc" },
+  });
+}
+
+/** Cheap readiness check — rooms + catalog stock + core recipes + breakfast menus. */
+export async function isKitchenWorkspaceReady(userId: string): Promise<boolean> {
+  const catalogCodes = [...PDF_STOCK_CATALOG, ...OTHER_SEED].map((i) => i.code);
+  const [roomCount, stockCount, recipeCount, menuCount] = await Promise.all([
+    prisma.room.count({ where: { userId } }),
+    prisma.stockItem.count({
+      where: { userId, code: { in: catalogCodes } },
+    }),
+    prisma.recipe.count({
+      where: { userId, isActive: true, code: { in: [...REQUIRED_RECIPE_CODES] } },
+    }),
+    prisma.mealMenu.count({
+      where: {
+        userId,
+        isActive: true,
+        code: { in: ["maldivian", "continental"] },
+      },
+    }),
+  ]);
+  return (
+    roomCount >= ROOM_NUMBERS.length &&
+    stockCount >= catalogCodes.length &&
+    recipeCount >= REQUIRED_RECIPE_CODES.length &&
+    menuCount >= 2
+  );
+}
+
 export async function ensureKitchenStockSeed(userId: string) {
-  for (const number of ROOM_NUMBERS) {
-    await prisma.room.upsert({
-      where: { userId_number: { userId, number } },
-      create: { userId, number },
-      update: {},
-    });
+  if (kitchenReadyUsers.has(userId)) {
+    return listRooms(userId);
   }
+
+  if (await isKitchenWorkspaceReady(userId)) {
+    kitchenReadyUsers.add(userId);
+    return listRooms(userId);
+  }
+
+  await Promise.all(
+    ROOM_NUMBERS.map((number) =>
+      prisma.room.upsert({
+        where: { userId_number: { userId, number } },
+        create: { userId, number },
+        update: {},
+      }),
+    ),
+  );
 
   const existingProducts = await prisma.stockProduct.findMany({
     where: { userId, isActive: true },
@@ -473,7 +538,7 @@ export async function ensureKitchenStockSeed(userId: string) {
   );
   const pendingProducts: PendingProduct[] = [];
 
-  for (const item of PDF_STOCK_CATALOG) {
+  const upsertCatalog = async (item: CatalogItem, kind: "kitchen" | "other") => {
     const fields = catalogSeedFields(item);
     const row = await prisma.stockItem.upsert({
       where: { userId_code: { userId, code: item.code } },
@@ -485,7 +550,7 @@ export async function ensureKitchenStockSeed(userId: string) {
         baseUnit: fields.baseUnit,
         displayUnit: fields.displayUnit,
         units: fields.units,
-        kind: "kitchen",
+        kind,
         minStock: 0,
         useNotes: item.useNotes,
         packInfo: item.packInfo ?? null,
@@ -495,36 +560,22 @@ export async function ensureKitchenStockSeed(userId: string) {
       update: {},
     });
     queueMissingProducts(userId, row.id, item.products, productKeys, pendingProducts);
-  }
+  };
 
-  for (const item of OTHER_SEED) {
-    const fields = catalogSeedFields(item);
-    const row = await prisma.stockItem.upsert({
-      where: { userId_code: { userId, code: item.code } },
-      create: {
-        userId,
-        code: item.code,
-        name: item.name,
-        unit: fields.unit,
-        baseUnit: fields.baseUnit,
-        displayUnit: fields.displayUnit,
-        units: fields.units,
-        kind: "other",
-        minStock: 0,
-        useNotes: item.useNotes,
-        packInfo: item.packInfo ?? null,
-        sortOrder: item.sortOrder,
-      },
-      update: {},
-    });
-    queueMissingProducts(userId, row.id, item.products, productKeys, pendingProducts);
+  const catalogJobs = [
+    ...PDF_STOCK_CATALOG.map((item) => () => upsertCatalog(item, "kitchen")),
+    ...OTHER_SEED.map((item) => () => upsertCatalog(item, "other")),
+  ];
+  const CHUNK = 8;
+  for (let i = 0; i < catalogJobs.length; i += CHUNK) {
+    await Promise.all(catalogJobs.slice(i, i + CHUNK).map((fn) => fn()));
   }
 
   if (pendingProducts.length > 0) {
     await prisma.stockProduct.createMany({ data: pendingProducts });
   }
 
-  // Merge catalog pack units onto existing items + products from grocery / ledger history.
+  // One-time bootstrap helpers (not on the hot path once ready).
   const { ensureCatalogPackUnitsOnItems, ensureProductsFromHistory } = await import(
     "./stockProductBackfill.js"
   );
@@ -542,11 +593,8 @@ export async function ensureKitchenStockSeed(userId: string) {
   const { ensureMealMenus } = await import("./mealMenus.js");
   await ensureMealMenus(userId);
 
-  const rooms = await prisma.room.findMany({
-    where: { userId },
-    orderBy: { number: "asc" },
-  });
-  return rooms;
+  kitchenReadyUsers.add(userId);
+  return listRooms(userId);
 }
 
 type SeedLine = {

@@ -30,6 +30,68 @@ async function currencyChangeLocked(accountId: string, openingBalance: unknown):
   return ic + ec + tf + tt + dp + adj > 0;
 }
 
+/** Batch version for account lists — 6 queries total instead of 6×N. */
+async function currencyLockedByAccountId(
+  rows: Array<{ id: string; openingBalance: unknown }>,
+): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>();
+  const needCheck: string[] = [];
+  for (const row of rows) {
+    if (toMoney(Number(row.openingBalance)) !== 0) {
+      out.set(row.id, true);
+    } else {
+      needCheck.push(row.id);
+      out.set(row.id, false);
+    }
+  }
+  if (needCheck.length === 0) return out;
+
+  const [inc, exp, tf, tt, dp, adj] = await Promise.all([
+    prisma.incomeEntry.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: needCheck }, deletedAt: null, voidedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.expenseEntry.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: needCheck }, deletedAt: null, voidedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.accountTransfer.groupBy({
+      by: ["fromAccountId"],
+      where: { fromAccountId: { in: needCheck } },
+      _count: { _all: true },
+    }),
+    prisma.accountTransfer.groupBy({
+      by: ["toAccountId"],
+      where: { toAccountId: { in: needCheck } },
+      _count: { _all: true },
+    }),
+    prisma.debtPayment.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: needCheck }, voidedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.accountBalanceAdjustment.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: needCheck } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const active = new Set<string>();
+  for (const r of inc) if (r.accountId) active.add(r.accountId);
+  for (const r of exp) if (r.accountId) active.add(r.accountId);
+  for (const r of tf) active.add(r.fromAccountId);
+  for (const r of tt) active.add(r.toAccountId);
+  for (const r of dp) active.add(r.accountId);
+  for (const r of adj) active.add(r.accountId);
+  for (const id of needCheck) {
+    if (active.has(id)) out.set(id, true);
+  }
+  return out;
+}
+
 function serializeAccount(
   row: {
     id: string;
@@ -64,11 +126,9 @@ accountsRouter.get(
       where: { userId },
       orderBy: { createdAt: "asc" },
     });
-    const out = await Promise.all(
-      rows.map(async (row) => {
-        const locked = await currencyChangeLocked(row.id, row.openingBalance);
-        return serializeAccount(row, { can_change_currency: !locked });
-      }),
+    const lockedById = await currencyLockedByAccountId(rows);
+    const out = rows.map((row) =>
+      serializeAccount(row, { can_change_currency: !lockedById.get(row.id) }),
     );
     res.json(out);
   }),

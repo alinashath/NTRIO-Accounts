@@ -7,6 +7,24 @@ export interface SettingsUserDto {
   created_at: string;
 }
 
+/** GET /api/settings/mcp-users */
+export interface McpUserDto {
+  id: string;
+  username: string;
+  disabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** GET /api/settings/mcp-meta */
+export interface McpMetaDto {
+  mcp_url: string;
+  current_origin: string;
+  allowed_origins: string[];
+  mcp_urls: string[];
+  scope: string;
+}
+
 /** GET / PATCH /api/settings */
 export interface FxDailyRateDto {
   rate_date: string;

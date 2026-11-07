@@ -179,12 +179,21 @@ export function readPreferredOrgId(req: Request): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
+/** Cache org book-owner lookups — membership rarely changes mid-session. */
+const OWNER_TTL_MS = 5 * 60 * 1000;
+const ownerCache = new Map<string, { at: number; userId: string }>();
+
 /**
  * Books (accounts, entries, rooms, stock, FX) are stored on one user id.
  * That id is a founding member of the organization (earliest membership).
  * People added later read and write those same records while the organization is active.
  */
 export async function dataOwnerForOrganization(organizationId: string): Promise<string> {
+  const cached = ownerCache.get(organizationId);
+  if (cached && Date.now() - cached.at < OWNER_TTL_MS) {
+    return cached.userId;
+  }
+
   const members = await prisma.organizationMember.findMany({
     where: { organizationId },
     orderBy: [{ createdAt: "asc" }, { user: { createdAt: "asc" } }],
@@ -204,7 +213,9 @@ export async function dataOwnerForOrganization(organizationId: string): Promise<
     if (byAccounts !== 0) return byAccounts;
     return a.user.createdAt.getTime() - b.user.createdAt.getTime();
   });
-  return founders[0]!.userId;
+  const userId = founders[0]!.userId;
+  ownerCache.set(organizationId, { at: Date.now(), userId });
+  return userId;
 }
 
 /** Active organization for this login, then the user id that owns its books. */

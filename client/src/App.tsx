@@ -28,6 +28,7 @@ import { ReportsGreenTaxTab } from "./pages/reports/ReportsGreenTaxTab";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SettingsAccountPage } from "./pages/settings/SettingsAccountPage";
 import { SettingsUsersPage } from "./pages/settings/SettingsUsersPage";
+import { SettingsMcpPage } from "./pages/settings/SettingsMcpPage";
 import { SettingsIncomeCategoriesPage } from "./pages/settings/SettingsIncomeCategoriesPage";
 import { SettingsExpenseCategoriesPage } from "./pages/settings/SettingsExpenseCategoriesPage";
 import { SettingsProjectsPage } from "./pages/settings/SettingsProjectsPage";
@@ -189,6 +190,7 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/account" element={<SettingsAccountPage />} />
           <Route path="settings/users" element={<SettingsUsersPage />} />
+          <Route path="settings/mcp" element={<SettingsMcpPage />} />
           <Route path="settings/income-categories" element={<SettingsIncomeCategoriesPage />} />
           <Route path="settings/expense-categories" element={<SettingsExpenseCategoriesPage />} />
           <Route path="settings/projects" element={<SettingsProjectsPage />} />

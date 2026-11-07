@@ -22,6 +22,7 @@ import { stockRouter } from "./routes/stock.js";
 import { recipesRouter } from "./routes/recipes.js";
 import { menusRouter } from "./routes/menus.js";
 import { OrgAccessError } from "./lib/organization.js";
+import { mountMcp } from "./mcp/mount.js";
 import { notFound } from "./utils/http.js";
 
 const app = express();
@@ -53,6 +54,9 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false }));
+
+mountMcp(app);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });

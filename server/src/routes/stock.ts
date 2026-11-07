@@ -39,6 +39,40 @@ async function previousBalance(
   return balanceOf(dec(prev.opening), dec(prev.received), dec(prev.used));
 }
 
+/** Latest ledger before `beforeDate` for many items — one query instead of N. */
+async function previousBalancesByItem(
+  userId: string,
+  stockItemIds: string[],
+  beforeDate: Date,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (stockItemIds.length === 0) return out;
+
+  const rows = await prisma.stockLedgerDay.findMany({
+    where: {
+      userId,
+      stockItemId: { in: stockItemIds },
+      date: { lt: beforeDate },
+    },
+    orderBy: [{ stockItemId: "asc" }, { date: "desc" }],
+    select: {
+      stockItemId: true,
+      opening: true,
+      received: true,
+      used: true,
+    },
+  });
+
+  for (const row of rows) {
+    if (out.has(row.stockItemId)) continue;
+    out.set(
+      row.stockItemId,
+      balanceOf(dec(row.opening), dec(row.received), dec(row.used)),
+    );
+  }
+  return out;
+}
+
 function normalizeBase(raw: string | undefined): BaseUnit {
   if (raw === "g" || raw === "ml" || raw === "pcs") return raw;
   return "pcs";
@@ -534,14 +568,17 @@ stockRouter.get(
       },
     });
 
+    const itemIds = items.map((i) => i.id);
     const ledgers = await prisma.stockLedgerDay.findMany({
       where: {
         userId,
         date,
-        stockItemId: { in: items.map((i) => i.id) },
+        stockItemId: { in: itemIds },
       },
     });
     const byItem = new Map(ledgers.map((l) => [l.stockItemId, l]));
+    const missingIds = itemIds.filter((id) => !byItem.has(id));
+    const openingByItem = await previousBalancesByItem(userId, missingIds, date);
 
     const rows = [];
     for (const item of items) {
@@ -550,7 +587,7 @@ stockRouter.get(
       const productCount = item._count.products;
       let ledger = byItem.get(item.id);
       if (!ledger) {
-        const opening = await previousBalance(userId, item.id, date);
+        const opening = openingByItem.get(item.id) ?? 0;
         rows.push({
           stock_item_id: item.id,
           code: mapped.code,

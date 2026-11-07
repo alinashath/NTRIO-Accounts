@@ -32,6 +32,8 @@ model Organization {
   /// Users whose last-selected / default workspace is this org.
   activeUsers User[]             @relation("UserActiveOrganization")
   members     OrganizationMember[]
+  mcpUsers    McpUser[]
+  mcpAuditEvents McpAuditEvent[]
 
   @@map("organizations")
 }
@@ -351,8 +353,10 @@ model IncomeEntry {
   @@index([userId, date])
   @@index([userId, receivedDate])
   @@index([accountId])
+  @@index([categoryId])
   @@index([contactId])
   @@index([projectId])
+  @@index([recurringId])
   @@map("income_entries")
 }
 
@@ -412,11 +416,15 @@ model ExpenseEntry {
   splits    ExpenseSplit[]
 
   @@index([userId, date])
+  @@index([userId, billDate])
+  @@index([userId, paidDate])
   @@index([accountId])
+  @@index([categoryId])
   @@index([debtId])
   @@index([contactId])
   @@index([userId, payLater])
   @@index([projectId])
+  @@index([recurringId])
   @@map("expense_entries")
 }
 
@@ -431,6 +439,7 @@ model ExpenseSplit {
   category Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   @@index([expenseId])
+  @@index([categoryId])
   @@map("expense_splits")
 }
 
@@ -490,6 +499,7 @@ model DebtPayment {
   account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
   @@index([debtId])
+  @@index([accountId])
   @@map("debt_payments")
 }
 
@@ -510,6 +520,8 @@ model AccountTransfer {
   toAccount   Account @relation("TransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
 
   @@index([userId, date])
+  @@index([fromAccountId])
+  @@index([toAccountId])
   @@map("account_transfers")
 }
 
@@ -578,6 +590,7 @@ model RoomStay {
 
   @@index([userId, fromDate, toDate])
   @@index([userId, roomId])
+  @@index([roomId])
   @@map("room_stays")
 }
 
@@ -597,6 +610,7 @@ model RoomDay {
 
   @@unique([userId, roomId, date])
   @@index([userId, date])
+  @@index([roomId])
   @@map("room_days")
 }
 
@@ -640,6 +654,8 @@ model BreakfastOrder {
   @@unique([userId, roomId, breakfastDate, mealPeriod, guestNumber])
   @@index([userId, breakfastDate])
   @@index([userId, breakfastDate, mealPeriod])
+  @@index([roomId])
+  @@index([menuId])
   @@map("breakfast_orders")
 }
 
@@ -670,6 +686,7 @@ model RoomDayExtras {
 
   @@unique([userId, roomId, date, mealPeriod])
   @@index([userId, date])
+  @@index([roomId])
   @@map("room_day_extras")
 }
 
@@ -708,6 +725,8 @@ model StockItem {
 
   @@unique([userId, code])
   @@index([userId, kind])
+  @@index([userId, isActive])
+  @@index([userId, sortOrder])
   @@map("stock_items")
 }
 
@@ -731,8 +750,9 @@ model StockProduct {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([stockItemId])
+  @@index([userId, isActive])
+  @@index([userId, stockItemId])
+  @@index([stockItemId, isActive])
   @@map("stock_products")
 }
 
@@ -807,6 +827,7 @@ model RecipeLine {
   componentRecipe Recipe? @relation("RecipeLineComponent", fields: [componentRecipeId], references: [id], onDelete: SetNull)
 
   @@index([recipeId])
+  @@index([stockItemId])
   @@index([componentRecipeId])
   @@map("recipe_lines")
 }
@@ -854,6 +875,8 @@ model MealMenuLine {
   componentRecipe Recipe?   @relation("MenuLineComponentRecipe", fields: [componentRecipeId], references: [id], onDelete: Restrict)
 
   @@index([menuId])
+  @@index([stockItemId])
+  @@index([componentRecipeId])
   @@map("meal_menu_lines")
 }
 
@@ -881,5 +904,101 @@ model StockLedgerDay {
 
   @@unique([userId, stockItemId, date])
   @@index([userId, date])
+  @@index([stockItemId, date])
   @@map("stock_ledger_days")
+}
+
+/// Machine / AI login for remote MCP (Settings → MCP access). Not a Supabase user.
+model McpUser {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  /// Globally unique username used on the OAuth login form.
+  username       String   @unique @db.VarChar(64)
+  passwordHash   String   @map("password_hash")
+  disabled       Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authCodes    OAuthAuthorizationCode[]
+  refreshTokens OAuthRefreshToken[]
+  auditEvents  McpAuditEvent[]
+
+  @@index([organizationId])
+  @@map("mcp_users")
+}
+
+/// OAuth client registered via DCR (or pre-seeded). Public clients only.
+model OAuthClient {
+  id                        String   @id @default(uuid()) @db.Uuid
+  /// Public client_id returned to MCP clients (UUID string).
+  clientId                  String   @unique @map("client_id") @db.VarChar(128)
+  clientName                String?  @map("client_name") @db.VarChar(256)
+  redirectUris              String[] @map("redirect_uris")
+  tokenEndpointAuthMethod   String   @default("none") @map("token_endpoint_auth_method") @db.VarChar(64)
+  grantTypes                String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes             String[] @default(["code"]) @map("response_types")
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  authCodes     OAuthAuthorizationCode[]
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthAuthorizationCode {
+  id                  String   @id @default(uuid()) @db.Uuid
+  codeHash            String   @unique @map("code_hash")
+  clientId            String   @map("client_id") @db.Uuid
+  mcpUserId           String   @map("mcp_user_id") @db.Uuid
+  redirectUri         String   @map("redirect_uri") @db.VarChar(2048)
+  codeChallenge       String   @map("code_challenge") @db.VarChar(128)
+  codeChallengeMethod String   @default("S256") @map("code_challenge_method") @db.VarChar(16)
+  scope               String   @default("org") @db.VarChar(64)
+  resource            String   @db.VarChar(2048)
+  issuer              String   @db.VarChar(512)
+  expiresAt           DateTime @map("expires_at")
+  consumedAt          DateTime? @map("consumed_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  client  OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  mcpUser McpUser     @relation(fields: [mcpUserId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_authorization_codes")
+}
+
+model OAuthRefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  clientId   String    @map("client_id") @db.Uuid
+  mcpUserId  String    @map("mcp_user_id") @db.Uuid
+  scope      String    @default("org") @db.VarChar(64)
+  resource   String    @db.VarChar(2048)
+  issuer     String    @db.VarChar(512)
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  client  OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  mcpUser McpUser     @relation(fields: [mcpUserId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+/// Lightweight MCP tool audit (no request bodies).
+model McpAuditEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  mcpUserId      String   @map("mcp_user_id") @db.Uuid
+  toolName       String   @map("tool_name") @db.VarChar(128)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mcpUser      McpUser      @relation(fields: [mcpUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([mcpUserId, createdAt])
+  @@map("mcp_audit_events")
 }

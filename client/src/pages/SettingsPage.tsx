@@ -15,6 +15,11 @@ const sections = [
     caption: "Add people to this organization",
   },
   {
+    to: "/accounts/settings/mcp",
+    title: "MCP access",
+    caption: "AI clients: Cursor, Claude, ChatGPT, Grok",
+  },
+  {
     to: "/accounts/settings/income-categories",
     title: "Income categories",
     caption: "Labels for money in",

@@ -22,10 +22,20 @@ import {
 } from "../lib/organization.js";
 import { createServiceRoleSupabase } from "../lib/supabaseService.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
+import { hashPassword, randomUrlToken } from "../mcp/crypto.js";
+import { listAllowedOrigins, mcpResourceUrl } from "../mcp/origins.js";
 import { asyncHandler } from "../utils/http.js";
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
+
+function rejectMcpCredentialManagement(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) {
+  if ((req as AuthedRequest).authKind === "mcp") {
+    res.status(403).json({ error: "MCP tokens cannot manage credentials" });
+    return;
+  }
+  next();
+}
 
 /** Comma-separated emails; if set, only these sign-ins may list/create app users from Settings. */
 function canManageUsers(actorEmail: string | null): boolean {
@@ -410,6 +420,190 @@ settingsRouter.post(
       id: data.user.id,
       email: data.user.email ?? email,
       created: true,
+    });
+  }),
+);
+
+const mcpUsernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(64)
+  .regex(/^[a-zA-Z0-9._-]+$/, "Username may use letters, numbers, ., _, -");
+
+settingsRouter.get(
+  "/mcp-users",
+  rejectMcpCredentialManagement,
+  asyncHandler(async (req, res) => {
+    const authed = req as AuthedRequest;
+    if (!canManageUsers(authed.userEmail)) {
+      res.status(403).json({ error: "Not allowed to manage MCP users" });
+      return;
+    }
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const rows = await prisma.mcpUser.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        username: true,
+        disabled: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        username: r.username,
+        disabled: r.disabled,
+        created_at: r.createdAt.toISOString(),
+        updated_at: r.updatedAt.toISOString(),
+      })),
+    );
+  }),
+);
+
+settingsRouter.get(
+  "/mcp-meta",
+  rejectMcpCredentialManagement,
+  asyncHandler(async (req, res) => {
+    const host = req.get("x-forwarded-host") || req.get("host") || "localhost";
+    const proto = (req.get("x-forwarded-proto") || req.protocol || "http").split(",")[0]!.trim();
+    const origin = `${proto}://${host}`.replace(/\/+$/, "");
+    const allowed = listAllowedOrigins();
+    res.json({
+      mcp_url: mcpResourceUrl(origin),
+      current_origin: origin,
+      allowed_origins: allowed.length ? allowed : [origin],
+      mcp_urls: (allowed.length ? allowed : [origin]).map((o) => mcpResourceUrl(o)),
+      scope: "org",
+    });
+  }),
+);
+
+settingsRouter.post(
+  "/mcp-users",
+  rejectMcpCredentialManagement,
+  asyncHandler(async (req, res) => {
+    const authed = req as AuthedRequest;
+    if (!canManageUsers(authed.userEmail)) {
+      res.status(403).json({ error: "Not allowed to manage MCP users" });
+      return;
+    }
+    const body = z
+      .object({
+        username: mcpUsernameSchema,
+        password: z.string().min(8).max(128).optional(),
+      })
+      .parse(req.body);
+
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const username = body.username.trim().toLowerCase();
+    const password = body.password?.trim() || randomUrlToken(18);
+    const passwordHash = await hashPassword(password);
+
+    try {
+      const row = await prisma.mcpUser.create({
+        data: {
+          organizationId: org.id,
+          username,
+          passwordHash,
+        },
+        select: { id: true, username: true, disabled: true, createdAt: true },
+      });
+      res.status(201).json({
+        id: row.id,
+        username: row.username,
+        disabled: row.disabled,
+        created_at: row.createdAt.toISOString(),
+        password,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("Unique constraint") || msg.includes("mcp_users_username_key")) {
+        res.status(409).json({ error: "That username is already taken" });
+        return;
+      }
+      throw e;
+    }
+  }),
+);
+
+settingsRouter.post(
+  "/mcp-users/:id/reset-password",
+  rejectMcpCredentialManagement,
+  asyncHandler(async (req, res) => {
+    const authed = req as AuthedRequest;
+    if (!canManageUsers(authed.userEmail)) {
+      res.status(403).json({ error: "Not allowed to manage MCP users" });
+      return;
+    }
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const id = String(req.params.id);
+    const body = z
+      .object({ password: z.string().min(8).max(128).optional() })
+      .parse(req.body ?? {});
+    const password = body.password?.trim() || randomUrlToken(18);
+    const passwordHash = await hashPassword(password);
+
+    const updated = await prisma.mcpUser.updateMany({
+      where: { id, organizationId: org.id },
+      data: { passwordHash },
+    });
+    if (!updated.count) {
+      res.status(404).json({ error: "MCP user not found" });
+      return;
+    }
+    // Revoke refresh tokens for this user
+    await prisma.oAuthRefreshToken.updateMany({
+      where: { mcpUserId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    res.json({ id, password });
+  }),
+);
+
+settingsRouter.patch(
+  "/mcp-users/:id",
+  rejectMcpCredentialManagement,
+  asyncHandler(async (req, res) => {
+    const authed = req as AuthedRequest;
+    if (!canManageUsers(authed.userEmail)) {
+      res.status(403).json({ error: "Not allowed to manage MCP users" });
+      return;
+    }
+    const preferred = readPreferredOrgId(req);
+    const org = await ensureUserOrganization(authed.userId, preferred, authed.userEmail);
+    const id = String(req.params.id);
+    const body = z.object({ disabled: z.boolean() }).parse(req.body);
+    const updated = await prisma.mcpUser.updateMany({
+      where: { id, organizationId: org.id },
+      data: { disabled: body.disabled },
+    });
+    if (!updated.count) {
+      res.status(404).json({ error: "MCP user not found" });
+      return;
+    }
+    if (body.disabled) {
+      await prisma.oAuthRefreshToken.updateMany({
+        where: { mcpUserId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    const row = await prisma.mcpUser.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, username: true, disabled: true, createdAt: true, updatedAt: true },
+    });
+    res.json({
+      id: row.id,
+      username: row.username,
+      disabled: row.disabled,
+      created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
     });
   }),
 );

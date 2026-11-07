@@ -41,15 +41,34 @@ export async function recalculateAccountBalance(accountId: string): Promise<numb
     }),
   ]);
 
-  const transfersOut = await prisma.accountTransfer.findMany({
-    where: { fromAccountId: accountId },
-    include: { fromAccount: true, toAccount: true },
-  });
-
-  const transfersIn = await prisma.accountTransfer.findMany({
-    where: { toAccountId: accountId },
-    include: { fromAccount: true, toAccount: true },
-  });
+  const [transfersOut, transfersIn, payments] = await Promise.all([
+    prisma.accountTransfer.findMany({
+      where: { fromAccountId: accountId },
+      select: {
+        amount: true,
+        exchangeRate: true,
+        fromAccount: { select: { currency: true } },
+        toAccount: { select: { currency: true } },
+      },
+    }),
+    prisma.accountTransfer.findMany({
+      where: { toAccountId: accountId },
+      select: {
+        amount: true,
+        exchangeRate: true,
+        fromAccount: { select: { currency: true } },
+        toAccount: { select: { currency: true } },
+      },
+    }),
+    prisma.debtPayment.findMany({
+      where: { accountId, voidedAt: null },
+      select: {
+        amount: true,
+        accountAmount: true,
+        debt: { select: { direction: true } },
+      },
+    }),
+  ]);
 
   let outT = 0;
   for (const t of transfersOut) {
@@ -60,11 +79,6 @@ export async function recalculateAccountBalance(accountId: string): Promise<numb
   for (const t of transfersIn) {
     inT += transferCreditToDestination(t);
   }
-
-  const payments = await prisma.debtPayment.findMany({
-    where: { accountId, voidedAt: null },
-    include: { debt: true },
-  });
 
   let debtDelta = 0;
   for (const p of payments) {

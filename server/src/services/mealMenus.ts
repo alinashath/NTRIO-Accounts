@@ -814,30 +814,35 @@ async function linkPreparedOntoMenus(userId: string) {
   }
 }
 
-/** Idempotent: sync Maldivian/Continental menus from recipes and re-link orders. */
+/** Synced menus skip ensureMealMenus after the first readiness check. */
+const mealMenusReadyUsers = new Set<string>();
+
+export function invalidateMealMenusCache(userId?: string) {
+  if (userId) mealMenusReadyUsers.delete(userId);
+  else mealMenusReadyUsers.clear();
+}
+
+/** Idempotent bootstrap: sync Maldivian/Continental menus — not needed every request. */
 export async function ensureMealMenus(userId: string) {
+  if (mealMenusReadyUsers.has(userId)) return;
+
+  const needsSync = await menusNeedSync(userId);
+  if (!needsSync) {
+    mealMenusReadyUsers.add(userId);
+    return;
+  }
+
   await reactivatePlatedStock(userId);
   const { ensurePreparedRecipes } = await import("./kitchenSeed.js");
   await ensurePreparedRecipes(userId);
 
   const eggsStock = await ensureEggsStock(userId);
-  const needsSync = await menusNeedSync(userId);
-  if (needsSync) {
-    await ensureAddonsKind(userId);
-    await syncMenuFromLegacyRecipe(userId, "maldivian", eggsStock.id);
-    await syncMenuFromLegacyRecipe(userId, "continental", eggsStock.id);
-    await linkPreparedOntoMenus(userId);
-  } else {
-    // Keep egg choices aligned even on the fast path (cheap updates).
-    const menus = await prisma.mealMenu.findMany({
-      where: { userId, code: { in: ["maldivian", "continental"] } },
-      select: { id: true },
-    });
-    for (const m of menus) {
-      await ensureEggStyleChoices(m.id, eggsStock.id);
-    }
-  }
+  await ensureAddonsKind(userId);
+  await syncMenuFromLegacyRecipe(userId, "maldivian", eggsStock.id);
+  await syncMenuFromLegacyRecipe(userId, "continental", eggsStock.id);
+  await linkPreparedOntoMenus(userId);
   await backfillOrders(userId);
+  mealMenusReadyUsers.add(userId);
 }
 
 export type MealMenuWithLines = Awaited<ReturnType<typeof loadMenusForUser>>[number];
