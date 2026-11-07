@@ -54,7 +54,14 @@ export function pkceS256Challenge(verifier: string): string {
 }
 
 function jwtSecretKey(): Uint8Array {
-  const secret = process.env.MCP_JWT_SECRET?.trim();
+  // Strip accidental wrapping quotes from dashboard / .env pastes: "secret" or 'secret'
+  let secret = process.env.MCP_JWT_SECRET?.trim() ?? "";
+  if (
+    (secret.startsWith('"') && secret.endsWith('"')) ||
+    (secret.startsWith("'") && secret.endsWith("'"))
+  ) {
+    secret = secret.slice(1, -1).trim();
+  }
   if (!secret || secret.length < 32) {
     throw new Error("MCP_JWT_SECRET must be set to a random string of at least 32 characters");
   }
