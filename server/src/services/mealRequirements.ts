@@ -501,7 +501,7 @@ export function resolveSelectedExtras(
   if (e.cereal) pushCode("cornflakes");
   if (e.waterBottle) pushCode("water_bottle");
   if (e.pancake) {
-    for (const code of PANCAKE_CODES) {
+    for (const code of ["pancake_batch", "pancake", "pancakes"] as const) {
       if (byCode.has(code)) {
         pushCode(code);
         break;
