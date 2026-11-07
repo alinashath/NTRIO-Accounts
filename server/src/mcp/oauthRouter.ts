@@ -38,21 +38,31 @@ async function resolveClient(clientIdRaw: string): Promise<ClientRecord | null> 
   if (/^https:\/\//i.test(clientId)) {
     try {
       const res = await fetch(clientId, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(8000),
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "NTRIO-MCP/1.0",
+        },
+        signal: AbortSignal.timeout(10000),
       });
       if (!res.ok) return null;
       const doc = (await res.json()) as {
         client_id?: string;
         redirect_uris?: string[];
         token_endpoint_auth_method?: string;
+        token_endpoint_auth_methods_supported?: string[];
       };
       const uris = filterAllowedRedirectUris(
         Array.isArray(doc.redirect_uris) ? doc.redirect_uris.map(String) : [],
       );
       if (!uris.length) return null;
-      const method = doc.token_endpoint_auth_method ?? "none";
-      if (method !== "none") return null;
+      // ChatGPT advertises preferred private_key_jwt but also supports "none"
+      // (PKCE public client). Accept when "none" is preferred or listed.
+      const supported = Array.isArray(doc.token_endpoint_auth_methods_supported)
+        ? doc.token_endpoint_auth_methods_supported.map(String)
+        : [];
+      const preferred = doc.token_endpoint_auth_method ?? "none";
+      const allowsPublic = preferred === "none" || supported.includes("none");
+      if (!allowsPublic) return null;
       return {
         id: `cimd:${clientId}`,
         clientId,
@@ -208,8 +218,22 @@ oauthRouter.get(
     }
     const q = parsed.data;
     const client = await resolveClient(q.client_id);
-    if (!client || !client.redirectUris.includes(q.redirect_uri)) {
-      oauthError(res, 400, "invalid_request", "Unknown client or redirect_uri mismatch");
+    if (!client) {
+      oauthError(
+        res,
+        400,
+        "invalid_request",
+        "Unknown client (CIMD fetch failed, or client does not allow public/none auth)",
+      );
+      return;
+    }
+    if (!client.redirectUris.includes(q.redirect_uri)) {
+      oauthError(
+        res,
+        400,
+        "invalid_request",
+        `redirect_uri mismatch. Registered: ${client.redirectUris.join(", ")}`,
+      );
       return;
     }
     if (!isAllowedRedirectUri(q.redirect_uri)) {
