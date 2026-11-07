@@ -2,6 +2,7 @@ import { createMcpHandler, McpServer, type AuthInfo } from "@modelcontextprotoco
 import { z } from "zod4";
 import { prisma } from "../lib/prisma.js";
 import { normalizeEnabledModules } from "../lib/workspaces.js";
+import { buildAgentGuide } from "./agentGuide.js";
 import { toolsForModules, type McpToolDef } from "./catalog.js";
 import { dispatchApi, formatDispatchResult } from "./dispatch.js";
 import { fetchReceipt, uploadReceiptBase64 } from "./receipts.js";
@@ -69,6 +70,32 @@ export function createNtrioMcpHandler() {
       const server = new McpServer(
         { name: "ntrio-accounts", version: "1.0.0" },
         { capabilities: { tools: {} } },
+      );
+
+      // Call this first — teaches the agent every workflow and which tools to use.
+      server.registerTool(
+        "ntrio_howto",
+        {
+          description:
+            "REQUIRED FIRST: Complete operating manual for this organization. Explains how to perform every accounts, receipt, report, kitchen, occupancy, and stock task, and which MCP tools to call. Pass optional task filter (overview, income, expenses, kitchen, stock, catalog, or a keyword).",
+          inputSchema: z.object({
+            task: z
+              .string()
+              .optional()
+              .describe(
+                "Optional focus: overview | accounts | income | expenses | contacts | debts | reports | kitchen | occupancy | stock | settings | catalog | or any keyword",
+              ),
+          }),
+        },
+        async ({ task }, ctx) => {
+          const auth = readExtra(ctx.http?.authInfo);
+          if (auth) {
+            await audit(auth.mcpUserId, auth.organizationId, "ntrio_howto");
+          }
+          return {
+            content: [{ type: "text", text: buildAgentGuide({ task: task ?? null }) }],
+          };
+        },
       );
 
       // Receipt helpers

@@ -7,3 +7,7 @@ server/.env
 client/.env
 .DS_Store
 *.log
+# Accidental tsc emit next to shared TypeScript sources
+shared/*.js
+shared/*.d.ts
+shared/*.js.map

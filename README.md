@@ -31,6 +31,7 @@ This mirrors the plan’s **client / server / shared** split while using **Supab
    SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
    PORT=3001
    CLIENT_ORIGIN="http://localhost:5173"
+   MCP_JWT_SECRET="replace-with-a-long-random-secret-at-least-32-chars"
    ```
 
 3. **Environment — `client/.env`**
@@ -119,7 +120,8 @@ Use **one Railway service** from the **repo root**. The production server serves
    | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server only). |
    | `VITE_SUPABASE_URL` | Same as `SUPABASE_URL` — required at **build** time for the client bundle. |
    | `VITE_SUPABASE_ANON_KEY` | Supabase anon (or publishable) key — **build** time. |
-   | `CLIENT_ORIGIN` | Optional. Comma-separated allowed browser origins for CORS. If unset on Railway, the server uses **`https://$RAILWAY_PUBLIC_DOMAIN`** when that variable is present. |
+   | `CLIENT_ORIGIN` | Optional. Comma-separated allowed browser origins for CORS. If unset on Railway, the server uses **`https://$RAILWAY_PUBLIC_DOMAIN`** when that variable is present. The same list (plus the Railway domain) is the allowlist for MCP / OAuth hosts. |
+   | `MCP_JWT_SECRET` | Required for organization MCP. Random string ≥ 32 characters used to sign MCP OAuth access tokens. |
    | `NODE_ENV` | Railway often sets this to `production` during build; optional to set explicitly. |
 
    Optional: `VITE_SUPABASE_RECEIPTS_BUCKET`, `SETTINGS_USER_ADMIN_EMAILS`, etc. (see [.env.example](.env.example)).
@@ -135,6 +137,13 @@ Use **one Railway service** from the **repo root**. The production server serves
 6. **Supabase Auth** — In the Supabase dashboard, add your public app URL (e.g. `https://<your-service>.up.railway.app`) to **Authentication → URL configuration** (site URL and redirect URLs). Do the same for **Google OAuth** if you use it.
 
 7. **Prisma OpenSSL** — If the build or runtime errors on OpenSSL, switch the service to an image that includes OpenSSL 3 or follow [Railway’s Prisma troubleshooting](https://docs.railway.com/reference/errors/prisma-openssl-error).
+
+## Organization MCP (AI clients)
+
+1. Set **`MCP_JWT_SECRET`** (≥ 32 random characters) on the server.
+2. In the app: **Settings → MCP access** — create a username/password and copy any allowed MCP URL (`https://<your-domain>/mcp`).
+3. Add that URL in Cursor, Claude Connectors, ChatGPT Connectors (Developer mode), or Grok custom connectors. Sign in with the MCP user when the browser opens.
+4. Agents should call the **`ntrio_howto`** tool first; it explains how to run every accounts, receipt, report, kitchen, occupancy, and stock workflow and which tools to use.
 
 ## Implemented vs plan
 
