@@ -403,6 +403,18 @@ export type CashFlowStatement = {
   cash_ending: number;
   /** beginning + net_change − ending; FX/timing residual */
   reconciling_diff: number;
+  /**
+   * Native (not FX-converted) cash path by account currency.
+   * opening/ending = sum of account balances as of period bounds;
+   * added/spent = period cash in/out on accounts in that currency.
+   */
+  native_by_currency: Array<{
+    currency: string;
+    opening: number;
+    ending: number;
+    added: number;
+    spent: number;
+  }>;
   accounts: Array<{
     account_id: string;
     name: string;
@@ -466,6 +478,22 @@ export async function buildCashFlowStatement(
       : { paidDate: { not: null, gte: from, lte: to } };
 
   const accountRows: CashFlowStatement["accounts"] = [];
+  const nativeMap = new Map<
+    string,
+    { opening: number; ending: number; added: number; spent: number }
+  >();
+  const bumpNative = (
+    ccy: string,
+    patch: Partial<{ opening: number; ending: number; added: number; spent: number }>,
+  ) => {
+    const key = ccy.toUpperCase();
+    const cur = nativeMap.get(key) ?? { opening: 0, ending: 0, added: 0, spent: 0 };
+    if (patch.opening != null) cur.opening = toMoney(cur.opening + patch.opening);
+    if (patch.ending != null) cur.ending = toMoney(cur.ending + patch.ending);
+    if (patch.added != null) cur.added = toMoney(cur.added + patch.added);
+    if (patch.spent != null) cur.spent = toMoney(cur.spent + patch.spent);
+    nativeMap.set(key, cur);
+  };
 
   for (const a of accounts) {
     const [incRows, expRows, tout, tin, debtPay, adjRows] = await Promise.all([
@@ -598,6 +626,12 @@ export async function buildCashFlowStatement(
     const moneyIn = toMoney(incomeSum + transferIn + debtIn + Math.max(adjSum, 0));
     const moneyOut = toMoney(expenseSum + transferOut + debtOut + Math.max(-adjSum, 0));
 
+    // Cash path "added/spent" excludes inter-account transfers (they net within cash).
+    bumpNative(a.currency, {
+      added: toMoney(incomeSum + debtIn + Math.max(adjSum, 0)),
+      spent: toMoney(expenseSum + debtOut + Math.max(-adjSum, 0)),
+    });
+
     accountRows.push({
       account_id: a.id,
       name: a.name,
@@ -686,6 +720,7 @@ export async function buildCashFlowStatement(
     cashEnding = toMoney(
       cashEnding + conv(b1, a.currency, displayCurrency, rateFor(toYmd)),
     );
+    bumpNative(a.currency, { opening: b0, ending: b1 });
   }
 
   const impliedEnding = toMoney(cashBeginning + netChange);
@@ -749,6 +784,15 @@ export async function buildCashFlowStatement(
     cash_beginning: cashBeginning,
     cash_ending: cashEnding,
     reconciling_diff: reconcilingDiff,
+    native_by_currency: ["MVR", "USD"].map((currency) => {
+      const row = nativeMap.get(currency) ?? {
+        opening: 0,
+        ending: 0,
+        added: 0,
+        spent: 0,
+      };
+      return { currency, ...row };
+    }),
     accounts: accountRows,
   };
 }

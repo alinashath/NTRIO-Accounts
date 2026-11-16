@@ -9,8 +9,8 @@ import { Link } from "react-router-dom";
 import { apiFetch } from "@/api/http";
 import { AccountsCard } from "@/components/AccountsCard";
 import { CashMovementCard } from "@/components/CashMovementCard";
+import { DashboardFinanceCards } from "@/components/DashboardFinanceCards";
 import { DisplayAmountCell } from "@/components/DisplayAmountCell";
-import { Modal } from "@/components/Modal";
 import { PeriodFilterBar } from "@/components/PeriodFilterBar";
 import { ProjectFilter } from "@/components/ProjectFilter";
 import { SkeletonLine } from "@/components/Skeleton";
@@ -18,12 +18,11 @@ import {
   TopExpensesCard,
   type TopExpenseRow,
 } from "@/components/TopExpensesCard";
-import { Amount, ListRow, PanelCard, PctChangeTag, StatRow } from "@/components/design";
+import { PanelCard } from "@/components/design";
 import { useDisplayCurrency } from "@/context/DisplayCurrencyContext";
 import { appendProjectFilter } from "@/context/ProjectsContext";
 import { convertWithUsdMvrRate } from "@/lib/displayFx";
-import { formatUnsignedAmount } from "@/lib/amountFormat";
-import { formatSharePct } from "@/lib/periodCompare";
+import { toMoney } from "@/lib/money";
 import {
   comparablePriorPeriod,
   DASHBOARD_PERIOD_PRESETS,
@@ -49,9 +48,26 @@ type NetWorth = {
   display_currency?: string | null;
 };
 
-type CashflowFx = {
+type NativeCcyRow = {
+  currency: string;
+  opening: number;
+  ending: number;
+  added: number;
+  spent: number;
+};
+
+type CashflowSnapshot = {
+  cash_beginning: number;
+  cash_ending: number;
+  cash_from_income: number;
+  cash_paid_expenses: number;
+  adjustments: number;
+  debt_collections: number;
+  debt_repayments: number;
+  net_change_in_cash: number;
   reconciling_diff: number;
   transfer_fx_gain: number;
+  native_by_currency: NativeCcyRow[];
 };
 
 type CatRow = {
@@ -104,13 +120,12 @@ export function DashboardPage() {
   const [rangePreset, setRangePreset] = useState<RangePreset>("this_month");
   const [applied, setApplied] = useState(initial);
   const [filterProject, setFilterProject] = useState("");
-  const [infoHint, setInfoHint] = useState<string | null>(null);
 
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [pnlPrev, setPnlPrev] = useState<Pnl | null>(null);
   const [nw, setNw] = useState<NetWorth | null>(null);
-  const [cashFx, setCashFx] = useState<CashflowFx | null>(null);
+  const [cashFx, setCashFx] = useState<CashflowSnapshot | null>(null);
   const [income, setIncome] = useState<IncomeEntryDto[]>([]);
   const [expenses, setExpenses] = useState<ExpenseEntryDto[]>([]);
   const [debts, setDebts] = useState<DebtDto[]>([]);
@@ -148,7 +163,20 @@ export function DashboardPage() {
             apiFetch<NetWorth>(
               pj(`/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
-            apiFetch<CashflowFx>(
+            apiFetch<{
+              cash_beginning: number;
+              cash_ending: number;
+              operating: {
+                cash_from_income: number;
+                cash_paid_expenses: number;
+                adjustments: number;
+              };
+              financing: { debt_collections: number; debt_repayments: number };
+              net_change_in_cash: number;
+              reconciling_diff: number;
+              transfer_fx_gain?: number;
+              native_by_currency?: NativeCcyRow[];
+            }>(
               pj(`/api/reports/cashflow?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<IncomeEntryDto[]>(
@@ -171,8 +199,17 @@ export function DashboardPage() {
         setPnlPrev(pnlPrior);
         setNw(nwRes);
         setCashFx({
+          cash_beginning: cfRes.cash_beginning ?? 0,
+          cash_ending: cfRes.cash_ending ?? 0,
+          cash_from_income: cfRes.operating?.cash_from_income ?? 0,
+          cash_paid_expenses: cfRes.operating?.cash_paid_expenses ?? 0,
+          adjustments: cfRes.operating?.adjustments ?? 0,
+          debt_collections: cfRes.financing?.debt_collections ?? 0,
+          debt_repayments: cfRes.financing?.debt_repayments ?? 0,
+          net_change_in_cash: cfRes.net_change_in_cash ?? 0,
           reconciling_diff: cfRes.reconciling_diff ?? 0,
           transfer_fx_gain: cfRes.transfer_fx_gain ?? 0,
+          native_by_currency: cfRes.native_by_currency ?? [],
         });
         setIncome(inc);
         setExpenses(exp);
@@ -206,9 +243,68 @@ export function DashboardPage() {
     };
   }, [asOf, displayCurrency, filterProject, periodFrom, periodTo, rangePreset]);
 
-  const incomeKept = pnl
-    ? formatSharePct(pnl.net, pnl.total_income, "of income kept")
-    : null;
+  const cashPath = useMemo(() => {
+    if (!cashFx) return null;
+    const adjIn = Math.max(cashFx.adjustments, 0);
+    const adjOut = Math.max(-cashFx.adjustments, 0);
+    const added = cashFx.cash_from_income + adjIn + cashFx.debt_collections;
+    const spent = cashFx.cash_paid_expenses + adjOut + cashFx.debt_repayments;
+    const forex = cashFx.transfer_fx_gain;
+    // Residual after peeling Forex gain out of the cashflow reconciling line
+    // so Opening + Added − Spent + Forex + Rate effect = Cash now.
+    const rateEffect = cashFx.reconciling_diff - forex;
+    const cashNow = nw?.cash_and_accounts ?? cashFx.cash_ending;
+    const payLater = nw?.pay_later_unpaid ?? 0;
+    const available =
+      nw?.cash_after_pay_later ?? cashNow - payLater;
+    const impliedCashNow =
+      cashFx.cash_beginning + (added - spent) + forex + rateEffect;
+    const closes = Math.abs(impliedCashNow - cashNow) < 0.02;
+
+    const by = (ccy: string) =>
+      cashFx.native_by_currency.find((r) => r.currency.toUpperCase() === ccy) ?? {
+        currency: ccy,
+        opening: 0,
+        ending: 0,
+        added: 0,
+        spent: 0,
+      };
+    const mvr = by("MVR");
+    const usd = by("USD");
+
+    // Pay later unpaid by bill currency (native, not FX-converted).
+    const payLaterNative = { mvr: 0, usd: 0 };
+    for (const e of expenses) {
+      if (!e.pay_later) continue;
+      if (e.paid_date) continue;
+      const ccy = (e.bill_currency ?? e.account_currency ?? "USD").toUpperCase();
+      if (ccy === "MVR") payLaterNative.mvr += e.amount;
+      else if (ccy === "USD") payLaterNative.usd += e.amount;
+    }
+
+    return {
+      opening: cashFx.cash_beginning,
+      added,
+      spent,
+      forex,
+      rateEffect,
+      cashNow,
+      payLater,
+      available,
+      closes,
+      native: {
+        opening: { mvr: mvr.opening, usd: usd.opening },
+        added: { mvr: mvr.added, usd: usd.added },
+        spent: { mvr: -mvr.spent, usd: -usd.spent },
+        cashNow: { mvr: mvr.ending, usd: usd.ending },
+        payLater: { mvr: -payLaterNative.mvr, usd: -payLaterNative.usd },
+        available: {
+          mvr: mvr.ending - payLaterNative.mvr,
+          usd: usd.ending - payLaterNative.usd,
+        },
+      },
+    };
+  }, [cashFx, expenses, nw]);
 
   const dailyTrend = useMemo(() => {
     const start = parseISO(periodFrom);
@@ -251,6 +347,69 @@ export function DashboardPage() {
     for (const d of days) d.net = d.income - d.expense;
     return days;
   }, [displayCurrency, expenses, getUsdMvrRateForDate, income, periodFrom, periodTo]);
+
+  /** Opening → daily cash in/out (received / paid) → snap end to cash now. */
+  const cashCurve = useMemo(() => {
+    if (!cashPath) return [];
+    const start = parseISO(periodFrom);
+    const end = parseISO(periodTo);
+    const days = eachDayOfInterval({ start, end }).map((d) => ({
+      key: format(d, "yyyy-MM-dd"),
+      day: format(d, "MMM d"),
+      net: 0,
+    }));
+    const idx = new Map(days.map((d, i) => [d.key, i]));
+
+    for (const row of income) {
+      if (!row.account_id || row.pending_receivable) continue;
+      const key = format(new Date(row.received_date ?? row.date), "yyyy-MM-dd");
+      const i = idx.get(key);
+      if (i == null) continue;
+      days[i]!.net += convertWithUsdMvrRate(
+        row.amount,
+        row.account_currency || row.currency || "USD",
+        displayCurrency,
+        getUsdMvrRateForDate(key),
+      );
+    }
+    for (const row of expenses) {
+      if (row.pay_later || !row.paid_date) continue;
+      const key = format(new Date(row.paid_date), "yyyy-MM-dd");
+      const i = idx.get(key);
+      if (i == null) continue;
+      days[i]!.net -= convertWithUsdMvrRate(
+        row.amount,
+        row.account_currency || "USD",
+        displayCurrency,
+        getUsdMvrRateForDate(key),
+      );
+    }
+
+    const points: { key: string; day: string; v: number }[] = [
+      {
+        key: `${periodFrom}#open`,
+        day: format(start, "MMM d"),
+        v: toMoney(cashPath.opening),
+      },
+    ];
+    let running = cashPath.opening;
+    for (const d of days) {
+      running = toMoney(running + d.net);
+      points.push({ key: d.key, day: d.day, v: running });
+    }
+    if (points.length) {
+      points[points.length - 1]!.v = toMoney(cashPath.cashNow);
+    }
+    return points;
+  }, [
+    cashPath,
+    displayCurrency,
+    expenses,
+    getUsdMvrRateForDate,
+    income,
+    periodFrom,
+    periodTo,
+  ]);
 
   const trendTotals = useMemo(() => {
     const incomeTotal = dailyTrend.reduce((s, d) => s + d.income, 0);
@@ -380,264 +539,19 @@ export function DashboardPage() {
 
       {!loading && !error ? (
         <>
-          <PanelCard title={periodTitle(rangePreset)} caption={priorTitle(rangePreset)}>
-            <StatRow
-              label="Income"
-              change={
-                pnl && pnlPrev ? (
-                  <PctChangeTag
-                    current={pnl.total_income}
-                    prior={pnlPrev.total_income}
-                    higherIsBetter
-                  />
-                ) : null
-              }
-              value={
-                <Amount
-                  value={pnl?.total_income ?? 0}
-                  currency={displayCurrency}
-                  tone="credit"
-                  size="lg"
-                />
-              }
-              priorCaption={
-                pnlPrev
-                  ? `Prior ${formatUnsignedAmount(pnlPrev.total_income, displayCurrency)}`
-                  : undefined
-              }
-            />
-            <StatRow
-              label="Expenses"
-              change={
-                pnl && pnlPrev ? (
-                  <PctChangeTag
-                    current={pnl.total_expenses}
-                    prior={pnlPrev.total_expenses}
-                    higherIsBetter={false}
-                  />
-                ) : null
-              }
-              value={
-                <Amount
-                  value={pnl?.total_expenses ?? 0}
-                  currency={displayCurrency}
-                  tone="debit"
-                  size="lg"
-                />
-              }
-              priorCaption={
-                pnlPrev
-                  ? `Prior ${formatUnsignedAmount(pnlPrev.total_expenses, displayCurrency)}`
-                  : undefined
-              }
-            />
-            <StatRow
-              label="Net"
-              change={
-                pnl && pnlPrev ? (
-                  <PctChangeTag current={pnl.net} prior={pnlPrev.net} higherIsBetter />
-                ) : null
-              }
-              value={
-                <Amount
-                  value={pnl?.net ?? 0}
-                  currency={displayCurrency}
-                  tone="auto"
-                  size="lg"
-                />
-              }
-              caption={incomeKept ?? undefined}
-            />
-            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
-              <ListRow
-                primary="FX gain on transfers"
-                secondary={
-                  <button
-                    type="button"
-                    className="text-caption underline-offset-2 hover:underline"
-                    onClick={() =>
-                      setInfoHint(
-                        "Extra (or less) destination currency from transfer rates vs Settings USD/MVR on the transfer date. Not included in Net above.",
-                      )
-                    }
-                  >
-                    What is this?
-                  </button>
-                }
-                right={
-                  <Amount
-                    value={cashFx.transfer_fx_gain}
-                    currency={displayCurrency}
-                    tone="auto"
-                  />
-                }
-              />
-            ) : null}
-            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
-              <StatRow
-                label="Net incl. FX gain"
-                value={
-                  <Amount
-                    value={(pnl?.net ?? 0) + cashFx.transfer_fx_gain}
-                    currency={displayCurrency}
-                    tone="auto"
-                    size="lg"
-                  />
-                }
-                caption="Operating net + FX gain on transfers"
-              />
-            ) : null}
-            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
-              <span className="text-caption">Avg spend per day</span>
-              <span className="text-sm font-semibold tabular-nums text-ink">
-                {formatUnsignedAmount(trendTotals.avgDailySpend, displayCurrency)}
-              </span>
-            </div>
-          </PanelCard>
-
-          <PanelCard title="Balance position">
-            <ListRow
-              primary="Cash & accounts"
-              secondary={
-                <button
-                  type="button"
-                  className="text-caption underline-offset-2 hover:underline"
-                  onClick={() =>
-                    setInfoHint("Sum of account balances in the selected display currency.")
-                  }
-                >
-                  What is this?
-                </button>
-              }
-              right={
-                <Amount
-                  value={nw?.cash_and_accounts ?? 0}
-                  currency={displayCurrency}
-                  tone="plain"
-                  signed={false}
-                />
-              }
-            />
-            <ListRow
-              primary="Pay later unpaid"
-              secondary={
-                <button
-                  type="button"
-                  className="text-caption underline-offset-2 hover:underline"
-                  onClick={() =>
-                    setInfoHint("Open bills not yet paid from accounts.")
-                  }
-                >
-                  What is this?
-                </button>
-              }
-              right={
-                <Amount
-                  value={nw?.pay_later_unpaid ?? 0}
-                  currency={displayCurrency}
-                  tone="debit"
-                />
-              }
-            />
-            <ListRow
-              primary="Cash after pay later"
-              secondary={
-                <button
-                  type="button"
-                  className="text-caption underline-offset-2 hover:underline"
-                  onClick={() =>
-                    setInfoHint(
-                      "Cash & accounts minus unpaid pay-later bills — what remains if those bills are settled from cash.",
-                    )
-                  }
-                >
-                  What is this?
-                </button>
-              }
-              right={
-                <Amount
-                  value={
-                    nw?.cash_after_pay_later ??
-                    (nw?.cash_and_accounts ?? 0) - (nw?.pay_later_unpaid ?? 0)
-                  }
-                  currency={displayCurrency}
-                  tone="auto"
-                />
-              }
-            />
-            {cashFx && Math.abs(cashFx.reconciling_diff) >= 0.01 ? (
-              <ListRow
-                primary="Effect of exchange rates / other"
-                secondary={
-                  <button
-                    type="button"
-                    className="text-caption underline-offset-2 hover:underline"
-                    onClick={() =>
-                      setInfoHint(
-                        "Period residual so beginning cash + net change + this line = ending cash (same as Cash flow report). Includes FX on balances and timing.",
-                      )
-                    }
-                  >
-                    What is this?
-                  </button>
-                }
-                right={
-                  <Amount
-                    value={cashFx.reconciling_diff}
-                    currency={displayCurrency}
-                    tone="auto"
-                  />
-                }
-              />
-            ) : null}
-            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
-              <ListRow
-                primary="FX gain on transfers"
-                secondary={
-                  <button
-                    type="button"
-                    className="text-caption underline-offset-2 hover:underline"
-                    onClick={() =>
-                      setInfoHint(
-                        "When a transfer uses a better (or worse) rate than Settings USD/MVR on that date, this is the gain/(loss) in display currency for the selected period.",
-                      )
-                    }
-                  >
-                    What is this?
-                  </button>
-                }
-                right={
-                  <Amount
-                    value={cashFx.transfer_fx_gain}
-                    currency={displayCurrency}
-                    tone="auto"
-                  />
-                }
-              />
-            ) : null}
-            <ListRow
-              primary="Net worth"
-              secondary={
-                <button
-                  type="button"
-                  className="text-caption underline-offset-2 hover:underline"
-                  onClick={() =>
-                    setInfoHint(`As of ${asOf} in ${displayCurrency}.`)
-                  }
-                >
-                  What is this?
-                </button>
-              }
-              right={
-                <Amount
-                  value={nw?.net_worth ?? 0}
-                  currency={displayCurrency}
-                  tone={(nw?.net_worth ?? 0) < 0 ? "debit" : "plain"}
-                  signed={(nw?.net_worth ?? 0) < 0}
-                />
-              }
-            />
-          </PanelCard>
+          <DashboardFinanceCards
+            currency={displayCurrency}
+            periodTitle={periodTitle(rangePreset)}
+            priorCaption={priorTitle(rangePreset)}
+            asOfLabel={format(parseISO(asOf), "MMM d, yyyy")}
+            pnl={pnl}
+            pnlPrev={pnlPrev}
+            forexGain={cashFx?.transfer_fx_gain ?? 0}
+            avgDailySpend={trendTotals.avgDailySpend}
+            cashPath={cashPath}
+            cashCurve={cashCurve}
+            netWorth={nw?.net_worth ?? 0}
+          />
 
           <CashMovementCard
             currency={displayCurrency}
@@ -707,10 +621,6 @@ export function DashboardPage() {
           <p className="text-center text-caption">{rangeLabel}</p>
         </>
       ) : null}
-
-      <Modal open={infoHint != null} title="About this figure" onClose={() => setInfoHint(null)}>
-        <p className="text-sm text-ink">{infoHint}</p>
-      </Modal>
     </div>
   );
 }

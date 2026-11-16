@@ -109,24 +109,89 @@ export function StatRow({
   priorCaption,
   change,
   caption,
+  hint,
+  emphasize,
 }: {
   label: string;
   value: React.ReactNode;
   priorCaption?: string;
   change?: React.ReactNode;
   caption?: React.ReactNode;
+  hint?: React.ReactNode;
+  /** Stronger bottom border for subtotal / total rows */
+  emphasize?: boolean;
 }) {
   return (
-    <div className="border-t border-border px-4 py-3 first:border-t-0">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-label">{label}</p>
-        {change}
-      </div>
-      <div className="mt-1 flex items-end justify-between gap-3">
+    <div
+      className={cn(
+        "border-t border-border px-4 py-3 first:border-t-0",
+        emphasize && "border-t-2 border-ink/20 bg-neutral-bg/40",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">{value}</div>
-        {priorCaption ? <p className="shrink-0 text-caption">{priorCaption}</p> : null}
+        {change ? <div className="shrink-0 pt-0.5">{change}</div> : null}
       </div>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="text-label">{label}</p>
+        {priorCaption ? <p className="text-caption">{priorCaption}</p> : null}
+      </div>
+      {hint ? <div className="mt-0.5">{hint}</div> : null}
       {caption ? <p className="mt-1 text-caption">{caption}</p> : null}
+    </div>
+  );
+}
+
+/** 3-column metric strip: value on top, label under each cell. */
+export function StatGrid({
+  children,
+  className,
+  emphasize,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-3 gap-px border-t border-border bg-border",
+        emphasize && "border-t-2 border-ink/20",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function StatCell({
+  label,
+  value,
+  change,
+  priorCaption,
+  caption,
+  hint,
+  className,
+}: {
+  label: string;
+  value: React.ReactNode;
+  change?: React.ReactNode;
+  priorCaption?: string;
+  caption?: React.ReactNode;
+  hint?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("stat-cell min-w-0 bg-surface px-2.5 py-3 sm:px-4", className)}>
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0 max-w-full overflow-hidden">{value}</div>
+        {change ? <div className="shrink-0 scale-90 origin-top-right sm:scale-100">{change}</div> : null}
+      </div>
+      <p className="mt-1.5 text-label leading-tight">{label}</p>
+      {priorCaption ? <p className="mt-0.5 text-caption leading-tight">{priorCaption}</p> : null}
+      {hint ? <div className="mt-0.5">{hint}</div> : null}
+      {caption ? <p className="mt-0.5 text-caption leading-tight">{caption}</p> : null}
     </div>
   );
 }

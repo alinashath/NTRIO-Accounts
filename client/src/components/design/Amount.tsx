@@ -13,7 +13,7 @@ type AmountProps = {
   signed?: boolean;
   captionValue?: number;
   captionCurrency?: string;
-  size?: "lg" | "md";
+  size?: "xl" | "lg" | "md";
   className?: string;
 };
 
@@ -44,16 +44,25 @@ export function Amount({
         ? "text-debit"
         : "text-ink";
 
+  const sizeClass =
+    size === "xl"
+      ? "text-number-display"
+      : size === "lg"
+        ? "text-amount-lg"
+        : "text-sm font-semibold leading-5";
+
   return (
     <span
       className={cn(
-        "amount inline-flex flex-col items-end tabular-nums",
-        size === "lg" ? "text-amount-lg" : "text-sm font-semibold leading-5",
+        "amount inline-flex max-w-full flex-col items-start tabular-nums",
+        sizeClass,
         toneClass,
         className,
       )}
     >
-      <span className="whitespace-nowrap">{primary}</span>
+      <span className={size === "md" ? "whitespace-nowrap" : "max-w-full truncate"}>
+        {primary}
+      </span>
       {captionValue != null && captionCurrency ? (
         <span className="text-caption font-normal tabular-nums">
           {formatCaptionAmount(captionValue, captionCurrency)}
