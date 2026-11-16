@@ -916,6 +916,12 @@ model McpUser {
   username       String   @unique @db.VarChar(64)
   passwordHash   String   @map("password_hash")
   disabled       Boolean  @default(false)
+  /// When false, GET-style MCP tools are denied.
+  canRead        Boolean  @default(true) @map("can_read")
+  /// When false, mutating MCP tools are denied.
+  canWrite       Boolean  @default(true) @map("can_write")
+  /// Module allowlist for this MCP user (intersection with org enabled modules).
+  enabledModules String[] @default(["accounts", "occupancy", "kitchen", "stock"]) @map("enabled_modules")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

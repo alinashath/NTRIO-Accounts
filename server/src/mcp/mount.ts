@@ -31,7 +31,7 @@ function hostGuard(req: Request, res: Response, next: NextFunction) {
   if (!origin) {
     res.status(400).json({
       error: "invalid_request",
-      error_description: "Host is not on the allowed domain list",
+      error_description: "Could not resolve request Host for MCP/OAuth",
     });
     return;
   }

@@ -46,8 +46,8 @@ export function SettingsMcpPage() {
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-body">
           <li>Create an MCP username and password below.</li>
           <li>
-            In the AI client, add a remote MCP server URL (any allowed domain), then sign in with
-            that username and password.
+            In the AI client, add a remote MCP server URL for any domain this app is mapped to
+            (e.g. this page’s MCP URL below), then sign in with that username and password.
           </li>
           <li>Approve access when the browser opens the NTRIO sign-in page.</li>
         </ol>

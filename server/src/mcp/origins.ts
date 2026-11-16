@@ -1,6 +1,7 @@
 /**
  * Allowed public origins for MCP / OAuth (multi-domain).
- * Union of CLIENT_ORIGIN + Railway public domain + localhost in development.
+ * MCP accepts any Host that reaches this app (custom domains, Railway, localhost).
+ * CLIENT_ORIGIN + Railway public domain are still listed for settings / CORS hints.
  */
 
 function stripTrailingSlash(s: string): string {
@@ -20,6 +21,7 @@ function normalizeOrigin(raw: string): string | null {
   }
 }
 
+/** Configured / known origins (CORS + Settings “also allowed” list). */
 export function listAllowedOrigins(): string[] {
   const out = new Set<string>();
 
@@ -59,7 +61,10 @@ export function listAllowedHostnames(): string[] {
   return [...hosts];
 }
 
-/** Resolve request origin; require Host (and optional X-Forwarded-Proto) on the allowlist. */
+/**
+ * Resolve request origin from Host / X-Forwarded-*.
+ * Any domain that reaches this app is accepted so MCP/OAuth work on every mapped custom domain.
+ */
 export function resolveRequestOrigin(req: {
   protocol?: string;
   headers: Record<string, string | string[] | undefined>;
@@ -68,22 +73,7 @@ export function resolveRequestOrigin(req: {
   const proto = (xfProto?.split(",")[0]?.trim() || req.protocol || "http").replace(/:$/, "");
   const host = headerFirst(req.headers["x-forwarded-host"]) || headerFirst(req.headers.host);
   if (!host) return null;
-  const origin = normalizeOrigin(`${proto}://${host}`);
-  if (!origin) return null;
-  const allowed = listAllowedOrigins();
-  if (allowed.length === 0) {
-    // No CLIENT_ORIGIN configured: accept the request host (dev / open CORS mode).
-    return origin;
-  }
-  const hostOnly = new URL(origin).hostname.toLowerCase();
-  const ok = allowed.some((a) => {
-    try {
-      return new URL(a).hostname.toLowerCase() === hostOnly;
-    } catch {
-      return false;
-    }
-  });
-  return ok ? origin : null;
+  return normalizeOrigin(`${proto}://${host}`);
 }
 
 export function mcpResourceUrl(origin: string): string {

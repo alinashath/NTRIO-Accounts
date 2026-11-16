@@ -23,6 +23,8 @@ export interface McpMetaDto {
   allowed_origins: string[];
   mcp_urls: string[];
   scope: string;
+  /** When true, MCP/OAuth work on every domain that reaches the app. */
+  any_mapped_domain?: boolean;
 }
 
 /** GET / PATCH /api/settings */

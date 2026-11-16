@@ -5,6 +5,13 @@ import { normalizeEnabledModules } from "../lib/workspaces.js";
 import { buildAgentGuide } from "./agentGuide.js";
 import { toolsForModules, type McpToolDef } from "./catalog.js";
 import { dispatchApi, formatDispatchResult } from "./dispatch.js";
+import {
+  normalizeMcpModules,
+  receiptReadAllowed,
+  receiptUploadAllowed,
+  toolAllowed,
+  type McpUserPermissions,
+} from "./permissions.js";
 import { fetchReceipt, uploadReceiptBase64 } from "./receipts.js";
 
 export type McpAuthExtra = {
@@ -59,12 +66,36 @@ export function createNtrioMcpHandler() {
       const extra = readExtra(authInfo);
 
       let enabled = normalizeEnabledModules(undefined);
+      let perms: McpUserPermissions = {
+        canRead: true,
+        canWrite: true,
+        enabledModules: normalizeMcpModules(undefined),
+      };
       if (extra) {
-        const org = await prisma.organization.findUnique({
-          where: { id: extra.organizationId },
-          select: { enabledModules: true },
-        });
+        const [org, mcpUser] = await Promise.all([
+          prisma.organization.findUnique({
+            where: { id: extra.organizationId },
+            select: { enabledModules: true },
+          }),
+          prisma.mcpUser.findUnique({
+            where: { id: extra.mcpUserId },
+            select: { canRead: true, canWrite: true, enabledModules: true },
+          }),
+        ]);
         enabled = normalizeEnabledModules(org?.enabledModules);
+        if (mcpUser) {
+          perms = {
+            canRead: mcpUser.canRead,
+            canWrite: mcpUser.canWrite,
+            enabledModules: normalizeMcpModules(mcpUser.enabledModules),
+          };
+        } else {
+          perms = {
+            canRead: true,
+            canWrite: true,
+            enabledModules: normalizeMcpModules(enabled),
+          };
+        }
       }
 
       const server = new McpServer(
@@ -115,6 +146,12 @@ export function createNtrioMcpHandler() {
           if (!auth) {
             return { content: [{ type: "text", text: "Unauthorized" }], isError: true };
           }
+          if (!receiptUploadAllowed(perms, enabled)) {
+            return {
+              content: [{ type: "text", text: "Not allowed to upload receipts for this MCP user" }],
+              isError: true,
+            };
+          }
           await audit(auth.mcpUserId, auth.organizationId, "upload_receipt");
           try {
             const uploaded = await uploadReceiptBase64({
@@ -154,6 +191,12 @@ export function createNtrioMcpHandler() {
           if (!auth) {
             return { content: [{ type: "text", text: "Unauthorized" }], isError: true };
           }
+          if (!receiptReadAllowed(perms, enabled)) {
+            return {
+              content: [{ type: "text", text: "Not allowed to read receipts for this MCP user" }],
+              isError: true,
+            };
+          }
           await audit(auth.mcpUserId, auth.organizationId, "read_receipt");
           try {
             const { contentType, bytes } = await fetchReceipt(url);
@@ -189,6 +232,7 @@ export function createNtrioMcpHandler() {
       );
 
       for (const def of toolsForModules(enabled)) {
+        if (!toolAllowed(def, perms, enabled)) continue;
         registerHttpTool(server, def);
       }
 

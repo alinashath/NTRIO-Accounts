@@ -472,13 +472,17 @@ settingsRouter.get(
     const host = req.get("x-forwarded-host") || req.get("host") || "localhost";
     const proto = (req.get("x-forwarded-proto") || req.protocol || "http").split(",")[0]!.trim();
     const origin = `${proto}://${host}`.replace(/\/+$/, "");
-    const allowed = listAllowedOrigins();
+    const configured = listAllowedOrigins();
+    const origins = new Set<string>([origin, ...configured]);
+    const mcpUrls = [...origins].map((o) => mcpResourceUrl(o));
     res.json({
       mcp_url: mcpResourceUrl(origin),
       current_origin: origin,
-      allowed_origins: allowed.length ? allowed : [origin],
-      mcp_urls: (allowed.length ? allowed : [origin]).map((o) => mcpResourceUrl(o)),
+      allowed_origins: [...origins],
+      mcp_urls: mcpUrls,
       scope: "org",
+      /** MCP/OAuth accept any Host that reaches this app (every mapped custom domain). */
+      any_mapped_domain: true,
     });
   }),
 );

@@ -40,7 +40,7 @@ export function sendProtectedResourceMetadata(req: Request, res: Response) {
   if (!origin) {
     res.status(400).json({
       error: "invalid_request",
-      error_description: "Host is not on the allowed domain list",
+      error_description: "Could not resolve request Host for MCP/OAuth",
       allowed_origins: listAllowedOrigins(),
     });
     return;
@@ -53,7 +53,7 @@ export function sendAuthorizationServerMetadata(req: Request, res: Response) {
   if (!origin) {
     res.status(400).json({
       error: "invalid_request",
-      error_description: "Host is not on the allowed domain list",
+      error_description: "Could not resolve request Host for MCP/OAuth",
       allowed_origins: listAllowedOrigins(),
     });
     return;

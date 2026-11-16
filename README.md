@@ -120,7 +120,7 @@ Use **one Railway service** from the **repo root**. The production server serves
    | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server only). |
    | `VITE_SUPABASE_URL` | Same as `SUPABASE_URL` — required at **build** time for the client bundle. |
    | `VITE_SUPABASE_ANON_KEY` | Supabase anon (or publishable) key — **build** time. |
-   | `CLIENT_ORIGIN` | Optional. Comma-separated allowed browser origins for CORS. If unset on Railway, the server uses **`https://$RAILWAY_PUBLIC_DOMAIN`** when that variable is present. The same list (plus the Railway domain) is the allowlist for MCP / OAuth hosts. |
+   | `CLIENT_ORIGIN` | Optional. Comma-separated allowed browser origins for CORS. If unset on Railway, the server uses **`https://$RAILWAY_PUBLIC_DOMAIN`** when that variable is present. MCP / OAuth accept **any Host** that reaches the app (every mapped custom domain); `CLIENT_ORIGIN` is only a hint list in Settings. |
    | `MCP_JWT_SECRET` | Required for organization MCP. Random string ≥ 32 characters used to sign MCP OAuth access tokens. |
    | `NODE_ENV` | Railway often sets this to `production` during build; optional to set explicitly. |
 

@@ -124,7 +124,7 @@ function requireOrigin(req: Request, res: Response): string | null {
       res,
       400,
       "invalid_request",
-      `Host not allowed. Allowed: ${listAllowedOrigins().join(", ") || "(none configured)"}`,
+      `Could not resolve request Host for OAuth. Known origins: ${listAllowedOrigins().join(", ") || "(none configured)"}`,
     );
     return null;
   }
