@@ -399,14 +399,13 @@ function DualComposition({
   signed,
 }: {
   dual: DualCcy;
-  /** When true, show − for negative legs */
+  /** When true, prefix + on positive legs (deltas). Negatives always show −. */
   signed?: boolean;
 }) {
   const fmt = (n: number) => {
     const abs = formatMoneyAmountOnly(toMoney(Math.abs(n)));
-    if (!signed) return abs;
-    if (n < 0) return `\u2212${abs}`;
-    if (n > 0) return `+${abs}`;
+    if (n < -0.004) return `\u2212${abs}`;
+    if (signed && n > 0.004) return `+${abs}`;
     return abs;
   };
   return (
@@ -429,7 +428,7 @@ function CashWaterfall({
       value: path.opening,
       kind: "total",
       detail:
-        "Cash you had at the start of the period. MVR · USD is how much you actually held in each currency (not an exchange of the total).",
+        "Cash at period start in display currency. MVR · USD are native account balances (negative = overdrawn in that currency)—not an exchange of the total.",
       dual: path.native.opening,
     },
     {
@@ -536,7 +535,7 @@ function CashWaterfall({
         })}
       </ol>
       <p className="border-t border-border px-3.5 py-2 text-[11px] text-muted-label sm:px-4">
-        Main figure in {currency.toUpperCase()} · MVR · USD below = native holdings, not exchange
+        Main figure in {currency.toUpperCase()} · MVR · USD = native balances (minus = overdrawn), not FX of the total
       </p>
     </section>
   );
