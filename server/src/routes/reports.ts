@@ -417,6 +417,10 @@ reportsRouter.get(
       displayCurrency ?? "USD",
       projectScope,
     );
+    const payLater = stmt.pay_later_unpaid ?? 0;
+    const cashAfterPayLater = Number(
+      (stmt.cash_and_accounts - payLater).toFixed(2),
+    );
     res.json({
       as_of: stmt.as_of,
       display_currency: stmt.display_currency,
@@ -426,6 +430,7 @@ reportsRouter.get(
       outstanding_owed_to_me: stmt.outstanding_owed_to_me,
       net_worth: stmt.net_worth,
       pay_later_unpaid: stmt.pay_later_unpaid,
+      cash_after_pay_later: cashAfterPayLater,
     });
   }),
 );

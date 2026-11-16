@@ -392,6 +392,12 @@ export type CashFlowStatement = {
   };
   /** Inter-account transfers (memo only; excluded from net cash). */
   transfers_memo: number;
+  /**
+   * Gain/(loss) from cross-currency transfers vs Settings USD/MVR rate on the transfer date.
+   * Positive = actual transfer rate gave more destination currency than the system rate.
+   * In display currency (destination-side delta converted at the system rate).
+   */
+  transfer_fx_gain: number;
   net_change_in_cash: number;
   cash_beginning: number;
   cash_ending: number;
@@ -406,6 +412,21 @@ export type CashFlowStatement = {
     net_flow: number;
   }>;
 };
+
+/** to-currency units per 1 from-currency at the system USD/MVR rate. */
+function systemTransferRate(
+  fromCurrency: string,
+  toCurrency: string,
+  usdMvrRate: number,
+): number | null {
+  const from = fromCurrency.toUpperCase();
+  const to = toCurrency.toUpperCase();
+  if (from === to) return 1;
+  const r = usdMvrRate > 0 ? usdMvrRate : 20;
+  if (from === "USD" && to === "MVR") return r;
+  if (from === "MVR" && to === "USD") return 1 / r;
+  return null;
+}
 
 export async function buildCashFlowStatement(
   userId: string,
@@ -670,6 +691,36 @@ export async function buildCashFlowStatement(
   const impliedEnding = toMoney(cashBeginning + netChange);
   const reconcilingDiff = toMoney(cashEnding - impliedEnding);
 
+  /** Actual transfer rate vs Settings rate — counted once per outbound transfer. */
+  let transferFxGain = 0;
+  if (!scoped) {
+    const xfers = await prisma.accountTransfer.findMany({
+      where: {
+        userId,
+        date: { gte: from, lte: to },
+        exchangeRate: { not: null },
+      },
+      include: { fromAccount: true, toAccount: true },
+    });
+    for (const t of xfers) {
+      const fromCur = t.fromAccount.currency;
+      const toCur = t.toAccount.currency;
+      if (fromCur === toCur) continue;
+      const actualRate = Number(t.exchangeRate ?? 0);
+      if (actualRate <= 0) continue;
+      const ymd = ymdFromDb(t.date);
+      const usdMvr = rateFor(ymd);
+      const sysRate = systemTransferRate(fromCur, toCur, usdMvr);
+      if (sysRate == null || sysRate <= 0) continue;
+      const amt = Number(t.amount);
+      const gainInTo = toMoney(amt * (actualRate - sysRate));
+      if (Math.abs(gainInTo) < 0.005) continue;
+      transferFxGain = toMoney(
+        transferFxGain + conv(gainInTo, toCur, displayCurrency, usdMvr),
+      );
+    }
+  }
+
   return {
     from: fromYmd,
     to: toYmd,
@@ -693,6 +744,7 @@ export async function buildCashFlowStatement(
       net: financingNet,
     },
     transfers_memo: transfersMemo,
+    transfer_fx_gain: transferFxGain,
     net_change_in_cash: netChange,
     cash_beginning: cashBeginning,
     cash_ending: cashEnding,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { apiFetch } from "@/api/http";
@@ -40,6 +40,8 @@ export function AccountStatementPage() {
   const [adjAmount, setAdjAmount] = useState("");
   const [adjNote, setAdjNote] = useState("");
   const [adjBusy, setAdjBusy] = useState(false);
+  const adjBusyRef = useRef(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
 
   const loadPage = useCallback(
@@ -78,11 +80,13 @@ export function AccountStatementPage() {
   async function submitAdjustment(e: React.FormEvent) {
     e.preventDefault();
     if (!id) return;
+    if (adjBusyRef.current) return;
     const amt = Number(adjAmount);
     if (!Number.isFinite(amt) || amt === 0) {
       setError("Enter a non-zero adjustment amount (use − for decreases).");
       return;
     }
+    adjBusyRef.current = true;
     setAdjBusy(true);
     setError(null);
     try {
@@ -101,12 +105,47 @@ export function AccountStatementPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     } finally {
+      adjBusyRef.current = false;
       setAdjBusy(false);
     }
   }
 
   const ccy = data?.currency ?? "USD";
   const hasMore = data != null && items.length < data.total;
+
+  async function deleteAdjustment(row: LedgerLineDto) {
+    if (!id || row.kind !== "adjustment") return;
+    if (deletingId) return;
+    const label = row.description?.trim() || "Balance adjustment";
+    if (
+      !window.confirm(
+        `Delete this adjustment?\n${row.date} · ${formatMoney(row.signed_amount, ccy)}\n${label}`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(row.id);
+    setError(null);
+    try {
+      const res = await apiFetch<{ balance: number }>(
+        `/api/accounts/${encodeURIComponent(id)}/adjustments/${encodeURIComponent(row.id)}`,
+        { method: "DELETE" },
+      );
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              account: { ...prev.account, balance: res.balance },
+            }
+          : prev,
+      );
+      await loadPage(1, false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function exportCsv() {
     if (!id || !data) return;
@@ -222,13 +261,14 @@ export function AccountStatementPage() {
                 <th className="py-2 pr-2">Description</th>
                 <th className="py-2 pr-2 text-right">In</th>
                 <th className="py-2 pr-2 text-right">Out</th>
-                <th className="py-2 text-right">Balance</th>
+                <th className="py-2 pr-2 text-right">Balance</th>
+                <th className="py-2 text-right"> </th>
               </tr>
             </thead>
             <tbody>
               {!loading && items.length === 0 ? (
                 <tr>
-                  <td className="py-6 text-muted-label" colSpan={6}>
+                  <td className="py-6 text-muted-label" colSpan={7}>
                     No ledger lines yet (only opening balance).
                   </td>
                 </tr>
@@ -254,8 +294,21 @@ export function AccountStatementPage() {
                     <td className="py-2 pr-2 text-right tabular-nums text-debit">
                       {r.money_out != null ? formatMoney(r.money_out, ccy) : "—"}
                     </td>
-                    <td className="py-2 text-right font-medium tabular-nums text-ink">
+                    <td className="py-2 pr-2 text-right font-medium tabular-nums text-ink">
                       {formatMoney(r.running_balance, ccy)}
+                    </td>
+                    <td className="py-2 text-right">
+                      {r.kind === "adjustment" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="!h-7 !px-2 text-xs text-debit"
+                          disabled={deletingId === r.id}
+                          onClick={() => void deleteAdjustment(r)}
+                        >
+                          {deletingId === r.id ? "…" : "Delete"}
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))
@@ -287,7 +340,9 @@ export function AccountStatementPage() {
           setAdjNote={setAdjNote}
           ccy={ccy}
           busy={adjBusy}
-          onClose={() => setAdjOpen(false)}
+          onClose={() => {
+            if (!adjBusyRef.current) setAdjOpen(false);
+          }}
           onSubmit={submitAdjustment}
         />
       ) : null}
@@ -331,6 +386,7 @@ function ModalAdj({
               value={adjDate}
               onChange={(e) => setAdjDate(e.target.value)}
               required
+              disabled={busy}
             />
           </label>
           <TextField
@@ -340,8 +396,14 @@ function ModalAdj({
             inputMode="decimal"
             placeholder="e.g. -2.50 or 100"
             required
+            disabled={busy}
           />
-          <TextField label="Note (optional)" value={adjNote} onChange={(e) => setAdjNote(e.target.value)} />
+          <TextField
+            label="Note (optional)"
+            value={adjNote}
+            onChange={(e) => setAdjNote(e.target.value)}
+            disabled={busy}
+          />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
               Cancel

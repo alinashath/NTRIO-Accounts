@@ -28,6 +28,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   { name: "get_account_ledger", description: "Get account statement/ledger", module: "accounts", method: "GET", path: "/api/accounts/{id}/ledger", pathParams: ["id"] },
   { name: "get_account", description: "Get one account", module: "accounts", method: "GET", path: "/api/accounts/{id}", pathParams: ["id"] },
   { name: "create_account_adjustment", description: "Create a balance adjustment", module: "accounts", method: "POST", path: "/api/accounts/{id}/adjustments", pathParams: ["id"], passBody: true },
+  { name: "delete_account_adjustment", description: "Delete a balance adjustment", module: "accounts", method: "DELETE", path: "/api/accounts/{id}/adjustments/{adjustmentId}", pathParams: ["id", "adjustmentId"] },
 
   // —— Income ——
   { name: "list_income", description: "List income entries (filters via query)", module: "accounts", method: "GET", path: "/api/income" },

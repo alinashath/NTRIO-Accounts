@@ -577,3 +577,36 @@ accountsRouter.post(
     });
   }),
 );
+
+accountsRouter.delete(
+  "/:id/adjustments/:adjustmentId",
+  asyncHandler(async (req, res) => {
+    const userId = (req as AuthedRequest).userId;
+    const id = z.string().uuid().parse(req.params.id);
+    const adjustmentId = z.string().uuid().parse(req.params.adjustmentId);
+
+    const account = await prisma.account.findFirst({ where: { id, userId } });
+    if (!account) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+
+    const existing = await prisma.accountBalanceAdjustment.findFirst({
+      where: { id: adjustmentId, accountId: id, userId },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Adjustment not found" });
+      return;
+    }
+
+    await prisma.accountBalanceAdjustment.delete({ where: { id: adjustmentId } });
+    await recalculateAccountBalance(id);
+    const fresh = await prisma.account.findUniqueOrThrow({ where: { id } });
+
+    res.json({
+      ok: true,
+      account_id: id,
+      balance: toMoney(Number(fresh.balance)),
+    });
+  }),
+);

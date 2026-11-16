@@ -45,7 +45,13 @@ type NetWorth = {
   outstanding_i_owe: number;
   outstanding_owed_to_me: number;
   pay_later_unpaid: number | null;
+  cash_after_pay_later?: number | null;
   display_currency?: string | null;
+};
+
+type CashflowFx = {
+  reconciling_diff: number;
+  transfer_fx_gain: number;
 };
 
 type CatRow = {
@@ -104,6 +110,7 @@ export function DashboardPage() {
   const [pnl, setPnl] = useState<Pnl | null>(null);
   const [pnlPrev, setPnlPrev] = useState<Pnl | null>(null);
   const [nw, setNw] = useState<NetWorth | null>(null);
+  const [cashFx, setCashFx] = useState<CashflowFx | null>(null);
   const [income, setIncome] = useState<IncomeEntryDto[]>([]);
   const [expenses, setExpenses] = useState<ExpenseEntryDto[]>([]);
   const [debts, setDebts] = useState<DebtDto[]>([]);
@@ -129,7 +136,7 @@ export function DashboardPage() {
         return `${path}?${q.toString()}`;
       };
       try {
-        const [accs, pnlRes, pnlPrior, nwRes, inc, exp, d, br, brPrior] =
+        const [accs, pnlRes, pnlPrior, nwRes, cfRes, inc, exp, d, br, brPrior] =
           await Promise.all([
             apiFetch<AccountDto[]>("/api/accounts"),
             apiFetch<Pnl>(
@@ -140,6 +147,9 @@ export function DashboardPage() {
             ),
             apiFetch<NetWorth>(
               pj(`/api/reports/net-worth?as_of=${encodeURIComponent(asOf)}&display_currency=${encodeURIComponent(displayCurrency)}`),
+            ),
+            apiFetch<CashflowFx>(
+              pj(`/api/reports/cashflow?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}&display_currency=${encodeURIComponent(displayCurrency)}`),
             ),
             apiFetch<IncomeEntryDto[]>(
               pj(`/api/income?from=${encodeURIComponent(periodFrom)}&to=${encodeURIComponent(periodTo)}`),
@@ -160,6 +170,10 @@ export function DashboardPage() {
         setPnl(pnlRes);
         setPnlPrev(pnlPrior);
         setNw(nwRes);
+        setCashFx({
+          reconciling_diff: cfRes.reconciling_diff ?? 0,
+          transfer_fx_gain: cfRes.transfer_fx_gain ?? 0,
+        });
         setIncome(inc);
         setExpenses(exp);
         setDebts(d);
@@ -434,6 +448,45 @@ export function DashboardPage() {
               }
               caption={incomeKept ?? undefined}
             />
+            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
+              <ListRow
+                primary="FX gain on transfers"
+                secondary={
+                  <button
+                    type="button"
+                    className="text-caption underline-offset-2 hover:underline"
+                    onClick={() =>
+                      setInfoHint(
+                        "Extra (or less) destination currency from transfer rates vs Settings USD/MVR on the transfer date. Not included in Net above.",
+                      )
+                    }
+                  >
+                    What is this?
+                  </button>
+                }
+                right={
+                  <Amount
+                    value={cashFx.transfer_fx_gain}
+                    currency={displayCurrency}
+                    tone="auto"
+                  />
+                }
+              />
+            ) : null}
+            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
+              <StatRow
+                label="Net incl. FX gain"
+                value={
+                  <Amount
+                    value={(pnl?.net ?? 0) + cashFx.transfer_fx_gain}
+                    currency={displayCurrency}
+                    tone="auto"
+                    size="lg"
+                  />
+                }
+                caption="Operating net + FX gain on transfers"
+              />
+            ) : null}
             <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
               <span className="text-caption">Avg spend per day</span>
               <span className="text-sm font-semibold tabular-nums text-ink">
@@ -486,6 +539,82 @@ export function DashboardPage() {
                 />
               }
             />
+            <ListRow
+              primary="Cash after pay later"
+              secondary={
+                <button
+                  type="button"
+                  className="text-caption underline-offset-2 hover:underline"
+                  onClick={() =>
+                    setInfoHint(
+                      "Cash & accounts minus unpaid pay-later bills — what remains if those bills are settled from cash.",
+                    )
+                  }
+                >
+                  What is this?
+                </button>
+              }
+              right={
+                <Amount
+                  value={
+                    nw?.cash_after_pay_later ??
+                    (nw?.cash_and_accounts ?? 0) - (nw?.pay_later_unpaid ?? 0)
+                  }
+                  currency={displayCurrency}
+                  tone="auto"
+                />
+              }
+            />
+            {cashFx && Math.abs(cashFx.reconciling_diff) >= 0.01 ? (
+              <ListRow
+                primary="Effect of exchange rates / other"
+                secondary={
+                  <button
+                    type="button"
+                    className="text-caption underline-offset-2 hover:underline"
+                    onClick={() =>
+                      setInfoHint(
+                        "Period residual so beginning cash + net change + this line = ending cash (same as Cash flow report). Includes FX on balances and timing.",
+                      )
+                    }
+                  >
+                    What is this?
+                  </button>
+                }
+                right={
+                  <Amount
+                    value={cashFx.reconciling_diff}
+                    currency={displayCurrency}
+                    tone="auto"
+                  />
+                }
+              />
+            ) : null}
+            {cashFx && Math.abs(cashFx.transfer_fx_gain) >= 0.01 ? (
+              <ListRow
+                primary="FX gain on transfers"
+                secondary={
+                  <button
+                    type="button"
+                    className="text-caption underline-offset-2 hover:underline"
+                    onClick={() =>
+                      setInfoHint(
+                        "When a transfer uses a better (or worse) rate than Settings USD/MVR on that date, this is the gain/(loss) in display currency for the selected period.",
+                      )
+                    }
+                  >
+                    What is this?
+                  </button>
+                }
+                right={
+                  <Amount
+                    value={cashFx.transfer_fx_gain}
+                    currency={displayCurrency}
+                    tone="auto"
+                  />
+                }
+              />
+            ) : null}
             <ListRow
               primary="Net worth"
               secondary={

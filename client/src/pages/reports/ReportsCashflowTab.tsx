@@ -60,6 +60,7 @@ type CashflowRes = {
     net: number;
   };
   transfers_memo: number;
+  transfer_fx_gain?: number;
   net_change_in_cash: number;
   cash_beginning: number;
   cash_ending: number;
@@ -434,6 +435,16 @@ export function ReportsCashflowTab() {
                 compare={compares?.netChange.text}
                 compareTone={compares?.netChange.tone}
               />
+              {Math.abs(stmt.transfer_fx_gain ?? 0) >= 0.01 ? (
+                <StatementRow
+                  label="FX gain on transfers (vs Settings rate)"
+                  amount={stmt.transfer_fx_gain ?? 0}
+                  currency={ccy}
+                  depth={1}
+                  muted
+                  negativeAsParen
+                />
+              ) : null}
               <StatementRow
                 label="Cash and cash equivalents at beginning of period"
                 amount={stmt.cash_beginning}
@@ -466,6 +477,8 @@ export function ReportsCashflowTab() {
             <p className="mt-4 text-xs text-muted-foreground">
               Inter-account transfers are excluded from consolidated cash flow (they net within cash).
               Ending cash matches the sum of account balances as of the period end.
+              FX gain on transfers compares each cross-currency transfer rate to Settings USD/MVR on that date
+              (memo only — already reflected in account balances).
             </p>
           </Card>
 
